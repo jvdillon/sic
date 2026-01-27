@@ -7,7 +7,7 @@ import pathlib
 import pytest
 import torch
 
-from research.projects.trm3.model import (
+from model import (
     EMA,
     TRM,
     Attention,
@@ -23,7 +23,7 @@ from research.projects.trm3.model import (
     _find_multiple,
     _trunc_normal_init_,
 )
-from research.projects.trm3.util import set_seed
+from util import set_seed
 
 
 class TestModelUtils:
@@ -478,6 +478,6 @@ class TestTRMBitForBit:
 
 
 if __name__ == "__main__":
-    from research.projects.trm3.util import test_main
+    from util import test_main
 
     test_main(__file__)

@@ -10,7 +10,7 @@ import tempfile
 
 import torch
 
-from research.projects.trm3.util import Tee, entropy, jsd, log1mexp, logmeanexp
+from util import Tee, entropy, jsd, log1mexp, logmeanexp
 
 
 class TestTee:
@@ -373,6 +373,6 @@ class TestJSD:
 
 
 if __name__ == "__main__":
-    from research.projects.trm3.util import test_main
+    from util import test_main
 
     test_main(__file__)

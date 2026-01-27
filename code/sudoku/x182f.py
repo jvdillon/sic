@@ -1,8 +1,8 @@
 """x182f: x182a with q_halt warmup (force H=1 for first 4k steps)."""
 
-from research.projects.trm3.experiment import main
-from research.projects.trm3.model import TRM3
-from research.projects.trm3.x182 import Experiment as Experiment182
+from experiment import main
+from model import TRM3
+from x182 import Experiment as Experiment182
 
 
 class Experiment(Experiment182):

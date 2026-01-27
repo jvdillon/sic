@@ -6,13 +6,13 @@ import tempfile
 
 import torch
 
-from research.projects.trm3.experiment import (
+from experiment import (
     ExperimentBase,
     compute_diversity_loss,
     resume_from_checkpoint,
     setup_muon_optimizers,
 )
-from research.projects.trm3.model import TRM
+from model import TRM
 
 
 def test_compute_diversity_loss_empty():
@@ -588,6 +588,6 @@ def test_wta_batched_vs_sequential():
 
 
 if __name__ == "__main__":
-    from research.projects.trm3.util import test_main
+    from util import test_main
 
     test_main(__file__)

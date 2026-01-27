@@ -17,11 +17,11 @@ from torch.optim import Optimizer
 import numpy as np
 import torch
 
-from research.projects.trm3.data import GPUCachedSudoku, augment_sudoku
-from research.projects.trm3.evaluation import print_diagnostics
-from research.projects.trm3.model import EMA, TRM
-from research.projects.trm3.optimizer import DummyOptimizer, Muon
-from research.projects.trm3.util import Tee, set_seed
+from data import GPUCachedSudoku, augment_sudoku
+from evaluation import print_diagnostics
+from model import EMA, TRM
+from optimizer import DummyOptimizer, Muon
+from util import Tee, set_seed
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")

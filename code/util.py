@@ -137,7 +137,7 @@ def test_main(test_file: str) -> None:
 
     Usage:
         if __name__ == "__main__":
-            from research.projects.trm3.util import test_main
+            from util import test_main
             test_main(__file__)
 
     Args:

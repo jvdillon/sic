@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from research.projects.trm3.evaluation import (
+from evaluation import (
     HALT_TOKEN_ID,
     cells_fixed_broken,
     evaluate_multistart,
@@ -15,7 +15,7 @@ from research.projects.trm3.evaluation import (
     run_act_steps,
     z_h_deltas,
 )
-from research.projects.trm3.model import TRM
+from model import TRM
 
 
 def test_prepend_halt():
@@ -164,6 +164,6 @@ def test_cells_fixed_broken():
 
 
 if __name__ == "__main__":
-    from research.projects.trm3.util import test_main
+    from util import test_main
 
     test_main(__file__)

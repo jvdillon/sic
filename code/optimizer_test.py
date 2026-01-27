@@ -5,7 +5,7 @@ from torch import nn
 import pytest
 import torch
 
-from research.projects.trm3.optimizer import (
+from optimizer import (
     DummyOptimizer,
     Muon,
     _adjust_lr,
@@ -277,6 +277,6 @@ class TestDummyOptimizer:
 
 
 if __name__ == "__main__":
-    from research.projects.trm3.util import test_main
+    from util import test_main
 
     test_main(__file__)

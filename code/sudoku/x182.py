@@ -52,15 +52,15 @@ from torch import Tensor, nn
 
 import torch
 
-from research.projects.trm3.data import GPUCachedSudoku, augment_sudoku
-from research.projects.trm3.experiment import (
+from data import GPUCachedSudoku, augment_sudoku
+from experiment import (
     HALT_TOKEN_ID,
     ExperimentBase,
     main,
     setup_muon_optimizers,
 )
-from research.projects.trm3.model import EMA, TRM3
-from research.projects.trm3.util import set_seed
+from model import EMA, TRM3
+from util import set_seed
 
 
 class ForwardResult(TypedDict):

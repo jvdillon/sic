@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from research.projects.trm3.data import augment_sudoku
+from data import augment_sudoku
 
 
 def test_augment_sudoku_shapes():
@@ -40,6 +40,6 @@ def test_augment_sudoku_deterministic_with_seed():
 
 
 if __name__ == "__main__":
-    from research.projects.trm3.util import test_main
+    from util import test_main
 
     test_main(__file__)

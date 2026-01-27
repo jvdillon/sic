@@ -1,7 +1,7 @@
 """x182i: x182g with seed=43."""
 
-from research.projects.trm3.experiment import main
-from research.projects.trm3.x182g import Experiment as Experiment182g
+from experiment import main
+from x182g import Experiment as Experiment182g
 
 
 class Experiment(Experiment182g):

@@ -1,8 +1,8 @@
 """x182a: x182 with random z_L init."""
 
-from research.projects.trm3.experiment import main
-from research.projects.trm3.model import TRM3
-from research.projects.trm3.x182 import Experiment as Experiment182
+from experiment import main
+from model import TRM3
+from x182 import Experiment as Experiment182
 
 
 class Experiment(Experiment182):
