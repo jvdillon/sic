@@ -52,7 +52,7 @@ exclude = ["*_test.py", "*.log"]
 
 [tool.pytest.ini_options]
 python_files = ["*_test.py"]
-addopts = ["-Werror"]
+addopts = ["-Werror", "--import-mode=importlib"]
 norecursedirs = [".venv", "__pycache__", ".typings", "*.egg-info"]
 testpaths = ["code/"]
 pythonpath = ["code/"]

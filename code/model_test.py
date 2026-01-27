@@ -405,6 +405,8 @@ class TestTRMBitForBit:
     @pytest.fixture
     def checkpoint(self) -> dict:
         ckpt_path = pathlib.Path(__file__).resolve().parent / "test_data" / "trm3.pt"
+        if not ckpt_path.exists():
+            pytest.skip(f"Checkpoint not found: {ckpt_path}")
         return torch.load(ckpt_path, weights_only=False)
 
     def test_forward_bitforbit(self, checkpoint: dict):
