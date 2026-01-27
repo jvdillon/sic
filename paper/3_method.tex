@@ -12,7 +12,7 @@ seeds and average their predictions. For TRM on Sudoku-Extreme:
 \toprule
 Method & Puzzle Acc. & Forward Passes \\
 \midrule
-Single model & 84.97\% & 16 \\  % avg(x02.log, x03.log, x04.log)
+Single model (avg) & 85.0\% & 16 \\  % avg(x02.log, x03.log, x04.log)
 Ensemble (3 seeds) & 88.52\% & 48 \\  % x02.log + x03.log + x04.log
 + TTA (4 rotations) & 91.51\% & 192 \\  % x02.log + x03.log + x04.log + TTA
 \bottomrule
@@ -104,7 +104,7 @@ across multiple gradient updates, not within a single forward pass.
 
 \paragraph{Carry policy.} After each step, we must decide how to propagate
 states to the next iteration. We use \texttt{copy\_top1} for $z_H$: the
-winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 8). For $z_L$, we
+winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 9). For $z_L$, we
 use \texttt{all}: each chain keeps its own $z_L$. This allows heads to benefit
 from shared high-level progress while maintaining low-level diversity (see
 \Cref{sec:ablations} for ablations).
@@ -162,10 +162,12 @@ uniform high weight decay (1.0) to all parameters, which may over-constrain
 the reasoning layers.
 
 \paragraph{Modified SwiGLU.} We discovered that Muon fails completely with
-standard SwiGLU activation. The fix is to apply layer normalization before the
-down-projection: $\text{SwiGLU}_\text{mod}(x) = \text{SiLU}(g) \cdot
-\text{LayerNorm}(g \odot x)$ where $g = Wx$. Without this modification, Muon's
-orthogonalized updates cause training to diverge.
+standard SwiGLU activation. Standard SwiGLU computes $\text{SiLU}(g) \odot v$
+where $[g, v] = xW$ (split in half). Our modification applies normalization
+before the down-projection: $\text{SwiGLU}_\text{mod}(x) = \sigma(g) \odot
+\text{RMSNorm}(g \odot v)$, using sigmoid rather than SiLU for the gate. This
+bounds the pre-activation magnitudes, preventing Muon's orthogonalized updates
+from causing training to diverge.
 
 \subsubsection{SVD-Aligned Initialization}
 
@@ -201,10 +203,12 @@ bilevel system has the form:
   S = I - J_H - J_{HL} (I - J_L)^{-1} J_{LH}
 \end{equation}
 %
-where $J_L, J_H$ are the Jacobians of the L and H updates, and $J_{HL}, J_{LH}$
-capture cross-dependencies. The inner equilibrium's conditioning $(I - J_L)^{-1}$
-gets embedded inside the outer inverse---the mathematical signature of bilevel
-structure. Good conditioning of the inner loop propagates to the full system.
+where $J_L = \partial f / \partial z_L$ and $J_H = \partial g / \partial z_H$
+are the self-Jacobians of the L and H updates, while $J_{HL} = \partial g /
+\partial z_L$ and $J_{LH} = \partial f / \partial z_H$ capture how each loop
+depends on the other's state. The inner equilibrium's Jacobian $(I - J_L)^{-1}$
+appears inside the outer inverse $S^{-1}$---good conditioning of the inner loop
+propagates to the full system.
 
 \paragraph{Architectural asymmetry stabilizes the inner loop.} L-cycles receive
 $z_L + z_H + z_x$ (three unit-variance terms), while H-cycles receive only

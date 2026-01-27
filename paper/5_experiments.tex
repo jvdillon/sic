@@ -13,7 +13,7 @@ ${\sim}$16GB) to 6 hours ($K{=}4$, bs${=}$192, ${\sim}$30GB) for 36k steps.
 
 \paragraph{Architecture.} 2-layer MLP-Mixer~\citep{tolstikhin2021mlpmixer}, 512
 hidden (7M params), no attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (vs.\ 3, 6
-in baseline TRM). Modified SwiGLU to accomodate Muon.
+in baseline TRM). Modified SwiGLU to accommodate Muon.
 
 \paragraph{Evaluation.} We report puzzle accuracy (fraction of puzzles solved
 completely) and cell accuracy (fraction of cells correct). For ACT models, we
@@ -349,7 +349,7 @@ training-time exploration that leads to diverse local optima.
 % Source: x00.log baseline, analysis/digit_perm_inference.py
 \paragraph{Selection vs.\ capability.} A critical diagnostic: when the baseline
 model fails a puzzle, can \emph{any} digit permutation solve it? We ran TTA
-with $K{=}8$ permutations on the 2,037 failures (5.3\% of test set):
+with $K{=}8$ permutations on all baseline failures:
 %
 \begin{center}
 \begin{tabular}{lcc}
@@ -364,8 +364,8 @@ Unsolvable by any permutation & 217 & 10.7\% \\  % x00.log + digit_perm_inferenc
 %
 \textbf{89\% of failures are selection problems}, not capability limits. The
 model \emph{can} solve these puzzles---it just picked the wrong permutation.
-The true ceiling is 99.4\%, not 94.7\%. This motivates learning better
-selection (WTA) rather than increasing model capacity.
+With oracle selection, accuracy would be ${\sim}$99\%, not 86\%. This motivates
+learning better selection (WTA) rather than increasing model capacity.
 
 % Source: x00.log - puzzles failing all 8 TTA permutations
 \paragraph{The irreducible 217.} We analyzed the 217 puzzles (0.6\%) that no
