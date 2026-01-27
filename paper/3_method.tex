@@ -81,13 +81,13 @@ letting them compete. During training, we run $K{=}4$ parallel hypotheses; at
 inference, we run just one.
 
 Specifically, we maintain $K$ parallel low-level states
-$\{z_L^{(k)}\}_{k=1}^K$, each from a learned initialization
-$L_{\text{init}}^{(k)}$, while sharing the high-level state $z_H$. At each
+$\{z_{Lk}\}_{k=1}^K$, each from a learned initialization
+$L_{\text{init},k}$, while sharing the high-level state $z_H$. At each
 step, all $K$ heads process the input in parallel, and the
 \textbf{winner-take-all} (WTA) rule selects which head receives the gradient:
 %
 \begin{equation}
-  k^* = \argmin_k \mathcal{L}(y^{(k)}, y_\text{target})
+  k^* = \argmin_k \mathcal{L}_{\text{CE}}(y_k, y_\text{target})
 \end{equation}
 %
 Only the winning head contributes to the loss. This mirrors halt-first
@@ -113,15 +113,15 @@ from shared high-level progress while maintaining low-level diversity (see
 \caption{Oracle-First Training (one step)}
 \label{alg:wta}
 \begin{algorithmic}[1]
-  \STATE \textbf{Input:} $x$, $y_\text{target}$, carried $z_H$, $\{z_L^{(k)}\}_{k=1}^K$
+  \STATE \textbf{Input:} $x$, $y_\text{target}$, carried $z_H$, $\{z_{Lk}\}_{k=1}^K$
   \FOR{$k = 1$ to $K$}
-    \STATE $y_k, q_k, z_H', z_L^{(k)} \gets \operatorname{TRM}(x, z_H, z_L^{(k)}; \theta)$
+    \STATE $y_k, q_k, z_{Hk}, z_{Lk} \gets \operatorname{TRM}(x, z_H, z_{Lk}; \theta, n_\text{ACT}=1)$
   \ENDFOR
   \STATE $k^* \gets \argmin_{k} \mathcal{L}_\text{CE}(y_k, y_\text{target})$ \LCOMMENT{winner}
-  \STATE $c \gets \mathbf{1}[y_{k^*} = y_\text{target}]$ \LCOMMENT{correctness}
-  \STATE $\mathcal{L} \gets \mathcal{L}_\text{CE}(y_{k^*}, y_\text{target}) + \lambda \mathcal{L}_\text{BCE}(\sigma(q_{k^*}), c)$
+  \STATE $c \gets \mathbf{1}[y_{k^*} = y_\text{target}]$ \LCOMMENT{all correct}
+  \STATE $\mathcal{L} \gets \mathcal{L}_\text{CE}(y_{k^*}, y_\text{target}) + \lambda \mathcal{L}_\text{BCE}(q_{k^*}, c)$
   \STATE Backprop through $\mathcal{L}$
-  \STATE $z_H \gets z_H'$ \LCOMMENT{winner's $z_H$ shared to all}
+  \STATE $z_H \gets z_{Hk^*}$ \LCOMMENT{winner's $z_H$ copied to all}
 \end{algorithmic}
 \end{algorithm}
 %
@@ -169,7 +169,7 @@ orthogonalized updates cause training to diverge.
 
 \subsubsection{SVD-Aligned Initialization}
 
-The $K$ initialization vectors $L_{\text{init}}^{(k)}$ determine hypothesis
+The $K$ initialization vectors $L_{\text{init},k}$ determine hypothesis
 diversity. Naive random initialization risks ``dead'' heads---initializations
 that point in directions the network cannot use effectively. We address this by
 computing the top singular vectors of the first layer's weight matrix and
@@ -177,11 +177,10 @@ ensuring all $K$ heads have equal alignment with this subspace. This provides
 equal ``effective signal strength'' across heads while maintaining diversity in
 the orthogonal complement.
 
-\subsection{Intuition: Why Speed Indicates Confidence}
+\subsection{Intuition: Why Diverse $z_L$ with Shared $z_H$}
 
-We offer a speculative interpretation connecting halting speed to optimization
-conditioning. This is a hypothesis, not a formal result; empirical validation
-is future work.
+We offer a speculative interpretation of why maintaining $K$ parallel $z_L$
+states while sharing $z_H$ works well. This is intuition, not a formal result.
 
 \paragraph{Bilevel fixed-point structure.} TRM computes a nested equilibrium:
 %
@@ -191,35 +190,38 @@ is future work.
 \end{align}
 %
 The inner loop equilibrates $z_L$ for fixed $z_H$; the outer loop updates $z_H$
-given the equilibrated $z_L^*$. This separation creates a natural hierarchy:
-$z_L$ handles cell-level constraint propagation while $z_H$ maintains
-puzzle-level state.
+given the equilibrated $z_L^*$. This creates a natural hierarchy: $z_L$ handles
+cell-level constraint propagation while $z_H$ maintains puzzle-level state.
 
-\paragraph{Architectural asymmetry stabilizes the inner loop.} A key
-observation: $z_x$, $z_L$, and $z_H$ each have unit variance (due to
-normalization), but they enter the computation asymmetrically. L-cycles receive
-$z_L + z_H + z_x$ (three terms), while H-cycles receive only $z_H + z_L$ (two
-terms). Assuming approximate independence, $z_L$ contributes $\tfrac{1}{3}$ of
-L-cycle input variance versus $\tfrac{1}{2}$ for H-cycles.
+\paragraph{Schur complement structure.} The implicit gradient through this
+bilevel system has the form:
+%
+\begin{equation}
+  \frac{d\mathcal{L}}{d\theta} \propto S^{-1}, \quad
+  S = I - J_H - J_{HL} (I - J_L)^{-1} J_{LH}
+\end{equation}
+%
+where $J_L, J_H$ are the Jacobians of the L and H updates, and $J_{HL}, J_{LH}$
+capture cross-dependencies. The inner equilibrium's conditioning $(I - J_L)^{-1}$
+gets embedded inside the outer inverse---the mathematical signature of bilevel
+structure. Good conditioning of the inner loop propagates to the full system.
 
-The Jacobian $J_L = \partial f / \partial z_L$ measures sensitivity to $z_L$
-perturbations. When $z_L$ is a smaller fraction of the input, the output is
-more ``anchored'' by context $(z_H + z_x)$ and less sensitive to $z_L$---yielding
-smaller spectral radius. The fixed input $z_x$ thus acts as a stabilizing
-anchor that L-cycles have but H-cycles lack, naturally making the inner loop
-better conditioned than the outer loop.
+\paragraph{Architectural asymmetry stabilizes the inner loop.} L-cycles receive
+$z_L + z_H + z_x$ (three unit-variance terms), while H-cycles receive only
+$z_H + z_L$ (two terms). Assuming approximate independence, $z_L$ contributes
+$\tfrac{1}{3}$ of L-cycle input variance versus $\tfrac{1}{2}$ for H-cycles.
+The Jacobian $J_L = \partial f / \partial z_L$ is thus smaller: the output is
+``anchored'' by context $(z_H + z_x)$ and less sensitive to $z_L$. The fixed
+input $z_x$ stabilizes L-cycles in a way H-cycles lack.
 
-\paragraph{WTA training enhances this effect.} The \texttt{copy\_top1} carry
-policy (\Cref{alg:wta}, line~8) copies the winner's $z_H$ to all chains. This
-means each chain's $z_H$ comes from a \emph{different} chain than its $z_L$,
-further decorrelating the inputs and strengthening the independence assumption
-underlying the variance argument.
+\paragraph{Why diverse $z_L$.} Different $z_L$ initializations explore
+different basins of attraction in the inner equilibrium landscape. With $K$
+parallel initializations, we sample $K$ potential solution paths. The
+well-conditioned inner loop means these paths can diverge meaningfully without
+destabilizing training.
 
-\paragraph{Speed reflects conditioning (conjecture).} For iterative fixed-point
-methods, convergence rate depends on the spectral radius of the iteration
-Jacobian---smaller spectral radius means faster convergence. We hypothesize
-that the learned halting signal $q_\text{halt}$ correlates with this
-conditioning: chains that halt quickly have found well-conditioned paths, while
-chains that deliberate longer are stuck in poorly-conditioned regions.
-Evolution's heuristic (trust the first signal) may thus correspond to selecting
-well-conditioned solutions.
+\paragraph{Why shared $z_H$.} The \texttt{copy\_top1} policy copies the
+winner's $z_H$ to all chains. This propagates successful high-level state
+(puzzle-level progress) while preserving low-level diversity. It also
+decorrelates each chain's $z_H$ from its own $z_L$, strengthening the
+independence assumption in the variance argument above.
