@@ -1,0 +1,35 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage[top=0.75in,bottom=1in,left=0.75in,right=0.75in,columnsep=0.25in]{geometry}
+\usepackage{times}
+\usepackage{natbib}
+\input{preamble}
+
+\title{Speed is Confidence}
+\author{Joshua V.\ Dillon\\Independent Researcher\\\tt\small \href{mailto:jvdillon@gmail.com}{jvdillon@gmail.com}}
+
+\begin{document}
+
+\twocolumn[
+\maketitle
+\begin{@twocolumnfalse}
+\begin{abstract}
+\input{0_abstract}
+\end{abstract}
+\vspace{0.5cm}
+\end{@twocolumnfalse}
+]
+
+\input{1_introduction}
+\input{2_background}
+\input{3_method}
+\input{4_related}
+\input{5_experiments}
+\input{6_conclusion}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\newpage
+\input{7_appendix}
+
+\end{document}

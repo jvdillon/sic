@@ -1,0 +1,229 @@
+\section{Method}
+
+\subsection{The Ensemble Puzzle}
+
+Standard practice for improving accuracy is
+ensembling~\citep{dietterich2000ensemble}: train multiple models with different
+seeds and average their predictions. For TRM on Sudoku-Extreme:
+%
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Method & Puzzle Acc. & Forward Passes \\
+\midrule
+Single model & 84.97\% & 16 \\
+Ensemble (3 seeds) & 88.52\% & 48 \\
++ TTA (4 rotations) & 91.51\% & 192 \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+Ensemble plus test-time augmentation yields +6.5\% accuracy, but at
+12$\times$ the compute cost. This presents a puzzle: ensembling helps, but the
+standard approach of probability averaging seems wasteful. Each model in the
+ensemble has its own ``opinion'' about when to stop reasoning, yet we ignore
+this timing information entirely. Can we do better by paying attention to
+\emph{when} models commit to their answers?
+
+We begin with a biological intuition and follow it to its logical conclusion.
+
+Biological neural systems face a fundamental constraint: metabolic energy is
+scarce, yet decisions must be fast. Evolution's solution is to \emph{act on
+the first confident signal}. In cortical winner-take-all
+circuits~\citep{grossberg1987competitive}, competing neural populations race to
+threshold, with the first to fire suppressing alternatives. Spiking neural
+networks formalize this as time-to-first-spike (TTFS)
+coding~\citep{thorpe2001spike, park2020t2fsnn}, where information is encoded in
+\emph{when} neurons fire rather than \emph{how often}---achieving both speed
+and energy efficiency.
+
+This principle suggests a strategy for ensembles of iterative reasoners:
+instead of averaging probabilities, \textbf{select the first model to halt}.
+
+\subsection{Halt-First Ensemble}
+
+The procedure is simple: run all ensemble members in parallel, each performing
+its own ACT iterations. When any model's halting signal exceeds threshold, that
+model provides the final answer. The results are striking:
+%
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & Acc. & Steps & Speedup \\
+\midrule
+Prob.\ avg.\ (12) & 91.5\% & 192 & 1$\times$ \\
+\textbf{Halt-first (12)} & \textbf{97.2\%} & \textbf{18.5} & \textbf{10$\times$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+Halt-first selection improves accuracy by 5.7 percentage points while using
+10$\times$ less compute. This validates the biological intuition:
+\textbf{inference speed is an implicit confidence signal}. When a reasoning
+process converges quickly, it indicates the model has found a ``clean''
+solution path---one without contradictions or backtracking. Probability
+averaging destroys this signal; a confident model halting at step 1 gets
+diluted by uncertain models still deliberating. Halt-first selection preserves
+the information that evolution discovered: the reasoner that finishes first is
+most likely correct.
+
+\subsection{Oracle-First Training}
+
+The halt-first result raises a natural question: can we internalize this
+benefit within a single model? Deploying multiple models is expensive---we want
+the accuracy of an ensemble with the deployment cost of one.
+
+Our key insight is that ensemble diversity comes from different random
+initializations during training. We can internalize this diversity by
+maintaining $K$ parallel latent initializations \emph{within} one model and
+letting them compete. During training, we run $K{=}4$ parallel hypotheses; at
+inference, we run just one.
+
+Specifically, we maintain $K$ parallel low-level states
+$\{z_L^{(k)}\}_{k=1}^K$, each from a learned initialization
+$L_{\text{init}}^{(k)}$, while sharing the high-level state $z_H$. At each
+step, all $K$ heads process the input in parallel, and the
+\textbf{winner-take-all} (WTA) rule selects which head receives the gradient:
+%
+\begin{equation}
+  k^* = \argmin_k \mathcal{L}(y^{(k)}, y_\text{target})
+\end{equation}
+%
+Only the winning head contributes to the loss. This mirrors halt-first
+selection: at inference, the fastest model wins; during training, the most
+accurate head wins. Both reward the same underlying property: having found a
+clean solution path. The connection is deep---we are teaching the model to find
+confident solutions by making confidence (low loss) the criterion for receiving
+gradient signal.
+
+\paragraph{Training dynamics.} A key detail: TRM training ``unpacks'' the outer
+loop of \Cref{alg:trm}. Each gradient step performs one H-cycle, carrying
+$z_H$ and $z_L$ to the next step. This means the $K$ parallel chains evolve
+across multiple gradient updates, not within a single forward pass.
+
+\begin{algorithm}[h]
+\caption{Oracle-First Training (one step)}
+\label{alg:wta}
+\begin{algorithmic}[1]
+  \STATE \textbf{Input:} $x$, $y_\text{target}$, carried $z_H$, $\{z_L^{(k)}\}_{k \in S}$ where $|S| \leq K$
+  \FOR{$k \in S$}
+    \STATE $y_k, q_k, z_H', z_L^{(k)} \gets \operatorname{TRM}(x, z_H, z_L^{(k)}; \theta)$
+  \ENDFOR
+  \STATE $k^* \gets \argmin_{k \in S} \mathcal{L}_\text{task}(y_k, y_\text{target})$ \LCOMMENT{winner}
+  \STATE $c \gets \mathbf{1}[y_{k^*} = y_\text{target}]$ \LCOMMENT{correctness}
+  \STATE $\mathcal{L} \gets \mathcal{L}_\text{task}(y_{k^*}, y_\text{target}) + \lambda \mathcal{L}_\text{halt}(q_{k^*}, c)$
+  \STATE Backprop through $\mathcal{L}$
+  \STATE $z_H \gets z_H'$ \LCOMMENT{winner's $z_H$ shared to all}
+  \STATE \textbf{Expunge:} for all $i \neq j$, if $\cos(z_L^{(i)}, z_L^{(j)}) > 0.95$, remove higher-loss from $S$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Chain convergence and expunging.} We observed that $z_L$ chains
+converge rapidly during training: by H-step 5, pairwise cosine similarity
+exceeds 0.99. At this point, maintaining $K$ chains wastes compute---they
+explore nearly identical hypotheses. We address this by \emph{expunging}
+converged chains: when two chains' $z_L$ similarity exceeds 0.95, we remove the
+higher-loss chain and reassign its slot to a new sample. This sparse pooling
+recovers ${\sim}3\times$ throughput on samples that converge early while
+maintaining full $K$-chain diversity on early H-steps where it matters most.
+
+\paragraph{Counter-intuitive design.} WTA training deliberately spends compute
+on reasoning chains that won't contribute to the gradient. This apparent waste
+enables exploration: losing heads probe alternative paths, and winner selection
+identifies which succeeded.
+
+\subsection{Faster Training}
+
+WTA training requires $K$ forward passes per iteration---a $4\times$ increase
+for $K{=}4$. With only a single GPU, efficient training is essential. We
+combine two techniques that reduce training time from days to hours, making
+rapid experimentation possible.
+
+\subsubsection{Muon Optimizer}
+
+We use Muon~\citep{jordan2024muon} for 2D weight matrices (learning rate 0.02,
+weight decay 0.005) and AdamW for embeddings, heads, and biases (learning rate
+$10^{-4}$, weight decay 1.0). Muon's orthogonalized momentum enables
+substantially higher learning rates than AdamW alone, accelerating convergence.
+However, Muon is magnitude-invariant, so bias-like parameters require AdamW.
+
+\paragraph{Selective regularization.} This split-optimizer design creates an
+asymmetric regularization structure: the core reasoning weights (MLPMixer
+blocks) receive minimal regularization via Muon's low weight decay, while
+embeddings and output heads receive strong regularization via AdamW's high
+weight decay. Combined with label smoothing ($\alpha{=}0.2$), this encourages
+the core model to learn expressive representations while preventing the
+input/output interfaces from overfitting. In contrast, baseline TRM applies
+uniform high weight decay (1.0) to all parameters, which may over-constrain
+the reasoning layers.
+
+\paragraph{Modified SwiGLU.} We discovered that Muon fails completely with
+standard SwiGLU activation. The fix is to apply layer normalization before the
+down-projection: $\text{SwiGLU}_\text{mod}(x) = \sigma(g) \cdot
+\text{LayerNorm}(g \odot x)$. Without this modification, Muon's orthogonalized
+updates cause training to diverge.
+
+\subsubsection{SVD-Aligned Initialization}
+
+The $K$ initialization vectors $L_{\text{init}}^{(k)}$ determine hypothesis
+diversity. Naive random initialization risks ``dead'' heads---initializations
+that point in directions the network cannot use effectively. We address this by
+computing the top singular vectors of the first layer's weight matrix and
+ensuring all $K$ heads have equal alignment with this subspace. This provides
+equal ``effective signal strength'' across heads while maintaining diversity in
+the orthogonal complement.
+
+\subsection{Theoretical Interpretation}
+
+Why does halting speed indicate confidence? We provide a theoretical grounding
+through the lens of bilevel equilibrium.
+
+\paragraph{Bilevel fixed-point structure.} TRM computes a nested equilibrium:
+%
+\begin{align}
+  z_L^* &= f(z_L^*, z_H + x) && \text{(inner: fast local refinement)} \\
+  z_H^* &= g(z_H^*, z_L^*) && \text{(outer: slow global integration)}
+\end{align}
+%
+The inner loop equilibrates $z_L$ for fixed $z_H$; the outer loop updates $z_H$
+given the equilibrated $z_L^*$. This separation creates a natural hierarchy:
+$z_L$ handles cell-level constraint propagation while $z_H$ maintains
+puzzle-level state.
+
+\paragraph{Gradients have Schur complement structure.} The implicit gradient
+through this bilevel system takes the form:
+%
+\begin{equation}
+  \frac{dL}{d\theta} = \frac{\partial L}{\partial z_H^*} \cdot S^{-1} \cdot
+  \frac{\partial h}{\partial \theta}
+\end{equation}
+%
+where $S = I - J_H - K_H (I - J_L)^{-1} K_L$ is a Schur complement. The inner
+equilibrium's Jacobian $(I - J_L)^{-1}$ gets embedded inside the outer inverse.
+This factorization---one big inverse becomes two nested smaller ones---is the
+mathematical signature of bilevel structure.
+
+\paragraph{Multiple basins from multiple initializations.} Different $z_L$
+initializations converge to different fixed points $z_L^*(z_H)$. Each
+initialization explores a distinct basin of attraction in the inner equilibrium
+landscape. With $K$ parallel initializations, we sample $K$ basins
+simultaneously.
+
+\paragraph{Speed reflects conditioning.} The convergence rate to $z_L^*$ depends
+on the spectral radius $\rho(J_L)$ of the inner Jacobian. Basins with smaller
+$\rho(J_L)$ converge faster---the Neumann series $(I - J_L)^{-1} = \sum_t J_L^t$
+truncates earlier. \textbf{Halting speed literally measures basin quality}: a
+chain that halts quickly has found a well-conditioned equilibrium.
+
+\paragraph{Winner selection is basin selection.} The WTA rule selects the chain
+with lowest loss, which correlates with finding a stable, well-conditioned
+basin. The Schur complement $S$ varies across basins; the winner occupies the
+basin where $S^{-1}$ is most favorable for the task. Halt-first ensemble
+selection does the same thing implicitly: the first to halt found the
+best-conditioned path.
+
+\paragraph{``Speed is confidence'' = ``speed indicates conditioning.''} This
+reframes our biological intuition in mathematical terms. Evolution's heuristic
+(trust the first signal) corresponds to selecting the equilibrium with best
+spectral properties. WTA training optimizes the network to maintain multiple
+well-conditioned basins, ensuring at least one converges reliably for any input.

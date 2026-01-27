@@ -1,0 +1,34 @@
+\section{Conclusion}
+
+We began with an empirical observation: when ensembling iterative reasoners,
+selecting by \emph{completion speed} dramatically outperforms probability
+averaging. This led us to a hypothesis---inference speed is an implicit
+confidence signal---and a method: winner-take-all training that internalizes
+ensemble diversity within a single model.
+
+Our results on Sudoku-Extreme are striking: a single 7M parameter model achieves
+97.8\% puzzle accuracy, exceeding a 3-model halt-based ensemble and improving
+10pp over the TRM baseline. The key insight is not architectural but
+algorithmic: by letting $K{=}4$ parallel hypotheses compete during training, we
+teach the model to find confident solutions faster.
+
+The broader implication is that \textbf{how quickly} a model converges may be
+as informative as \textbf{what} it outputs. This connects to a rich literature
+on speed-accuracy tradeoffs in human cognition, where fast decisions correlate
+with confidence. Adaptive computation mechanisms like ACT may be learning to
+detect this same signal.
+
+\paragraph{Future directions.}
+\begin{itemize}
+  \item \textbf{Beyond Sudoku.} Validating on ARC, maze-solving, and other
+    reasoning benchmarks.
+  \item \textbf{Scaling $K$.} Understanding why $K{=}4$ saturates and whether
+    harder domains require more heads.
+  \item \textbf{Head specialization.} Encouraging heads to learn diverse
+    strategies rather than converging to similar solutions.
+  \item \textbf{Theoretical foundations.} Formalizing the connection between
+    convergence speed and solution quality in iterative systems.
+\end{itemize}
+
+\paragraph{Code and data.}
+Code and trained models will be released upon publication.

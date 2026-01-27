@@ -1,0 +1,50 @@
+\section{Background}
+
+\subsection{Tiny Recursive Models}
+
+Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm} achieve strong performance
+on constraint satisfaction problems using a remarkably simple architecture: a
+small neural network that iteratively refines its predictions through recursive
+application:
+%
+\begin{algorithm}[h]
+\caption{TRM with ACT (Inference)}
+\label{alg:trm}
+\begin{algorithmic}[1]
+  \FOR{$t = 0, \ldots, n_\text{ACT}{-}1$ \LCOMMENT{$n_\text{ACT}{=}16$}}
+    \FOR{$i = 0, \ldots, n_\text{H}{-}1$ \LCOMMENT{$n_\text{H}{=}6$}}
+      \STATE $z_L, z_H \gets \operatorname{stop}(z_L), \operatorname{stop}(z_H)$
+      \FOR{$j = 0, \ldots, n_\text{L}{-}1$ \LCOMMENT{$n_\text{L}{=}9$}}
+        \STATE $z_L \gets f(\operatorname{embed}(x;\theta) + z_L + z_H;\theta)$
+      \ENDFOR
+      \STATE $z_H \gets f(z_L + z_H;\theta)$
+    \ENDFOR
+    \STATE $y,q \gets h_\text{puzzle}(z_H;\theta), h_\text{halt}(z_H;\theta)$
+    \IF{$q > 0$}
+      \STATE \textbf{break}
+    \ENDIF
+  \ENDFOR
+\end{algorithmic}
+\end{algorithm}
+%
+The model maintains two latent states: $z_L$ for ``low-level'' details (updated
+$n_\text{L}$ times per H-cycle) and $z_H$ for ``high-level'' reasoning
+(updated once per H-cycle). The stop-gradient prevents gradient flow between
+H-cycles, enabling stable training. Gradients flow only through the final output.
+
+On Sudoku-Extreme (1,000 puzzles with 17 given digits), a 7M parameter TRM
+achieves 87.4\% puzzle accuracy---substantially outperforming larger language
+models while using a fraction of the parameters.
+
+\subsection{Adaptive Computation Time}
+
+Rather than fixing $T$, TRM can learn \emph{when to stop} via Adaptive
+Computation Time (ACT)~\citep{graves2016act}. The model outputs a halting
+probability $q_\text{halt}\defeq\sigmoid(q)$
+at each step, trained to predict whether the current output is correct. When
+$q_\text{halt} > 0.5$, the model ``commits'' to its answer.
+
+This creates an implicit tradeoff: easy puzzles should halt quickly (high
+confidence after few iterations), while hard puzzles may require more
+computation. In practice, a well-trained TRM solves most Sudoku puzzles in 1--3
+steps, with a long tail requiring up to 16 iterations.

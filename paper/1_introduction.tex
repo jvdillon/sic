@@ -1,0 +1,55 @@
+\section{Introduction}
+
+When faced with uncertainty, biological neural systems don't deliberate
+indefinitely---they act on the first confident signal. This principle, refined
+by millions of years of evolution, underlies rapid decision-making from prey
+detection to social judgment. In cortical winner-take-all circuits, competing
+neural populations race to threshold; the first to fire suppresses alternatives
+and triggers action~\citep{grossberg1987competitive}. The speed of convergence
+itself carries information: a fast response indicates a clear, unambiguous
+stimulus.
+
+We apply this biological insight to improve neural network ensembles. Standard
+ensemble methods average predictions across models, treating all outputs
+equally regardless of when each model reaches its answer. For iterative
+reasoners with adaptive computation time (ACT)~\citep{graves2016act}, this
+discards valuable information: models that converge quickly have typically
+found ``clean'' solution paths, while those still deliberating are often stuck
+or uncertain.
+
+Our key observation is that \textbf{inference speed is an implicit confidence
+signal}. When multiple models reason in parallel, the first to halt is most
+likely correct. This simple selection rule---which we call \emph{halt-first
+ensembling}---improves accuracy by 5.7 percentage points over probability
+averaging while using 10$\times$ less compute on the Sudoku-Extreme benchmark.
+
+This raises a natural question: can we internalize this benefit within a single
+model? Training and deploying multiple models is expensive. We show that the
+diversity exploited by halt-first selection comes primarily from different
+random initializations during training. By maintaining $K$ parallel latent
+initializations within one model and training with a winner-take-all (WTA)
+objective, we achieve ensemble-level accuracy with single-model deployment
+cost.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item We demonstrate that halt-first selection outperforms probability
+    averaging for ensembles of iterative reasoners, achieving 97.2\% accuracy
+    vs.\ 91.5\% with 10$\times$ less compute.
+  \item We introduce \emph{oracle-first training}, a WTA method that
+    internalizes ensemble diversity within a single model, achieving
+    96.9\% $\pm$ 0.6\% accuracy with zero inference overhead.
+  \item We identify chain convergence during training and introduce
+    \emph{expunging}---removing converged hypotheses to recover compute for
+    new samples.
+  \item We discover that Muon optimization fails with standard SwiGLU and
+    provide a fix: layer normalization before the down-projection. This
+    enables 4$\times$ higher learning rates than AdamW.
+  \item We provide a theoretical interpretation connecting halting speed to
+    the spectral properties of bilevel equilibria, grounding ``speed is
+    confidence'' in the conditioning of nested fixed points.
+  \item We document extensive hyperparameter exploration across 180+
+    experiments, identifying critical factors: carry policy, SVD-aligned
+    initialization, and z\_L diversity. Code and trained models at
+    \url{https://anonymous.4open.science/r/TODO}.
+\end{enumerate}

@@ -1,0 +1,151 @@
+% Shared preamble for ICML and arXiv versions
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{microtype}
+
+% Algorithms
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\renewcommand{\algorithmicdo}{}
+\renewcommand{\algorithmicendfor}{\textbf{end}}
+\renewcommand{\algorithmicendif}{\textbf{end}}
+\newcommand{\LCOMMENT}[1]{\hfill\textit{\# #1}}
+
+% TikZ
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning}
+
+% Colors
+\definecolor{DarkBlue}{RGB}{51,102,204}
+\definecolor{LightBlue}{RGB}{102,178,255}
+\definecolor{DarkRed}{RGB}{153,0,51}
+\definecolor{LightPurple}{RGB}{204,153,255}
+\definecolor{Purple}{RGB}{128,0,128}
+\definecolor{LinkBlue}{RGB}{0,0,139}
+
+% Hyperref and cleveref (must be last)
+\usepackage[breaklinks=true,bookmarks=false,colorlinks=true,linkcolor=LinkBlue,citecolor=LinkBlue,urlcolor=LinkBlue]{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+
+
+\renewcommand{\L}{\mathcal{L}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\Y}{\mathcal{Y}}
+\newcommand{\Z}{\mathcal{Z}}
+
+\renewcommand{\H}{\operatorname{\mathsf H}}
+\newcommand{\I}{\operatorname{\mathsf I}}
+\newcommand{\K}{\operatorname{\mathsf K}}
+\newcommand{\E}{\operatorname{\mathsf E}}
+\newcommand{\D}{\operatorname{\mathsf D}}
+\newcommand{\F}{\operatorname{\mathsf{F}}}
+
+\newcommand{\dd}{\mathrm{d}}
+
+\newcommand{\bilinear}{\operatorname{Bilinear}}
+
+\newcommand{\softmax}{\operatorname{softmax}}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+\newcommand{\expit}{\operatorname{expit}}
+\newcommand{\logit}{\operatorname{logit}}
+
+\newcommand{\reals}{\mathbb{R}}
+\newcommand{\ints}{\mathbb{Z}}
+\newcommand{\simplex}{\mathbb{P}}
+
+\newcommand\scalemath[2]{\scalebox{#1}{\mbox{\ensuremath{\displaystyle #2}}}}
+\newcommand{\defeq}{\stackrel{\scalemath{0.5}{\mathrm{def}}}{=}}
+\newcommand{\iid}{\stackrel{\scalemath{0.5}{\mathrm{iid}}}{\sim}}
+\newcommand{\tee}{{\scalemath{0.5}{\mathsf{T}}}}
+
+\newcommand{\Bernoulli}{\operatorname{Bernoulli}}
+\newcommand{\Categorical}{\operatorname{Categorical}}
+\newcommand{\Poisson}{\operatorname{Poisson}}
+\newcommand{\MVN}{\operatorname{MVN}}
+\newcommand{\Uniform}{\operatorname{Uniform}}
+
+\newcommand{\snr}{\mathrm{SNR}}
+
+\newcommand{\for}{\mathrm{for}\;\;}
+\renewcommand{\stop}{\operatorname{stop}}
+\newcommand{\size}{\operatorname{size}}
+
+\newcommand{\argmin}{\operatornamewithlimits{arg\, min}}
+\newcommand{\argmax}{\operatornamewithlimits{arg\, max}}
+
+\newcommand{\of}{\circ}
+\newcommand{\distance}{\operatorname{distance}}
+
+\newcommand{\reshape}{\operatorname{reshape}}
+\newcommand{\transpose}{\operatorname{transpose}}
+\newcommand{\rearrange}{\operatorname{rearrange}}
+\newcommand{\shape}{\operatorname{shape}}
+\newcommand{\ndims}{\operatorname{ndims}}
+
+\newcommand{\Encoder}{\operatorname{Encoder}}
+\newcommand{\Decoder}{\operatorname{Decoder}}
+
+
+% Default fixed font does not support bold face
+\DeclareFixedFont{\ttb}{T1}{txtt}{bx}{n}{10} % for bold
+\DeclareFixedFont{\ttm}{T1}{txtt}{m}{n}{10}  % for normal
+
+% Custom colors
+\usepackage{color}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+
+\usepackage{listings}
+
+% Python style for highlighting
+%\newcommand\pythonstyle{\lstset{
+%language=Python,
+%basicstyle=\ttm,
+%morekeywords={self},              % Add keywords here
+%keywordstyle=\ttb\color{deepblue},
+%emph={MyClass,__init__},          % Custom highlighting
+%emphstyle=\ttb\color{deepred},    % Custom highlighting style
+%stringstyle=\color{deepgreen},
+%frame=tb,                         % Any extra options here
+%showstringspaces=false
+%}}
+
+\newcommand\pythonstyle{\lstset{
+language=Python,
+basicstyle=\footnotesize\ttm,
+keywordstyle=\ttb\color{deepblue},
+commentstyle=\ttm\color{deepgreen},
+stringstyle=\color{deeporange},
+emphstyle=\ttb\color{deepred},    % Custom highlighting style.
+emph={__init__,__call__},          % Custom highlighting.
+otherkeywords={self,yield},       % Additional keywords.
+frame=single,                     % `tb` for top-bottom, `single` for square.
+showstringspaces=false,
+breaklines=true,
+backgroundcolor=\color{verylightgray},
+}}
+
+% Python environment
+\lstnewenvironment{python}[1][]
+{
+\pythonstyle
+\lstset{#1}
+}
+{}
+
+% Python for inline
+\newcommand\pythoninline[1]{{\pythonstyle\lstinline!#1!}}
+\renewcommand{\v}[1]{\pythoninline{#1}}
+
+% Python for external files
+\newcommand\pythonexternal[2][]{{
+\pythonstyle
+\lstinputlisting[#1]{#2}}}
+
+%\usepackage[ruled,vlined]{algorithm2e}

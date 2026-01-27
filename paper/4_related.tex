@@ -1,0 +1,90 @@
+\section{Related Work}
+
+\paragraph{Recursive reasoning models.}
+Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm} demonstrate that small
+networks with iterative refinement can outperform larger models on constraint
+satisfaction. The key insight is that recursive application of a small network
+can implement complex reasoning through gradual refinement, similar to how
+iterative algorithms solve constraint satisfaction problems. Our work extends
+TRM with multi-head stochastic search, showing that the diversity lost by using
+a single model can be recovered through parallel latent initializations. Deep
+Improvement Supervision~\citep{dis2025} takes a different approach, providing
+explicit intermediate targets rather than relying on implicit refinement; this
+is complementary to our winner-take-all dynamics.
+
+\paragraph{Adaptive computation.}
+Adaptive Computation Time (ACT)~\citep{graves2016act} allows models to learn
+when to stop iterating. PonderNet~\citep{banino2021pondernet} reformulates
+halting as a probabilistic model with unbiased gradients. Universal
+Transformers~\citep{dehghani2018universal} apply depth-adaptive computation to
+transformers. Our key observation is that the halting signal encodes
+confidence, making first-to-halt selection superior to probability averaging.
+
+\paragraph{Early-exit ensembles.}
+Recent work shows that \emph{cascaded} ensembles with early exit can be more
+efficient than scaling single models~\citep{xia2023earlyexit}. These approaches
+run ensemble members \emph{sequentially}, exiting when confidence exceeds a
+threshold. Our halt-first selection differs fundamentally: we run models
+\emph{in parallel} and select whichever halts first. This exploits timing as a
+confidence signal rather than explicit confidence scores, and achieves both
+higher accuracy and lower latency than sequential cascades.
+
+\paragraph{Dynamic ensemble selection.}
+Dynamic Ensemble Selection (DES)~\citep{cruz2018deslib} chooses which model to
+use based on input features, using $k$-nearest neighbors to identify locally
+competent classifiers. This requires explicit competence estimation; our
+approach needs no such mechanism---halting time implicitly identifies the most
+confident model.
+
+\paragraph{Portfolio solvers.}
+In constraint satisfaction, algorithm portfolios~\citep{gomes2001satportfolio}
+run multiple solvers in parallel, terminating when any solver
+succeeds~\citep{luby1993optimal}. This ``first to finish'' strategy is optimal
+for Las Vegas algorithms where run times are unpredictable. Our halt-first
+ensemble applies this principle to neural iterative reasoners---to our
+knowledge, the first such application. The key insight is that ACT-style
+halting provides a natural ``finish'' signal analogous to solver termination.
+
+\paragraph{Diverse solution strategies.}
+PolyNet~\citep{hottung2025polynet} learns multiple complementary solution
+strategies within a single decoder for combinatorial optimization, allowing
+different strategies to specialize on different problem subsets. Our approach
+shares the goal of implicit diversity but differs in mechanism: PolyNet learns
+diverse \emph{construction policies}, while we maintain diverse \emph{latent
+initializations} that compete via winner-take-all dynamics. PolyNet selects
+strategies via explicit scoring; we select via oracle (training) or halting
+time (inference).
+
+\paragraph{Winner-take-all and competitive learning.}
+WTA dynamics appear in competitive learning~\citep{rumelhart1985competitive},
+mixture of experts~\citep{shazeer2017moe}, and sparse
+attention~\citep{child2019sparse}. Our use of WTA differs: we apply it to
+\emph{latent initializations} rather than network components, creating
+competition among reasoning trajectories rather than experts.
+
+\paragraph{Test-time compute scaling.}
+Recent work explores scaling compute at inference time rather than model size.
+Chain-of-thought prompting, tree search, and iterative refinement all trade
+inference compute for accuracy. Our work contributes to this paradigm: halt-first
+selection achieves \emph{better} accuracy with \emph{less} compute by
+exploiting the structure of iterative reasoning. Rather than uniformly
+allocating compute across all inputs, we let the model adaptively allocate
+based on difficulty---easy puzzles halt immediately, hard puzzles iterate
+longer. WTA training goes further, internalizing this adaptive compute
+allocation within a single model.
+
+\paragraph{Biological inspiration.}
+Time-to-first-spike (TTFS) coding in spiking neural
+networks~\citep{thorpe2001spike, park2020t2fsnn} encodes information in
+\emph{when} neurons fire rather than firing rates, achieving both speed and
+energy efficiency. Winner-take-all circuits in cortex suppress alternatives
+once a threshold is reached~\citep{grossberg1987competitive}. At a higher
+organizational level, the Thousand Brains
+theory~\citep{hawkins2021thousand} proposes that cortical columns operate as
+parallel models that vote to reach consensus. Our halt-first ensemble embodies
+these principles: parallel reasoners race, and the first to ``fire'' (halt)
+provides the answer. Human decision-making shows analogous speed-accuracy
+tradeoffs~\citep{heitz2014speedaccuracy}, formalized in drift-diffusion
+models~\citep{ratcliff2008diffusion} as evidence accumulation until threshold.
+Our findings suggest neural networks exhibit similar dynamics: confident
+solutions emerge faster during iterative refinement.

@@ -1,0 +1,146 @@
+\appendix
+
+\section{Approaches That Failed}
+\label{app:failed}
+
+We document approaches that failed to improve over baseline, as negative results
+inform future research directions. All experiments below achieved \emph{lower}
+accuracy than standard TRM training.
+
+\subsection{Diversity Through Training Losses}
+
+Several approaches attempted to create diverse solution paths during training,
+motivated by the success of halt-first ensembling at inference.
+
+\paragraph{Forced trajectory divergence.} Adding a loss penalizing high cosine
+similarity between trajectories from different input permutations. Despite
+successfully reducing similarity (0.83 final), accuracy dropped from 86.3\% to
+48.2\%---the model learned to satisfy both permutations with \emph{worse}
+solutions rather than better diverse ones.
+
+\paragraph{Inter-H diversity loss.} Penalizing consecutive H-iteration
+similarity to prevent ``redundant'' iterations. This broke iterative
+refinement: each step began undoing the previous step's work. Healthy models
+show $\cos(z_H^{(h)}, z_H^{(h+1)}) > 0.9$; low similarity is harmful.
+
+\paragraph{Multi-head output diversity.} Training $K{=}3$ separate value heads
+on a shared trunk with diversity loss \emph{subtracting} similarity. Heads
+collapsed to identical outputs within 1000 steps despite the diversity pressure.
+The shared trunk creates a convergence attractor that overwhelms any loss signal.
+
+\subsection{Architectural Diversity Mechanisms}
+
+\paragraph{Slot attention.} Replacing $z_H$ with $K{=}3$ competing slots, forcing
+cells to distribute information via softmax competition. Slots collapsed to
+identical representations---the shared reasoning blocks (MLPMixer) dominate any
+structural diversity mechanism.
+
+\paragraph{K-specific full-rank weights.} Giving each of $K{=}3$ hypotheses
+completely separate reasoning parameters (3$\times$ model size). Despite no
+weight sharing, all hypotheses converged to the same solution. Separate weights
+$\neq$ diversity; training dynamics must force divergence.
+
+\paragraph{Learned $z_H$ initialization.} A puzzle-encoder MLP mapping inputs
+to per-puzzle initial states. Accuracy dropped 1.9\%---fixed initialization
+outperforms learned initialization, which adds noise and overfitting risk.
+
+\paragraph{Multi-init training.} $K{=}3$ learned $(z_H, z_L)$ initialization pairs
+with first-to-halt racing. Initial advantage vanished by step 2500; shared
+weights caused all initializations to converge to the same solution.
+
+\subsection{Loss Weighting and Curriculum}
+
+\paragraph{Per-H label smoothing.} Softer targets early (exploration), sharper
+late (commitment). Consistently 10+ percentage points behind baseline---high
+average smoothing hurt convergence without compensating benefits.
+
+\paragraph{Confidence-weighted loss.} Upweighting high-entropy cells. Initially
+neutral but diverged late (--3\% at convergence); extra weighting destabilized
+training.
+
+\paragraph{Stuck-puzzle loss weighting.} 3$\times$ weight for puzzles where
+$q_\text{halt} < 0$. With 91\% of puzzles marked ``stuck'' early in training,
+this overwhelmed the loss landscape.
+
+\subsection{Fixed-Point and Contraction Losses}
+
+\paragraph{Fixed-point loss.} Penalizing $\|z_H^{(h+1)} - z_H^{(h)}\|$ to
+encourage convergence. Accuracy dropped to ${\sim}65\%$. The model needs
+continued iteration even when states are similar.
+
+\paragraph{Validity loss.} Auxiliary loss encouraging predictions to satisfy
+Sudoku constraints (no duplicates per row/col/box). All variants (symmetric,
+low-temperature, Gumbel) failed at ${\sim}65\%$ accuracy.
+
+\subsection{Input Manipulation}
+
+\paragraph{Input corruption.} Corrupting 50\% of given digits during training
+(diffusion-inspired). Destroyed learning---the model needs constraint information
+intact. This contrasts with corrupting \emph{predictions} ($z_H$ noise), which
+helps marginally.
+
+\paragraph{Stochastic cell selection.} Updating random 50\% of cells per H-step
+(ConsFormer-inspired). Failed by --3\%: TRM needs all cells to propagate
+constraints simultaneously.
+
+\subsection{Inference-Time Mechanisms at Training}
+
+\paragraph{Binary reset during training.} Resetting $z_H/z_L$ when
+$q_\text{halt} < 0$. DOA at step 500---destructive gradient signals from 41\%
+of samples stuck at maximum iterations.
+
+\paragraph{Entropy regularization.} Encouraging uncertainty at early H-steps.
+Accuracy dropped 0.5\%: the model benefits from committing early on easy cells
+and propagating, not from hedging.
+
+\subsection{Architecture Modifications}
+
+\paragraph{Causal attention.} Replacing MLPMixer with causal TransformerBlock.
+Failed at --28\% behind baseline: TRM requires \emph{bidirectional} constraint
+propagation. Causal masking prevents cell 80 from seeing cell 0, breaking
+Sudoku's global structure.
+
+\paragraph{Larger model.} Increasing hidden dimension from 512 to 768. Unstable
+training with eventual collapse---the MLPMixer architecture doesn't benefit from
+extra capacity on this task.
+
+\subsection{Summary}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lc}
+\toprule
+Approach & $\Delta$ vs Baseline \\
+\midrule
+Forced trajectory divergence & --38\% \\
+Causal attention & --28\% \\
+Inter-H diversity loss & --20\% \\
+Multi-head diversity loss & --15\% \\
+Slot attention & --12\% \\
+Per-H label smoothing & --11\% \\
+Stochastic cell selection & --3\% \\
+Confidence-weighted loss & --3\% \\
+K-specific full-rank & --2\% \\
+Learned $z_H$ init & --2\% \\
+Entropy regularization & --0.5\% \\
+\bottomrule
+\end{tabular}
+\caption{Summary of failed approaches, sorted by accuracy drop.}
+\label{tab:failed}
+\end{table}
+
+The common failure mode: approaches that work for other architectures
+(diffusion, ViTs, LLMs) often fail for TRM because iterative refinement has
+different dynamics than single-pass inference or autoregressive generation.
+TRM needs:
+\begin{enumerate}
+  \item Bidirectional information flow (no causal masking)
+  \item High iteration-to-iteration similarity (incremental refinement)
+  \item Early commitment on easy cells (propagation, not hedging)
+  \item Intact input constraints (no corruption)
+\end{enumerate}
+
+The success of WTA training, in contrast, works \emph{with} these dynamics:
+it creates diversity in the \emph{initialization} (where it matters) while
+allowing each hypothesis to follow normal iterative refinement.
