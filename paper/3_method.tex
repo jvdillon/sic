@@ -10,7 +10,7 @@ seeds and average their predictions. For TRM on Sudoku-Extreme:
 \begin{center}
 \begin{tabular}{lcc}
 \toprule
-Method & Puzzle Acc. & Forward Passes \\
+Method & Puzzle Acc. & ACT Steps \\
 \midrule
 Single model (avg) & 85.0\% & 16 \\  % avg(x02.log, x03.log, x04.log)
 Ensemble (3 seeds) & 88.52\% & 48 \\  % x02.log + x03.log + x04.log
@@ -59,8 +59,8 @@ Prob.\ avg.\ (12) & 91.5\% & 192 & 1$\times$ \\  % x02.log + x03.log + x04.log +
 \end{tabular}
 \end{center}
 %
-Halt-first selection improves accuracy by 5.7 percentage points while using
-10$\times$ less compute. This validates the biological intuition:
+Halt-first selection improves accuracy by 5.7 percentage points while requiring
+10$\times$ fewer reasoning steps. This validates the biological intuition:
 \textbf{inference speed is an implicit confidence signal}. When a reasoning
 process converges quickly, it indicates the model has found a ``clean''
 solution path---one without contradictions or backtracking. Probability
@@ -191,9 +191,11 @@ states while sharing $z_H$ works well. This is intuition, not a formal result.
   z_H^* &= g(z_H^*, z_L^*) && \text{(outer: slow global integration)}
 \end{align}
 %
-The inner loop equilibrates $z_L$ for fixed $z_H$; the outer loop updates $z_H$
-given the equilibrated $z_L^*$. This creates a natural hierarchy: $z_L$ handles
-cell-level constraint propagation while $z_H$ maintains puzzle-level state.
+where $z_x = \operatorname{embed}(x)$ is the embedded input (fixed throughout
+iteration). The inner loop equilibrates $z_L$ for fixed $z_H$; the outer loop
+updates $z_H$ given the equilibrated $z_L^*$. This creates a natural hierarchy:
+$z_L$ handles cell-level constraint propagation while $z_H$ maintains
+puzzle-level state.
 
 \paragraph{Schur complement structure.} The implicit gradient through this
 bilevel system has the form:

@@ -21,7 +21,7 @@ Our key observation is that \textbf{inference speed is an implicit confidence
 signal}. When multiple models reason in parallel, the first to halt is most
 likely correct. This simple selection rule---which we call \emph{halt-first
 ensembling}---improves accuracy by 5.7 percentage points over probability
-averaging while using 10$\times$ less compute on the Sudoku-Extreme benchmark.
+averaging while requiring 10$\times$ fewer reasoning steps on Sudoku-Extreme.
 
 This raises a natural question: can we internalize this benefit within a single
 model? Training and deploying multiple models is expensive. We show that the
@@ -35,7 +35,7 @@ cost.
 \begin{enumerate}
   \item We demonstrate that halt-first selection outperforms probability
     averaging for ensembles of iterative reasoners, achieving 97.2\% accuracy
-    vs.\ 91.5\% with 10$\times$ less compute.
+    vs.\ 91.5\% while requiring 10$\times$ fewer reasoning steps.
     % Source: x02.log, x03.log, x04.log (halt-first 97.2%, prob avg 91.5%)
   \item We introduce \emph{oracle-first training}, a WTA method that
     internalizes ensemble diversity within a single model, achieving

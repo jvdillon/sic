@@ -54,7 +54,7 @@ use the halting signal with a maximum of 16 reasoning steps.
 \small
 \begin{tabular}{@{}lccc@{}}
 \toprule
-Method & Cell & Puzzle & Cost \\
+Method & Cell & Puzzle & Inf.\ Cost \\
 \midrule
 Baseline & 98.2\% & 86.1\% & 1$\times$ \\  % x00.log
 \midrule
@@ -67,7 +67,8 @@ K=4 trunc\_randn init & 98.6\% & 96.9$\pm$0.6\% & 1$\times$ \\  % x182a.log, x18
 \textbf{K=4 learned init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.8\%} & \textbf{1$\times$} \\  % x182j.log, x182k.log, x182l.log, x182m.log
 \bottomrule
 \end{tabular}
-\caption{Results on Sudoku-Extreme (n=4 seeds each). Both WTA variants achieve
+\caption{Results on Sudoku-Extreme (n=4 seeds each). Inf.\ Cost is inference
+cost relative to baseline (1 model, 16 ACT steps). Both WTA variants achieve
 \textbf{96.9\%} single-pass accuracy---matching TTA-8 (97.3\%) without test-time
 augmentation. Random init (K=$\infty$ effective) and learned init (K=4 heads)
 perform identically, showing 4 heads capture the full diversity benefit.}
@@ -212,8 +213,8 @@ Halt-first (12) & 1.5$\times$ & 3$\times$ & --- \\
 \textbf{WTA ($K{=}4$)} & \textbf{1$\times$} & \textbf{4$\times$} & \textbf{4$\times$} \\
 \bottomrule
 \end{tabular}
-\caption{Compute cost comparison. Inference shows forward passes per puzzle;
-train shows total training compute. WTA shifts cost entirely to training.
+\caption{Compute cost comparison. Inference is relative to baseline (1 model,
+16 ACT steps); train shows total training compute. WTA shifts cost to training.
 }
 \label{tab:compute}
 \end{table}
@@ -256,7 +257,7 @@ puzzles have at least one chain halt at step 0; 94.9\% within step 1.}
 
 
 \Cref{tab:compute} compares compute costs. Halt-first ensemble averages 1.5
-forward passes per puzzle (86\% halt at step 0 with 12 chains) but requires
+ACT cycles per puzzle (86\% halt at step 0 with 12 chains) but requires
 training 3 models. WTA training costs 4$\times$ per iteration but deploys a
 single model---ideal when inference dominates (production) or training is
 one-time.

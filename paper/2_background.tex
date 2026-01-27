@@ -29,11 +29,12 @@ application:
 %
 The model maintains two latent states: $z_L$ for ``low-level'' details (updated
 $n_\text{L}$ times per H-cycle) and $z_H$ for ``high-level'' reasoning
-(updated once per H-cycle). The stop-gradient prevents gradient flow between
-H-cycles, enabling stable training. Gradients flow only through the final output.
+(updated once per H-cycle). The $\operatorname{stop}(\cdot)$ operator detaches
+its argument from the computation graph, preventing gradient flow between
+H-cycles and enabling stable training.
 
-On Sudoku-Extreme (1,000 puzzles with 17 given digits), a 7M parameter TRM
-achieves 87.4\% puzzle accuracy---substantially outperforming larger language
+On Sudoku-Extreme (10,000 puzzles with 17 given digits), a 7M parameter TRM
+achieves ${\sim}$86\% puzzle accuracy---substantially outperforming larger language
 models while using a fraction of the parameters.
 
 \subsection{Adaptive Computation Time}
