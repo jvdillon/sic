@@ -41,9 +41,6 @@ cost.
     internalizes ensemble diversity within a single model, achieving
     96.9\% $\pm$ 0.6\% accuracy with zero inference overhead.
     % Source: x182a.log (97.6%), x182b.log (96.2%), x182c.log (96.5%), x182d.log (97.2%)
-  \item We identify chain convergence during training and introduce
-    \emph{expunging}---removing converged hypotheses to recover compute for
-    new samples.
   \item We discover that Muon optimization fails with standard SwiGLU and
     provide a fix: layer normalization before the down-projection. This
     enables 4$\times$ higher learning rates than AdamW.

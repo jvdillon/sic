@@ -64,10 +64,9 @@ Halt-first selection improves accuracy by 5.7 percentage points while using
 \textbf{inference speed is an implicit confidence signal}. When a reasoning
 process converges quickly, it indicates the model has found a ``clean''
 solution path---one without contradictions or backtracking. Probability
-averaging destroys this signal; a confident model halting at step 1 gets
-diluted by uncertain models still deliberating. Halt-first selection preserves
-the information that evolution discovered: the reasoner that finishes first is
-most likely correct.
+averaging destroys this signal; halt-first selection preserves the information
+that evolution discovered: the reasoner that finishes first is most likely
+correct. We analyze the halting dynamics in detail in \Cref{sec:halting}.
 
 \subsection{Oracle-First Training}
 
@@ -103,31 +102,33 @@ loop of \Cref{alg:trm}. Each gradient step performs one H-cycle, carrying
 $z_H$ and $z_L$ to the next step. This means the $K$ parallel chains evolve
 across multiple gradient updates, not within a single forward pass.
 
+\paragraph{Carry policy.} After each step, we must decide how to propagate
+states to the next iteration. We use \texttt{copy\_top1} for $z_H$: the
+winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 8). For $z_L$, we
+use \texttt{all}: each chain keeps its own $z_L$. This allows heads to benefit
+from shared high-level progress while maintaining low-level diversity (see
+\Cref{sec:ablations} for ablations).
+
 \begin{algorithm}[h]
 \caption{Oracle-First Training (one step)}
 \label{alg:wta}
 \begin{algorithmic}[1]
-  \STATE \textbf{Input:} $x$, $y_\text{target}$, carried $z_H$, $\{z_L^{(k)}\}_{k \in S}$ where $|S| \leq K$
-  \FOR{$k \in S$}
+  \STATE \textbf{Input:} $x$, $y_\text{target}$, carried $z_H$, $\{z_L^{(k)}\}_{k=1}^K$
+  \FOR{$k = 1$ to $K$}
     \STATE $y_k, q_k, z_H', z_L^{(k)} \gets \operatorname{TRM}(x, z_H, z_L^{(k)}; \theta)$
   \ENDFOR
-  \STATE $k^* \gets \argmin_{k \in S} \mathcal{L}_\text{task}(y_k, y_\text{target})$ \LCOMMENT{winner}
+  \STATE $k^* \gets \argmin_{k} \mathcal{L}_\text{CE}(y_k, y_\text{target})$ \LCOMMENT{winner}
   \STATE $c \gets \mathbf{1}[y_{k^*} = y_\text{target}]$ \LCOMMENT{correctness}
-  \STATE $\mathcal{L} \gets \mathcal{L}_\text{task}(y_{k^*}, y_\text{target}) + \lambda \mathcal{L}_\text{halt}(q_{k^*}, c)$
+  \STATE $\mathcal{L} \gets \mathcal{L}_\text{CE}(y_{k^*}, y_\text{target}) + \lambda \mathcal{L}_\text{BCE}(\sigma(q_{k^*}), c)$
   \STATE Backprop through $\mathcal{L}$
   \STATE $z_H \gets z_H'$ \LCOMMENT{winner's $z_H$ shared to all}
-  \STATE \textbf{Expunge:} for all $i \neq j$, if $\cos(z_L^{(i)}, z_L^{(j)}) > 0.95$, remove higher-loss from $S$
 \end{algorithmic}
 \end{algorithm}
-
-\paragraph{Chain convergence and expunging.} We observed that $z_L$ chains
-converge rapidly during training: by H-step 5, pairwise cosine similarity
-exceeds 0.99. At this point, maintaining $K$ chains wastes compute---they
-explore nearly identical hypotheses. We address this by \emph{expunging}
-converged chains: when two chains' $z_L$ similarity exceeds 0.95, we remove the
-higher-loss chain and reassign its slot to a new sample. This sparse pooling
-recovers ${\sim}3\times$ throughput on samples that converge early while
-maintaining full $K$-chain diversity on early H-steps where it matters most.
+%
+\noindent Here $\mathcal{L}_\text{CE}$ is cross-entropy with label smoothing
+($\alpha{=}0.2$), $\mathcal{L}_\text{BCE}$ is binary cross-entropy for the
+halting signal where $q_k$ is the halting logit and $\sigma(q_k)$ is the
+halting probability, and $\lambda{=}0.05$.
 
 \paragraph{Counter-intuitive design.} WTA training deliberately spends compute
 on reasoning chains that won't contribute to the gradient. This apparent waste
@@ -143,11 +144,12 @@ rapid experimentation possible.
 
 \subsubsection{Muon Optimizer}
 
-We use Muon~\citep{jordan2024muon} for 2D weight matrices (learning rate 0.02,
-weight decay 0.005) and AdamW for embeddings, heads, and biases (learning rate
-$10^{-4}$, weight decay 1.0). Muon's orthogonalized momentum enables
+We use Muon~\citep{jordan2024muon} for 2D weight matrices (lr${=}$0.02,
+wd${=}$0.005) and AdamW for embeddings, heads, and biases (lr${=}10^{-4}$,
+wd${=}$1.0, $\beta{=}$(0.9, 0.95)). Muon's orthogonalized momentum enables
 substantially higher learning rates than AdamW alone, accelerating convergence.
 However, Muon is magnitude-invariant, so bias-like parameters require AdamW.
+Learning rate follows a cosine schedule.
 
 \paragraph{Selective regularization.} This split-optimizer design creates an
 asymmetric regularization structure: the core reasoning weights (MLPMixer
@@ -161,9 +163,9 @@ the reasoning layers.
 
 \paragraph{Modified SwiGLU.} We discovered that Muon fails completely with
 standard SwiGLU activation. The fix is to apply layer normalization before the
-down-projection: $\text{SwiGLU}_\text{mod}(x) = \sigma(g) \cdot
-\text{LayerNorm}(g \odot x)$. Without this modification, Muon's orthogonalized
-updates cause training to diverge.
+down-projection: $\text{SwiGLU}_\text{mod}(x) = \text{SiLU}(g) \cdot
+\text{LayerNorm}(g \odot x)$ where $g = Wx$. Without this modification, Muon's
+orthogonalized updates cause training to diverge.
 
 \subsubsection{SVD-Aligned Initialization}
 
@@ -175,15 +177,16 @@ ensuring all $K$ heads have equal alignment with this subspace. This provides
 equal ``effective signal strength'' across heads while maintaining diversity in
 the orthogonal complement.
 
-\subsection{Theoretical Interpretation}
+\subsection{Intuition: Why Speed Indicates Confidence}
 
-Why does halting speed indicate confidence? We provide a theoretical grounding
-through the lens of bilevel equilibrium.
+We offer a speculative interpretation connecting halting speed to optimization
+conditioning. This is a hypothesis, not a formal result; empirical validation
+is future work.
 
 \paragraph{Bilevel fixed-point structure.} TRM computes a nested equilibrium:
 %
 \begin{align}
-  z_L^* &= f(z_L^*, z_H + x) && \text{(inner: fast local refinement)} \\
+  z_L^* &= f(z_L^*, z_H, z_x) && \text{(inner: fast local refinement)} \\
   z_H^* &= g(z_H^*, z_L^*) && \text{(outer: slow global integration)}
 \end{align}
 %
@@ -192,40 +195,31 @@ given the equilibrated $z_L^*$. This separation creates a natural hierarchy:
 $z_L$ handles cell-level constraint propagation while $z_H$ maintains
 puzzle-level state.
 
-\paragraph{Gradients have Schur complement structure.} The implicit gradient
-through this bilevel system takes the form:
-%
-\begin{equation}
-  \frac{dL}{d\theta} = \frac{\partial L}{\partial z_H^*} \cdot S^{-1} \cdot
-  \frac{\partial h}{\partial \theta}
-\end{equation}
-%
-where $S = I - J_H - K_H (I - J_L)^{-1} K_L$ is a Schur complement. The inner
-equilibrium's Jacobian $(I - J_L)^{-1}$ gets embedded inside the outer inverse.
-This factorization---one big inverse becomes two nested smaller ones---is the
-mathematical signature of bilevel structure.
+\paragraph{Architectural asymmetry stabilizes the inner loop.} A key
+observation: $z_x$, $z_L$, and $z_H$ each have unit variance (due to
+normalization), but they enter the computation asymmetrically. L-cycles receive
+$z_L + z_H + z_x$ (three terms), while H-cycles receive only $z_H + z_L$ (two
+terms). Assuming approximate independence, $z_L$ contributes $\tfrac{1}{3}$ of
+L-cycle input variance versus $\tfrac{1}{2}$ for H-cycles.
 
-\paragraph{Multiple basins from multiple initializations.} Different $z_L$
-initializations converge to different fixed points $z_L^*(z_H)$. Each
-initialization explores a distinct basin of attraction in the inner equilibrium
-landscape. With $K$ parallel initializations, we sample $K$ basins
-simultaneously.
+The Jacobian $J_L = \partial f / \partial z_L$ measures sensitivity to $z_L$
+perturbations. When $z_L$ is a smaller fraction of the input, the output is
+more ``anchored'' by context $(z_H + z_x)$ and less sensitive to $z_L$---yielding
+smaller spectral radius. The fixed input $z_x$ thus acts as a stabilizing
+anchor that L-cycles have but H-cycles lack, naturally making the inner loop
+better conditioned than the outer loop.
 
-\paragraph{Speed reflects conditioning.} The convergence rate to $z_L^*$ depends
-on the spectral radius $\rho(J_L)$ of the inner Jacobian. Basins with smaller
-$\rho(J_L)$ converge faster---the Neumann series $(I - J_L)^{-1} = \sum_t J_L^t$
-truncates earlier. \textbf{Halting speed literally measures basin quality}: a
-chain that halts quickly has found a well-conditioned equilibrium.
+\paragraph{WTA training enhances this effect.} The \texttt{copy\_top1} carry
+policy (\Cref{alg:wta}, line~8) copies the winner's $z_H$ to all chains. This
+means each chain's $z_H$ comes from a \emph{different} chain than its $z_L$,
+further decorrelating the inputs and strengthening the independence assumption
+underlying the variance argument.
 
-\paragraph{Winner selection is basin selection.} The WTA rule selects the chain
-with lowest loss, which correlates with finding a stable, well-conditioned
-basin. The Schur complement $S$ varies across basins; the winner occupies the
-basin where $S^{-1}$ is most favorable for the task. Halt-first ensemble
-selection does the same thing implicitly: the first to halt found the
-best-conditioned path.
-
-\paragraph{``Speed is confidence'' = ``speed indicates conditioning.''} This
-reframes our biological intuition in mathematical terms. Evolution's heuristic
-(trust the first signal) corresponds to selecting the equilibrium with best
-spectral properties. WTA training optimizes the network to maintain multiple
-well-conditioned basins, ensuring at least one converges reliably for any input.
+\paragraph{Speed reflects conditioning (conjecture).} For iterative fixed-point
+methods, convergence rate depends on the spectral radius of the iteration
+Jacobian---smaller spectral radius means faster convergence. We hypothesize
+that the learned halting signal $q_\text{halt}$ correlates with this
+conditioning: chains that halt quickly have found well-conditioned paths, while
+chains that deliberate longer are stuck in poorly-conditioned regions.
+Evolution's heuristic (trust the first signal) may thus correspond to selecting
+well-conditioned solutions.

@@ -8,11 +8,12 @@ TRM~\citep{jolicoeur2025trm}, with 8$\times$ augmentation (dihedral symmetries)
 and digit permutation applied during training.
 
 \paragraph{Hardware.} All experiments use a single NVIDIA RTX 5090 (32GB VRAM).
-Training completes in 1.5 hours ($K{=}1$, bs${=}$384, ${\sim}$16GB) to 6 hours
-($K{=}4$, bs${=}$192, ${\sim}$30GB) for 36k steps.
+Training completes in 48 minutes for 8k steps ($K{=}1$, bs${=}$384,
+${\sim}$16GB) to 6 hours ($K{=}4$, bs${=}$192, ${\sim}$30GB) for 36k steps.
 
-\paragraph{Architecture.} 2-layer MLP-Mixer, 512 hidden (7M params), no
-attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (vs.\ 3, 6 in baseline TRM).
+\paragraph{Architecture.} 2-layer MLP-Mixer~\citep{tolstikhin2021mlpmixer}, 512
+hidden (7M params), no attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (vs.\ 3, 6
+in baseline TRM). Modified SwiGLU to accomodate Muon.
 
 \paragraph{Evaluation.} We report puzzle accuracy (fraction of puzzles solved
 completely) and cell accuracy (fraction of cells correct). For ACT models, we
@@ -27,24 +28,24 @@ use the halting signal with a maximum of 16 reasoning steps.
 %   config: TRM3.Config(K_H=1, K_L=4, carry_H="copy_top1", carry_L="all",
 %                       z_L_init_svd=True)
 %
-% Key ablation: z_L_random_init (randn vs nn.Buffer for z_L initialization)
+% Key ablation: z_L_random_init (trunc\_randn vs nn.Buffer for z_L initialization)
 %
 % | Variants | z_L_random_init | 1 ACT warmup | Status      | Result        |
 % |----------|-----------------|--------------|-------------|---------------|
-% | a,b,c,d  | True (randn)    | No           | Done        | 96.9% ± 0.6%  |
-% | e        | True (randn)    | No           | Outlier     | 82.9% (drop)  |
-% | f,h      | True (randn)    | Yes (2k)     | Done        | 94.4% mean    |
+% | a,b,c,d  | True (trunc\_randn)    | No           | Done        | 96.9% ± 0.6%  |
+% | e        | True (trunc\_randn)    | No           | Outlier     | 82.9% (drop)  |
+% | f,h      | True (trunc\_randn)    | Yes (2k)     | Done        | 94.4% mean    |
 % | g,i      | False (Buffer)  | Yes (2k)     | Done        | 96.2% mean    |
 % | j,k,l,m  | False (Buffer)  | No           | Done        | 96.9% ± 0.8%  |
 %
-% KEY FINDING: randn (K=∞ effective) ≈ Buffer (K=4 learned) → 96.9% both!
+% KEY FINDING: trunc\_randn (K=∞ effective) ≈ Buffer (K=4 learned) → 96.9% both!
 % This shows K=4 learned heads capture the diversity of infinitely many random inits.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % Data sources:
 % - Baseline (x00): 86.1% puzzle, 97.3% with TTA-8 [unfuck.txt]
 % - Halt-first 12 chains: 97.2% [analysis/ENSEMBLE.md]
-% - x182{a,b,c,d} (randn): 96.85% ± 0.58%, range 96.2-97.6%
+% - x182{a,b,c,d} (trunc\_randn): 96.85% ± 0.58%, range 96.2-97.6%
 %   x182a: 97.64%, x182b: 96.16%, x182c: 96.46%, x182d: 97.16%
 % - x182{j,k,l,m} (Buffer): 96.88% ± 0.80%, range 95.7-97.4%
 %   x182j: 97.38%, x182k: 95.65%, x182l: 97.36%, x182m: 97.12%
@@ -62,7 +63,7 @@ TTA K=8 & --- & 97.3\% & 8$\times$ \\  % x00.log with TTA
 Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\  % x02.log + x03.log + x04.log halt-first
 \midrule
 \multicolumn{4}{@{}l}{\textit{WTA training (ours)}} \\
-K=4 randn init & 98.6\% & 96.9$\pm$0.6\% & 1$\times$ \\  % x182a.log, x182b.log, x182c.log, x182d.log
+K=4 trunc\_randn init & 98.6\% & 96.9$\pm$0.6\% & 1$\times$ \\  % x182a.log, x182b.log, x182c.log, x182d.log
 \textbf{K=4 learned init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.8\%} & \textbf{1$\times$} \\  % x182j.log, x182k.log, x182l.log, x182m.log
 \bottomrule
 \end{tabular}
@@ -84,10 +85,10 @@ perform identically, showing 4 heads capture the full diversity benefit.}
     96.9\% single-pass accuracy---matching TTA-8 (97.3\%) without any test-time
     augmentation.
     % Source: x182{a,b,c,d,j,k,l,m}.log
-  \item \textbf{K=4 $\approx$ K=$\infty$.} Random init (fresh randn each forward
+  \item \textbf{K=4 $\approx$ K=$\infty$.} Random init (fresh trunc\_randn each forward
     pass, effectively infinite heads) and learned init (4 fixed heads) achieve
     identical 96.9\%. Four well-chosen heads capture the full diversity benefit.
-    % Source: x182{a,b,c,d} (randn) vs x182{j,k,l,m} (Buffer)
+    % Source: x182{a,b,c,d} (trunc\_randn) vs x182{j,k,l,m} (Buffer)
   \item \textbf{Zero inference overhead.} Unlike TTA (8$\times$ cost) or
     ensembles (3+ models), our method requires one model, one forward pass.
     The K heads share all weights except initialization vectors (2KB overhead).
@@ -98,7 +99,7 @@ perform identically, showing 4 heads capture the full diversity benefit.}
 % Source: figures/learning_curves.pdf generated from x182{a,b,c,d}.log
 % x182a: seed=42, 97.64%  x182b: seed=43, 96.16%
 % x182c: seed=44, 96.46%  x182d: seed=45, 97.16%
-% Mean: 96.85% ± 0.58% (randn); x182{j,k,l,m} Buffer achieves same 96.9%
+% Mean: 96.85% ± 0.58% (trunc\_randn); x182{j,k,l,m} Buffer achieves same 96.9%
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/learning_curves.pdf}
@@ -122,8 +123,11 @@ observations:
 \end{itemize}
 
 \subsection{Ablation Studies}
+\label{sec:ablations}
 
-\paragraph{Number of heads.}
+\paragraph{Number of heads.} Due to limited compute (single GPU), we explored
+$K \in \{1, 4, \infty\}$ where $K{=}\infty$ is achieved by sampling fresh
+truncated-normal $z_L$ at each forward pass rather than using learned buffers.
 
 % Source experiments for K ablation (x182 series):
 % K=1: baseline x00 (86.1% puzzle) [unfuck.txt]
@@ -155,9 +159,9 @@ between reasoning steps:
 $z_H$ / $z_L$ Policy & Cell Acc. & Puzzle Acc. \\
 \midrule
 all / all (x179g) & 96.0\% & 90.3\% \\  % x179g.log
-all / top1 (x179f) & 97.4\% & 93.7\% \\  % x179f.log
-top1 / top1 (x179e) & 98.3\% & 95.9\% \\  % x179e.log
-\textbf{copy\_top1 / all (x179q)} & \textbf{99.1\%} & \textbf{97.7\%} \\  % x179q.log
+all / copy (x179f) & 97.4\% & 93.7\% \\  % x179f.log
+copy / copy (x179e) & 98.3\% & 95.9\% \\  % x179e.log
+\textbf{copy / all (x179q)} & \textbf{99.1\%} & \textbf{97.7\%} \\  % x179q.log
 \bottomrule
 \end{tabular}
 \end{center}
@@ -195,7 +199,7 @@ seed-dependent optima. Effects are additive (+6.5pp combined), not redundant.
 
 \subsection{Compute Efficiency Analysis}
 
-\begin{table}[t]
+\begin{table}[htb]
 \centering
 \begin{tabular}{lccc}
 \toprule
@@ -209,40 +213,27 @@ Halt-first (12) & 1.5$\times$ & 3$\times$ & --- \\
 \bottomrule
 \end{tabular}
 \caption{Compute cost comparison. Inference shows forward passes per puzzle;
-train shows total training compute. WTA shifts cost entirely to training.}
+train shows total training compute. WTA shifts cost entirely to training.
+}
 \label{tab:compute}
 \end{table}
 
-\Cref{tab:compute} compares compute costs. Halt-first ensemble averages 1.5
-forward passes per puzzle (86\% halt at step 0 with 12 chains) but requires
-training 3 models. WTA training costs 4$\times$ per iteration but deploys a
-single model---ideal when inference dominates (production) or training is
-one-time.
-
-\paragraph{Wall-clock time.} On a single RTX 5090:
-\begin{itemize}
-  \item Baseline ($K{=}1$, 36k steps, bs${=}$384): 1.5 hours, ${\sim}$16GB VRAM
-  \item WTA ($K{=}4$, 36k steps, bs${=}$192): 6 hours, ${\sim}$30GB VRAM
-  \item Ensemble (3 seeds): 4.5 hours total, but requires 3 models at inference
-\end{itemize}
-
-\subsection{Analysis of Halting Dynamics}
-
 % Source: x02.log, x03.log, x04.log - halt distribution with 12 chains
 % 86.3% halt at step 0, 94.9% by step 1
-\begin{figure}[t]
+\begin{figure}[htb]
+\vspace{-2em}
 \centering
-\begin{tikzpicture}[scale=0.8]
+\begin{tikzpicture}
   \begin{axis}[
     ybar,
     xlabel={Reasoning Steps},
-    ylabel={Fraction of Puzzles},
+    ylabel={Frac of Puzzles},
     ymin=0, ymax=0.9,
     xtick={0,1,2,3,4,5,6,7,8},
     ytick={0,0.2,0.4,0.6,0.8},
-    bar width=0.5cm,
-    width=0.9\columnwidth,
-    height=0.45\columnwidth,
+    bar width=0.4cm,
+    width=0.85\columnwidth,
+    height=0.4\columnwidth,
   ]
   \addplot[fill=blue!60] coordinates {
     (0, 0.863)
@@ -260,7 +251,26 @@ one-time.
 \caption{Halting distribution for halt-first ensemble (12 chains). 86.3\% of
 puzzles have at least one chain halt at step 0; 94.9\% within step 1.}
 \label{fig:halt-dist}
+\vspace{-2em}
 \end{figure}
+
+
+\Cref{tab:compute} compares compute costs. Halt-first ensemble averages 1.5
+forward passes per puzzle (86\% halt at step 0 with 12 chains) but requires
+training 3 models. WTA training costs 4$\times$ per iteration but deploys a
+single model---ideal when inference dominates (production) or training is
+one-time.
+
+\paragraph{Wall-clock time.} On a single RTX 5090:
+\begin{itemize}
+  \item TRM ($K{=}1$, steps${=}$8k, bs${=}$384): 48 min, 16GB
+  \item Baseline ($K{=}1$, steps${=}$36k, bs${=}$192): 90 min, 8GB
+  \item WTA ($K{=}4$, steps${=}$36k, bs${=}$192): 360 min, 30GB
+  \item Ensemble: $K$ models at $K\times$ time-cost
+\end{itemize}
+
+\subsection{Analysis of Halting Dynamics}
+\label{sec:halting}
 
 The learned halting signal exhibits strong calibration (\Cref{fig:halt-dist}):
 %
@@ -334,47 +344,6 @@ noise reduces individual accuracy by 1.1pp but increases ensemble ceiling by
 2.0pp via greater diversity. The low Jaccard (0.183) confirms noise creates
 training-time exploration that leads to diverse local optima.
 
-\subsection{Chain Convergence and Expunging}
-
-% Source: x182a.log z_L cosine similarity analysis
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}[scale=0.8]
-  \begin{axis}[
-    xlabel={H-step},
-    ylabel={Pairwise Cosine Similarity},
-    xmin=0, xmax=8,
-    ymin=0.5, ymax=1.02,
-    xtick={0,2,4,6,8},
-    ytick={0.5,0.6,0.7,0.8,0.9,1.0},
-    grid=major,
-    width=0.9\columnwidth,
-    height=0.5\columnwidth,
-  ]
-  \addplot[mark=*, thick, blue] coordinates {
-    (0, 0.52) (1, 0.71) (2, 0.85) (3, 0.93) (4, 0.97)
-    (5, 0.99) (6, 0.995) (7, 0.998) (8, 0.999)
-  };
-  \addplot[mark=none, red, dashed] coordinates {(0, 0.95) (8, 0.95)};
-  \node[anchor=west, font=\small] at (axis cs:5, 0.92) {Expunge threshold};
-  \end{axis}
-\end{tikzpicture}
-\caption{$z_L$ convergence across heads during training. Pairwise cosine
-similarity exceeds 0.95 by step 4; expunging recovers compute for new samples.}
-\label{fig:convergence}
-\end{figure}
-
-We observed that $z_L$ chains converge rapidly during training
-(\Cref{fig:convergence}): by H-step 5, pairwise cosine similarity exceeds 0.99.
-At this point, maintaining $K$ chains wastes compute---they explore nearly
-identical hypotheses.
-
-We address this by \emph{expunging} converged chains: when two chains' $z_L$
-similarity exceeds 0.95, we remove the higher-loss chain and reassign its slot
-to a new sample. This sparse pooling recovers ${\sim}3\times$ throughput on
-samples that converge early while maintaining full $K$-chain diversity on early
-H-steps where it matters most.
-
 \subsection{Error Analysis}
 
 % Source: x00.log baseline, analysis/digit_perm_inference.py
@@ -400,18 +369,10 @@ selection (WTA) rather than increasing model capacity.
 
 % Source: x00.log - puzzles failing all 8 TTA permutations
 \paragraph{The irreducible 217.} We analyzed the 217 puzzles (0.6\%) that no
-permutation solves. Common traits:
-%
-\begin{itemize}
-  \item Fewer ``naked singles'' (cells with only one candidate): avg.\ 3.1 vs.\
-    12.3 for solved puzzles
-  \item 86\% require bifurcation (trial-and-error guessing)
-  \item First row often all-blank (9 unknowns)---no initial anchor point
-\end{itemize}
-%
-These puzzles fundamentally exceed the model's greedy iterative refinement
-capacity. Solving them would require architectural changes (backtracking,
-explicit search) rather than better selection.
+permutation solves. Common traits: fewer ``naked singles'' (cells with only one
+candidate): avg.\ 3.1 vs.\ 12.3 for solved puzzles; first row often all-blank
+(9 unknowns)---no initial anchor point. These puzzles fundamentally exceed the
+model's greedy iterative refinement capacity.
 
 % Source: x00.log error analysis
 \paragraph{Cell-level error patterns.} Among failed puzzles, errors cluster
