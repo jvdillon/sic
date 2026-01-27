@@ -18,6 +18,7 @@ As in nature, this work was also resource constrained: all experimentation used 
 
 ```bash
 uv sync
+uv run code/sudoku/x182.py  # Train K=4, for example.
 ```
 
 ## License
