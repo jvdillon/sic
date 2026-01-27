@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import pathlib
 
-import pytest
-import torch
-
 from model import (
     EMA,
     TRM,
@@ -24,6 +21,9 @@ from model import (
     _trunc_normal_init_,
 )
 from util import set_seed
+
+import pytest
+import torch
 
 
 class TestModelUtils:

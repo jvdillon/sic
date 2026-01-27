@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import tempfile
 
-import torch
-
 from experiment import (
     ExperimentBase,
     compute_diversity_loss,
@@ -13,6 +11,8 @@ from experiment import (
     setup_muon_optimizers,
 )
 from model import TRM
+
+import torch
 
 
 def test_compute_diversity_loss_empty():

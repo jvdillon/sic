@@ -1,16 +1,15 @@
 """Tests for Muon optimizer and related functions."""
 
-from torch import nn
-
-import pytest
-import torch
-
 from optimizer import (
     DummyOptimizer,
     Muon,
     _adjust_lr,
     matrix_signum_via_newtonschulz,
 )
+from torch import nn
+
+import pytest
+import torch
 
 
 class TestMatrixSignumNewtonSchulz:

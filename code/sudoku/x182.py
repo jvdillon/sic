@@ -9,11 +9,6 @@ from typing import Literal, TypedDict
 import dataclasses
 import math
 
-from torch import Tensor, nn
-
-import torch
-
-from data import GPUCachedSudoku, augment_sudoku
 from experiment import (
     HALT_TOKEN_ID,
     ExperimentBase,
@@ -21,7 +16,12 @@ from experiment import (
     setup_muon_optimizers,
 )
 from model import EMA, TRM3
+from torch import Tensor, nn
 from util import set_seed
+
+import torch
+
+from data import GPUCachedSudoku, augment_sudoku
 
 
 class ForwardResult(TypedDict):
@@ -604,10 +604,12 @@ class TrainingState:
     def max_fillable(self) -> int:
         """Max samples that can be filled (limited by free chains AND inactive slots)."""
         # Single GPU sync for both counts
-        counts = torch.stack([
-            (self.batch_index == -1).sum(),
-            (~self.active).sum(),
-        ]).tolist()
+        counts = torch.stack(
+            [
+                (self.batch_index == -1).sum(),
+                (~self.active).sum(),
+            ]
+        ).tolist()
         num_free, num_inactive = int(counts[0]), int(counts[1])
         return min(num_free // self.K, num_inactive)
 

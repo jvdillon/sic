@@ -8,7 +8,8 @@ TRM~\citep{jolicoeur2025trm}, with 8$\times$ augmentation (dihedral symmetries)
 and digit permutation applied during training.
 
 \paragraph{Hardware.} All experiments use a single NVIDIA RTX 5090 (32GB VRAM).
-Training completes in 1.5 hours ($K{=}1$) to 6 hours ($K{=}4$) for 36k steps.
+Training completes in 1.5 hours ($K{=}1$, bs${=}$384, ${\sim}$16GB) to 6 hours
+($K{=}4$, bs${=}$192, ${\sim}$30GB) for 36k steps.
 
 \paragraph{Architecture.} 2-layer MLP-Mixer, 512 hidden (7M params), no
 attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (vs.\ 3, 6 in baseline TRM).
@@ -220,8 +221,8 @@ one-time.
 
 \paragraph{Wall-clock time.} On a single RTX 5090:
 \begin{itemize}
-  \item Baseline ($K{=}1$, 36k steps): 1.5 hours
-  \item WTA ($K{=}4$, 36k steps): 6 hours
+  \item Baseline ($K{=}1$, 36k steps, bs${=}$384): 1.5 hours, ${\sim}$16GB VRAM
+  \item WTA ($K{=}4$, 36k steps, bs${=}$192): 6 hours, ${\sim}$30GB VRAM
   \item Ensemble (3 seeds): 4.5 hours total, but requires 3 models at inference
 \end{itemize}
 

@@ -9,6 +9,6 @@ We apply this principle to ensembles of Tiny Recursive Models (TRM)~\citep{jolic
 % Source: x182{a,b,c,d}.log (randn): 96.85% ± 0.58%
 But can this capability be manifested as a training-only cost? Evidently yes: by maintaining $K{=}4$ parallel latent states during training but backpropping only through the lowest-loss ``winner,'' a single model achieves \textbf{96.9\% $\pm$ 0.6\%} puzzle accuracy---roughly matching TTA performance without any test-time augmentation.
 
-As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. This necessitated efficiency and compelled our invention of a modified SwiGLU~\citep{shazeer2020swiglu} which made Muon~\citep{jordan2024muon} viable. With Muon and $K{=}1$ training, we exceed TRM baseline performance in 8k steps (23 min). Higher accuracy requires 36k steps: 1.5 hours for $K{=}1$, 6 hours for $K{=}4$.
+As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. This necessitated efficiency and compelled our invention of a modified SwiGLU~\citep{shazeer2020swiglu} which made Muon~\citep{jordan2024muon} viable. With Muon and $K{=}1$ training, we exceed TRM baseline performance in 8k steps (48 min, bs${=}$384, ${\sim}$16GiB). Higher accuracy requires 36k steps: 1.5 hours for $K{=}1$, 6 hours for $K{=}4$ (bs${=}$192, ${\sim}$30GiB).
 
 % The path: biological principle $\to$ inference strategy that validates it $\to$ training procedure that internalizes the benefit. Speed is confidence.

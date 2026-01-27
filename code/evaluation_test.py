@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import torch
-
 from evaluation import (
     HALT_TOKEN_ID,
     cells_fixed_broken,
@@ -16,6 +14,8 @@ from evaluation import (
     z_h_deltas,
 )
 from model import TRM
+
+import torch
 
 
 def test_prepend_halt():

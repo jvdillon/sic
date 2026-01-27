@@ -11,17 +11,17 @@ import sys
 import time
 import warnings
 
+from evaluation import print_diagnostics
+from model import EMA, TRM
+from optimizer import DummyOptimizer, Muon
 from torch import Tensor, nn
 from torch.optim import Optimizer
+from util import Tee, set_seed
 
 import numpy as np
 import torch
 
 from data import GPUCachedSudoku, augment_sudoku
-from evaluation import print_diagnostics
-from model import EMA, TRM
-from optimizer import DummyOptimizer, Muon
-from util import Tee, set_seed
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")

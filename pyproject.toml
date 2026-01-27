@@ -221,7 +221,7 @@ skip = "htmlcov,.doctrees,*.pyc,*.ico,*.png,*.jpg,*.PNG,*.inv,*.dot,*.css,.git,.
 formats = "ipynb,py:percent"
 
 [tool.uv]
-package = true
+package = false
 
 [tool.uv.pip]
 compile-bytecode = true

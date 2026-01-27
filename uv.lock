@@ -344,7 +344,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/02/99/8447b9ee9f070522ee66604ee819d632ab4568c68b3134cebd3837a015cd/nvidia_cublas-13.0.0.19-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:381b1a0ca636fdcb6920a871e8fc89dbfd1f6157f421ed0a6f2673e14cffd3bd", size = 539001158, upload-time = "2025-08-04T10:19:50.761Z" },
     { url = "https://files.pythonhosted.org/packages/5a/99/210e113dde53955e97042bd76dc4ad927eca04c5b4645ec157cc59f4f3ae/nvidia_cublas-13.0.0.19-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:f6723af2e8e2600a11dc384037d90d9bf93070e346c24ef2e8f9001658c99896", size = 419392356, upload-time = "2025-08-04T10:20:19.449Z" },
-    { url = "https://files.pythonhosted.org/packages/52/e3/347dfb7dcea98730efb34428534452ace9350173b21db88bbe7031542ff0/nvidia_cublas-13.0.0.19-py3-none-win_amd64.whl", hash = "sha256:e6ecde441aaf0bb74ed538cfb3b18aa374f452aebf0162088bcb10942f7bbc33", size = 400515981, upload-time = "2025-08-04T10:29:54.83Z" },
 ]
 
 [[package]]
@@ -384,23 +383,6 @@ dependencies = [
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/9c/9e99c00dc23db324244ec257d1e84d79539202ee2f185dee2c1fa97c9549/nvidia_cudnn_cu13-9.13.0.50-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:33f0aa0b64230101b348648fd0693342188071d3f8a137c0cf50051c24b3584b", size = 412337597, upload-time = "2025-09-04T20:22:31.535Z" },
     { url = "https://files.pythonhosted.org/packages/cf/68/2712854561170b2a81bea7b6b35cc1ae264d9794c0c218986e5c685d45f7/nvidia_cudnn_cu13-9.13.0.50-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:2150b4850725d30653ec3e365f0732e3e2e3eb8633cf3bd2d3117628dea8b4f9", size = 348571624, upload-time = "2025-09-04T20:23:26.544Z" },
-    { url = "https://files.pythonhosted.org/packages/ab/7d/56b72861ce51edcac0aca0d3ed2604214bb7709e508975553b61de8bc1b5/nvidia_cudnn_cu13-9.13.0.50-py3-none-win_amd64.whl", hash = "sha256:216f6af23842823dfa84a32c3b91c9180aca9c036eebce0b8e05489c6bfc4b5c", size = 338660585, upload-time = "2025-09-04T20:24:38.337Z" },
-]
-
-[[package]]
-name = "nvidia-cudnn-frontend"
-version = "1.17.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/4a/a903c57ef5aaa32aa074007ba4d50ed7cbc80a8092ddb84fe9d879a69bbb/nvidia_cudnn_frontend-1.17.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:961004000a2c21dd4a03f816534629105cf49125a643dbb49abbc97021e66d20", size = 1911775, upload-time = "2025-12-20T00:27:11.297Z" },
-    { url = "https://files.pythonhosted.org/packages/15/20/80c4f5d62ebc58b8db8d25a2ee11f3246bb8947addea37c229540bcc05ac/nvidia_cudnn_frontend-1.17.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6ea44a8f2c0cfd20868b239ea13a2e0f32895dab868f6ff2bee01caf3778d273", size = 2035158, upload-time = "2025-12-20T00:25:00.9Z" },
-    { url = "https://files.pythonhosted.org/packages/5f/18/c24375c8d579c53a99a2d7428397288a94c7ea411d1823e3b8dc3cef50dc/nvidia_cudnn_frontend-1.17.0-cp311-cp311-win_amd64.whl", hash = "sha256:8dd6cc197a58d63da4d146a1febc1f99d425374d159f9b00628b140c65acb486", size = 1441316, upload-time = "2025-12-20T00:29:34.951Z" },
-    { url = "https://files.pythonhosted.org/packages/42/d9/f58ed6292c9396f7422812a0a2d9f80cc5a623ea6c758bcb3d34d4795bb8/nvidia_cudnn_frontend-1.17.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:de0c473f32d705abcf14f351615f7ffbeed7320e3499cf2195ae5689652a2592", size = 1917620, upload-time = "2025-12-20T00:27:46.179Z" },
-    { url = "https://files.pythonhosted.org/packages/db/eb/c641135632bd2afc21339aadee96af4c5db1460dfa07ca74836de75a590f/nvidia_cudnn_frontend-1.17.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c913c87fca691a91385287f2587575531933acfebc85c33dbcecb191886c7a53", size = 2038994, upload-time = "2025-12-20T00:25:18.9Z" },
-    { url = "https://files.pythonhosted.org/packages/82/49/a92da03eb43bde90be770a43666c5ab26b4f8b15f6e46c4b0b0e84f37994/nvidia_cudnn_frontend-1.17.0-cp312-cp312-win_amd64.whl", hash = "sha256:a0d4cfd03961592108abd1ba246e43c8bb7540aed984df860256d0bff181de98", size = 1441271, upload-time = "2025-12-20T00:29:52.056Z" },
-    { url = "https://files.pythonhosted.org/packages/99/96/4d55a559dff3175599fe15d83c853f051526b91994b083ec36b12caae776/nvidia_cudnn_frontend-1.17.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3800a1fe3d41a9206281475b1c8c438b02cb7e3c7e262d13f0a101edec223cb6", size = 1917065, upload-time = "2025-12-20T00:28:21.402Z" },
-    { url = "https://files.pythonhosted.org/packages/20/f6/5af63c254d7260dd1e974b2300eae9b157998b9d958f79c98ddaada0a0bf/nvidia_cudnn_frontend-1.17.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5adaf4a930b3be5ed019e1a25cfec7cc2bf444592a54a7639c28149b9227c2a4", size = 2039180, upload-time = "2025-12-20T00:25:36.695Z" },
-    { url = "https://files.pythonhosted.org/packages/64/ee/6de6aec1e42c859134312e6d5348d6f036b2f1b825e6eae92f9a429eccc4/nvidia_cudnn_frontend-1.17.0-cp313-cp313-win_amd64.whl", hash = "sha256:5c6a120fb54b157585ce6587153fc7086081af961f284f2553e01ba7c7a80c1a", size = 1441177, upload-time = "2025-12-20T00:30:09.927Z" },
 ]
 
 [[package]]
@@ -585,16 +567,13 @@ wheels = [
 [[package]]
 name = "sic"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "einops" },
     { name = "einshape" },
     { name = "gnureadline" },
     { name = "jaxtyping" },
     { name = "numpy" },
-    { name = "nvidia-cudnn-cu13" },
-    { name = "nvidia-cudnn-frontend" },
-    { name = "setuptools" },
     { name = "torch" },
 ]
 
@@ -613,9 +592,6 @@ requires-dist = [
     { name = "gnureadline" },
     { name = "jaxtyping" },
     { name = "numpy", specifier = ">=2.1" },
-    { name = "nvidia-cudnn-cu13" },
-    { name = "nvidia-cudnn-frontend" },
-    { name = "setuptools" },
     { name = "torch", specifier = "==2.9.0", index = "https://download.pytorch.org/whl/cu130" },
 ]
 

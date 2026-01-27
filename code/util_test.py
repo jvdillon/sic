@@ -8,9 +8,9 @@ import pathlib
 import sys
 import tempfile
 
-import torch
-
 from util import Tee, entropy, jsd, log1mexp, logmeanexp
+
+import torch
 
 
 class TestTee:
