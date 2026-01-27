@@ -2,6 +2,8 @@
 
 This repository contains the code for the "Speed is Confidence" research paper.
 
+**[Paper (PDF)](https://raw.githubusercontent.com/jvdillon/sic/main/paper/arxiv.pdf)**
+
 ## Abstract
 
 Biological neural systems must be fast but are energy-constrained. Evolution's solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat when a neuron fires as an expression of confidence.
