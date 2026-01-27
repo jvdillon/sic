@@ -1,4 +1,4 @@
-"""x182g: x182a without random init and with q_halt warmup (force H=1 for first 4k steps)."""
+"""x182m: x182j with seed=45."""
 
 from experiment import main
 from x182j import Experiment as Experiment182j

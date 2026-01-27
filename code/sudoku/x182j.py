@@ -1,4 +1,4 @@
-"""x182g: x182a without random init and with q_halt warmup (force H=1 for first 4k steps)."""
+"""x182j: x182 without random z_L init."""
 
 from experiment import main
 from model import TRM3

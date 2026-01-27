@@ -1,4 +1,4 @@
-"""x182c: x182a with seed=44."""
+"""x182e: x182a with seed=46."""
 
 from experiment import main
 from x182a import Experiment as Experiment182a

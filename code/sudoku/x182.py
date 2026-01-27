@@ -1,43 +1,4 @@
-"""x182: Sparse chain pooling to expunge converged chains.
-
-Evidence
---------
-Analysis of x179p (K_H=1, K_L=4, carry_H=copy_top1, carry_L=all) revealed:
-
-1. z_L chains converge rapidly during inference:
-   - H step 0: z_L_cos ≈ -0.02 (diverse)
-   - H step 3: z_L_cos ≈ 0.90
-   - H step 5+: z_L_cos ≈ 0.99 (nearly identical)
-
-2. Training accelerates this convergence:
-   - Untrained (step 0): z_L maintains diversity (cos ≈ 0.47 at H=16)
-   - Trained (step 36k): z_L converges within 3-5 H steps
-
-3. Winner selection is effectively random after convergence:
-   - Streak lengths match uniform distribution (p=0.25)
-   - All 4 chains win ~25% of the time
-
-This means we're paying 4x compute for 1x effective diversity after H step 5.
-
-Rationale
----------
-If chains converge to nearly identical states, maintaining all 4 is wasteful.
-We can expunge redundant chains and use freed slots for new samples.
-
-Proposed Design
----------------
-- Fixed pool of P = B * K chains (e.g., 192 * 4 = 768)
-- Track `sample_id[p]` for which sample each slot belongs to (-1 = free)
-- Each sample starts with K chains
-- After each H step, check pairwise z_L cosine similarity within each sample
-- If pair exceeds threshold (e.g., 0.95), nuke the higher-loss chain
-- When ≥K slots are free, assign them to a new sample
-
-Efficiency: worst case 3 idle slots = 3/768 = 0.4% wasted compute.
-
-Expected benefit: ~3x throughput on samples that converge early, while
-maintaining full K-chain diversity on early H steps where it matters.
-"""
+"""x182: Sparse chain pooling to expunge converged chains."""
 
 from __future__ import annotations
 
