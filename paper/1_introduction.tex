@@ -1,7 +1,7 @@
 \section{Introduction}
 
-When faced with uncertainty, biological neural systems don't deliberate
-indefinitely---they act on the first confident signal. This principle, refined
+When faced with uncertainty, biological neural systems don't perseverate
+indefinitely---they act on the earlier ideations. This principle, refined
 by millions of years of evolution, underlies rapid decision-making from prey
 detection to social judgment. In cortical winner-take-all circuits, competing
 neural populations race to threshold; the first to fire suppresses alternatives
@@ -36,9 +36,11 @@ cost.
   \item We demonstrate that halt-first selection outperforms probability
     averaging for ensembles of iterative reasoners, achieving 97.2\% accuracy
     vs.\ 91.5\% with 10$\times$ less compute.
+    % Source: x02.log, x03.log, x04.log (halt-first 97.2%, prob avg 91.5%)
   \item We introduce \emph{oracle-first training}, a WTA method that
     internalizes ensemble diversity within a single model, achieving
     96.9\% $\pm$ 0.6\% accuracy with zero inference overhead.
+    % Source: x182a.log (97.6%), x182b.log (96.2%), x182c.log (96.5%), x182d.log (97.2%)
   \item We identify chain convergence during training and introduce
     \emph{expunging}---removing converged hypotheses to recover compute for
     new samples.
@@ -48,8 +50,7 @@ cost.
   \item We provide a theoretical interpretation connecting halting speed to
     the spectral properties of bilevel equilibria, grounding ``speed is
     confidence'' in the conditioning of nested fixed points.
-  \item We document extensive hyperparameter exploration across 180+
-    experiments, identifying critical factors: carry policy, SVD-aligned
-    initialization, and z\_L diversity. Code and trained models at
-    \url{https://anonymous.4open.science/r/TODO}.
+  \item We conduct extensive hyperparameter exploration and identify critical
+	improvements related to TRM desisgn, carry policy, SVD-aligned
+    initialization, and z\_L diversity.
 \end{enumerate}

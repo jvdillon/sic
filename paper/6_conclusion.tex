@@ -6,11 +6,13 @@ averaging. This led us to a hypothesis---inference speed is an implicit
 confidence signal---and a method: winner-take-all training that internalizes
 ensemble diversity within a single model.
 
+% Source: x182a.log (best seed 97.64%), x182{a,b,c,d} mean 96.9% ± 0.6%
+% Baseline x00: 86.1% [unfuck.txt]
 Our results on Sudoku-Extreme are striking: a single 7M parameter model achieves
-97.8\% puzzle accuracy, exceeding a 3-model halt-based ensemble and improving
-10pp over the TRM baseline. The key insight is not architectural but
-algorithmic: by letting $K{=}4$ parallel hypotheses compete during training, we
-teach the model to find confident solutions faster.
+96.9\% $\pm$ 0.6\% puzzle accuracy (best seed: 97.6\%), matching a 3-model
+halt-based ensemble and improving 11pp over the TRM baseline. The key insight is
+not architectural but algorithmic: by letting $K{=}4$ parallel hypotheses
+compete during training, we teach the model to find confident solutions faster.
 
 The broader implication is that \textbf{how quickly} a model converges may be
 as informative as \textbf{what} it outputs. This connects to a rich literature

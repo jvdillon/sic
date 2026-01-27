@@ -6,14 +6,15 @@ Standard practice for improving accuracy is
 ensembling~\citep{dietterich2000ensemble}: train multiple models with different
 seeds and average their predictions. For TRM on Sudoku-Extreme:
 %
+% Source: x02.log (86.02%), x03.log (83.87%), x04.log (85.03%) - noised models
 \begin{center}
 \begin{tabular}{lcc}
 \toprule
 Method & Puzzle Acc. & Forward Passes \\
 \midrule
-Single model & 84.97\% & 16 \\
-Ensemble (3 seeds) & 88.52\% & 48 \\
-+ TTA (4 rotations) & 91.51\% & 192 \\
+Single model & 84.97\% & 16 \\  % avg(x02.log, x03.log, x04.log)
+Ensemble (3 seeds) & 88.52\% & 48 \\  % x02.log + x03.log + x04.log
++ TTA (4 rotations) & 91.51\% & 192 \\  % x02.log + x03.log + x04.log + TTA
 \bottomrule
 \end{tabular}
 \end{center}
@@ -46,13 +47,14 @@ The procedure is simple: run all ensemble members in parallel, each performing
 its own ACT iterations. When any model's halting signal exceeds threshold, that
 model provides the final answer. The results are striking:
 %
+% Source: x02.log, x03.log, x04.log (3 seeds × 4 rotations = 12 chains)
 \begin{center}
 \begin{tabular}{@{}lccc@{}}
 \toprule
 Method & Acc. & Steps & Speedup \\
 \midrule
-Prob.\ avg.\ (12) & 91.5\% & 192 & 1$\times$ \\
-\textbf{Halt-first (12)} & \textbf{97.2\%} & \textbf{18.5} & \textbf{10$\times$} \\
+Prob.\ avg.\ (12) & 91.5\% & 192 & 1$\times$ \\  % x02.log + x03.log + x04.log + TTA
+\textbf{Halt-first (12)} & \textbf{97.2\%} & \textbf{18.5} & \textbf{10$\times$} \\  % x02.log + x03.log + x04.log + TTA halt-first
 \bottomrule
 \end{tabular}
 \end{center}

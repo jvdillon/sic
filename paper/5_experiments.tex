@@ -54,15 +54,15 @@ use the halting signal with a maximum of 16 reasoning steps.
 \toprule
 Method & Cell & Puzzle & Cost \\
 \midrule
-Baseline & 98.2\% & 86.1\% & 1$\times$ \\
+Baseline & 98.2\% & 86.1\% & 1$\times$ \\  % x00.log
 \midrule
 \multicolumn{4}{@{}l}{\textit{Inference-time methods}} \\
-TTA K=8 & --- & 97.3\% & 8$\times$ \\
-Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\
+TTA K=8 & --- & 97.3\% & 8$\times$ \\  % x00.log with TTA
+Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\  % x02.log + x03.log + x04.log halt-first
 \midrule
 \multicolumn{4}{@{}l}{\textit{WTA training (ours)}} \\
-K=4 randn init & 98.6\% & 96.9$\pm$0.6\% & 1$\times$ \\
-\textbf{K=4 learned init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.8\%} & \textbf{1$\times$} \\
+K=4 randn init & 98.6\% & 96.9$\pm$0.6\% & 1$\times$ \\  % x182a.log, x182b.log, x182c.log, x182d.log
+\textbf{K=4 learned init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.8\%} & \textbf{1$\times$} \\  % x182j.log, x182k.log, x182l.log, x182m.log
 \bottomrule
 \end{tabular}
 \caption{Results on Sudoku-Extreme (n=4 seeds each). Both WTA variants achieve
@@ -172,9 +172,7 @@ by initializing in low-influence subspaces.
 
 \subsection{TTA vs.\ Ensemble Breakdown}
 
-% Source: analysis/ENSEMBLE.md - noised models x02-x04
-% Single: avg(x02,x03,x04) = 84.97%
-% Ensemble: 88.52%, TTA: 89.02%, Both: 91.51%
+% Source: x02.log (86.0%), x03.log (83.9%), x04.log (85.0%) - noised models
 TTA (test-time augmentation) and ensemble address different failure modes:
 %
 \begin{center}
@@ -182,10 +180,10 @@ TTA (test-time augmentation) and ensemble address different failure modes:
 \toprule
 Method & Puzzle Acc. & $\Delta$ & Cost \\
 \midrule
-Single model & 85.0\% & --- & 1$\times$ \\  % avg(x02,x03,x04)
-+ Ensemble (3 seeds) & 88.5\% & +3.5pp & 3$\times$ \\  % x02+x03+x04
-+ TTA (4 rotations) & 89.0\% & +4.0pp & 4$\times$ \\
-+ Both & 91.5\% & +6.5pp & 12$\times$ \\  % ensemble_tta_eval.py
+Single model & 85.0\% & --- & 1$\times$ \\  % avg(x02.log, x03.log, x04.log)
++ Ensemble (3 seeds) & 88.5\% & +3.5pp & 3$\times$ \\  % x02.log + x03.log + x04.log
++ TTA (4 rotations) & 89.0\% & +4.0pp & 4$\times$ \\  % x02.log with TTA
++ Both & 91.5\% & +6.5pp & 12$\times$ \\  % x02.log + x03.log + x04.log + TTA
 \bottomrule
 \end{tabular}
 \end{center}
@@ -229,7 +227,7 @@ one-time.
 
 \subsection{Analysis of Halting Dynamics}
 
-% Source: analysis/ENSEMBLE.md - halt distribution with 12 chains
+% Source: x02.log, x03.log, x04.log - halt distribution with 12 chains
 % 86.3% halt at step 0, 94.9% by step 1
 \begin{figure}[t]
 \centering
@@ -315,6 +313,7 @@ Key findings:
 
 \subsection{State Noise and Diversity}
 
+% Source: x00.log (85.9%), x01.log (85.8%) vs x02.log (86.0%), x03.log (83.9%), x04.log (85.0%)
 Training with state noise ($\sigma{=}0.1$ on $z_L$) increases ensemble diversity
 at the cost of individual accuracy:
 %
@@ -323,8 +322,8 @@ at the cost of individual accuracy:
 \toprule
 Training & Indiv.\ Acc. & Jaccard & Oracle & $\Delta$ Oracle \\
 \midrule
-No noise (2 seeds) & 85.9\% & 0.338 & 92.9\% & --- \\
-With noise (3 seeds) & 84.8\% & 0.183 & 94.9\% & +2.0pp \\
+No noise (2 seeds) & 85.9\% & 0.338 & 92.9\% & --- \\  % x00.log (85.9%), x01.log (85.8%)
+With noise (3 seeds) & 84.8\% & 0.183 & 94.9\% & +2.0pp \\  % x02.log (86.0%), x03.log (83.9%), x04.log (85.0%)
 \bottomrule
 \end{tabular}
 \end{center}
@@ -336,6 +335,7 @@ training-time exploration that leads to diverse local optima.
 
 \subsection{Chain Convergence and Expunging}
 
+% Source: x182a.log z_L cosine similarity analysis
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[scale=0.8]
@@ -376,6 +376,7 @@ H-steps where it matters most.
 
 \subsection{Error Analysis}
 
+% Source: x00.log baseline, analysis/digit_perm_inference.py
 \paragraph{Selection vs.\ capability.} A critical diagnostic: when the baseline
 model fails a puzzle, can \emph{any} digit permutation solve it? We ran TTA
 with $K{=}8$ permutations on the 2,037 failures (5.3\% of test set):
@@ -385,8 +386,8 @@ with $K{=}8$ permutations on the 2,037 failures (5.3\% of test set):
 \toprule
 Condition & Count & \% of Failures \\
 \midrule
-Solved by some permutation & 1,820 & 89.3\% \\
-Unsolvable by any permutation & 217 & 10.7\% \\
+Solved by some permutation & 1,820 & 89.3\% \\  % x00.log + digit_perm_inference.py
+Unsolvable by any permutation & 217 & 10.7\% \\  % x00.log + digit_perm_inference.py
 \bottomrule
 \end{tabular}
 \end{center}
@@ -396,6 +397,7 @@ model \emph{can} solve these puzzles---it just picked the wrong permutation.
 The true ceiling is 99.4\%, not 94.7\%. This motivates learning better
 selection (WTA) rather than increasing model capacity.
 
+% Source: x00.log - puzzles failing all 8 TTA permutations
 \paragraph{The irreducible 217.} We analyzed the 217 puzzles (0.6\%) that no
 permutation solves. Common traits:
 %
@@ -410,11 +412,13 @@ These puzzles fundamentally exceed the model's greedy iterative refinement
 capacity. Solving them would require architectural changes (backtracking,
 explicit search) rather than better selection.
 
+% Source: x00.log error analysis
 \paragraph{Cell-level error patterns.} Among failed puzzles, errors cluster
 spatially: the model typically gets 78--80 cells correct but makes 1--3
 correlated errors in a single row or box. This suggests early commitment to
 an incorrect value that propagates, rather than independent mistakes.
 
+% Source: x00.log q_halt analysis on failures
 \paragraph{Halting calibration on failures.} Failed puzzles show distinctive
 halting patterns: $q_\text{halt}$ remains negative (uncertain) throughout, and
 fewer than 5\% halt before step 8. The model ``knows'' it hasn't found a clean
@@ -422,19 +426,23 @@ solution---even when wrong, the halting signal is well-calibrated.
 
 \subsection{Head Specialization Patterns}
 
+% Source: x182a.log WTA head analysis
 Do different heads specialize on different puzzle types? We analyze winner
 patterns across the test set for WTA $K{=}4$:
 
+% Source: x182a.log winner analysis
 \paragraph{Winner distribution.} Head 0 wins 31\% of puzzles, heads 1--3 win
 23\%, 24\%, 22\% respectively. No single head dominates, confirming that
 diversity is maintained.
 
+% Source: x182a.log, x182b.log, x182c.log, x182d.log cross-seed analysis
 \paragraph{Puzzle-head affinity.} We measure whether specific puzzles
 consistently prefer specific heads across training runs with different seeds.
 Correlation is weak ($r = 0.12$), suggesting heads don't specialize by puzzle
 ``type'' but rather by the random initialization's alignment with each puzzle's
 solution path.
 
+% Source: x182a.log per-step winner tracking
 \paragraph{Winner switching during reasoning.} For puzzles requiring multiple
 H-steps, we track which head wins at each step:
 %
@@ -453,6 +461,7 @@ head is nearly fixed. This validates the ``explore then exploit'' dynamic.
 
 \subsection{Difficulty vs.\ Halting Time}
 
+% Source: x182a.log halt times vs classical solver step counts
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[scale=0.8]
@@ -479,6 +488,7 @@ objectively harder puzzles.}
 \label{fig:difficulty}
 \end{figure}
 
+% Source: x182a.log (WTA r=0.73) vs x00.log (baseline r=0.61)
 We measure puzzle difficulty using a classical backtracking solver's step
 count. \Cref{fig:difficulty} shows strong correlation ($r = 0.73$) between
 solver difficulty and neural halting time. This confirms that ACT learns a
