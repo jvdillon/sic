@@ -187,8 +187,8 @@ states while sharing $z_H$ works well. This is intuition, not a formal result.
 \paragraph{Bilevel fixed-point structure.} TRM computes a nested equilibrium:
 %
 \begin{align}
-  z_L^* &= f(z_L^*, z_H, z_x) && \text{(inner: fast local refinement)} \\
-  z_H^* &= g(z_H^*, z_L^*) && \text{(outer: slow global integration)}
+  z_L^* &= f(z_L^*, z_H, z_x) && \text{(inner: local refinement)} \\
+  z_H^* &= g(z_H^*, z_L^*) && \text{(outer: global integration)}
 \end{align}
 %
 where $z_x = \operatorname{embed}(x)$ is the embedded input (fixed throughout
