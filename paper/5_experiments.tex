@@ -234,7 +234,6 @@ Halt-first (12) & 1.5$\times$ & 3$\times$ & --- \\
 % Source: x02.log, x03.log, x04.log - halt distribution with 12 chains
 % 86.3% halt at step 0, 94.9% by step 1
 \begin{figure}[htb]
-\vspace{-2.5em}
 \centering
 \begin{tikzpicture}
   \begin{axis}[
@@ -264,10 +263,7 @@ Halt-first (12) & 1.5$\times$ & 3$\times$ & --- \\
 \caption{Halting distribution for halt-first ensemble (12 chains). 86.3\% of
 puzzles have at least one chain halt at step 0; 94.9\% within step 1.}
 \label{fig:halt-dist}
-\vspace{-1em}
 \end{figure}
-
-\vspace{-0.5em}
 
 \Cref{tab:compute} compares compute costs. Halt-first ensemble averages 1.5
 ACT cycles per puzzle (86\% halt at step 0 with 12 chains) but requires
@@ -463,7 +459,6 @@ head is nearly fixed. This validates the ``explore then exploit'' dynamic.
 backtracking solver steps). Pearson $r = 0.73$. The model takes longer on
 objectively harder puzzles.}
 \label{fig:difficulty}
-\vspace{-2em}
 \end{figure}
 
 % Source: x182a.log (WTA r=0.73) vs x00.log (baseline r=0.61)

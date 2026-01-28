@@ -1,6 +1,6 @@
 \documentclass[10pt,twocolumn,letterpaper]{article}
-\usepackage[top=0.75in,bottom=1.0625in,left=0.77in,right=0.77in,columnsep=0.25in]{geometry}
-%\usepackage[letterpaper,textwidth=6.75in,textheight=9.0in,left=0.77in,top=0.75in,columnsep=0.25in]{geometry}
+%\usepackage[top=0.75in,bottom=1in,left=0.75in,right=0.75in,columnsep=0.25in,headheight=10pt,headsep=10pt,footskip=25pt]{geometry}
+\usepackage[letterpaper,textwidth=6.75in,textheight=9.0in,left=0.77in,top=0.75in,columnsep=0.25in,headheight=10pt,headsep=10pt,footskip=25pt]{geometry}
 \usepackage{times}
 \usepackage{natbib}
 \input{preamble}
@@ -15,12 +15,32 @@
 \renewcommand\subsection{\@startsection{subsection}{2}{\z@}{-0.10in}{0.01in}{\normalfont\normalsize\bfseries}}
 \renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}{-0.08in}{0.01in}{\normalfont\normalsize\bfseries}}
 
-% Centered abstract title, slightly narrower (like ICML).
-\renewenvironment{abstract}{\centerline{\large\bfseries Abstract}\vspace{-0.12in}\begin{quote}}{\par\end{quote}\vskip 0.12in}
+% Title with horizontal rules.
+\def\@maketitle{%
+  \hrule height1pt \vskip .35in
+  \begin{center}%
+    {\Large\bfseries \@title \par}%
+    \vskip 1em%
+    {\normalsize \@author \par}%
+  \end{center}%
+  \vskip 0in \hrule height1pt \vskip .2in}
 \makeatother
 
-\title{Speed is Confidence}
+% Centered abstract title, slightly narrower.
+\renewenvironment{abstract}{\centerline{\large\bfseries Abstract}\vspace{-0.12in}\begin{quote}}{\par\end{quote}\vskip 0.12in}
+
+% Running header with title on pages 2+.
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small\bfseries Speed is Confidence}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{1pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\thepage}\renewcommand{\headrulewidth}{0pt}} % first page: no header
+
+\title{\vspace{-1em}Speed is Confidence\vspace{-0.5em}}
 \author{Joshua V.\ Dillon\\Independent Researcher\\\tt\small \href{mailto:jvdillon@gmail.com}{jvdillon@gmail.com}}
+\date{\vspace{-2em}}
 
 \begin{document}
 
