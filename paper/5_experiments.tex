@@ -86,7 +86,7 @@ and fixed init (cached in buffer) perform identically.}
         permutation). The ceiling is 99.4\%, not 85.5\%.
         % Source: analysis/digit_perm_inference.py - 1820/2037 failures solved by TTA
   \item \textbf{WTA training internalizes diversity.}
-      K=4 z\_L heads achieve 96.9\% $\pm$ 0.6\% single-pass accuracy---nearly
+      $K{=}4$ $z_L$ heads achieve 96.9\% $\pm$ 0.6\% single-pass accuracy---nearly
         matching TTA-8 (97.3\%) without any test-time augmentation. Notably,
         WTA also \emph{reduces variance} by 2$\times$ vs.\ baseline
         (0.6\% vs.\ 1.3\%).
@@ -163,7 +163,7 @@ $K$ & Cell Acc. & Puzzle Acc. & $\Delta$ \\
 \end{tabular}
 \end{center}
 %
-K=4 consistently outperforms baseline by 7--11pp. Variance across x182 variants
+$K{=}4$ consistently outperforms baseline by 7--11pp. Variance across x182 variants
 (93.4\%--97.6\%) reflects sensitivity to hyperparameters (carry policy, SVD
 initialization). The best configuration (x182a) matches TTA-8 performance.
 

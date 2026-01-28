@@ -93,9 +93,16 @@ step, all $K$ heads process the input in parallel, and the
 Only the winning head contributes to the loss. This mirrors halt-first
 selection: at inference, the fastest model wins; during training, the most
 accurate head wins. Both reward the same underlying property: having found a
-clean solution path. The connection is deep---we are teaching the model to find
-confident solutions by making confidence (low loss) the criterion for receiving
-gradient signal.
+clean solution path.
+
+Why does lowest loss correlate with fastest halting? The mechanism is
+convergence dynamics. When iterative refinement encounters no contradictions,
+$z_L$ stabilizes quickly---the fixed-point iteration has a large basin of
+attraction. This rapid stabilization produces both correct outputs (low loss)
+and confident halting signals (the model detects its own convergence). Conversely,
+when refinement oscillates or drifts, both accuracy and halting confidence
+suffer. Loss and halting time are thus downstream effects of the same cause:
+solution path quality.
 
 \paragraph{Training dynamics.} A key detail: TRM training ``unpacks'' the outer
 loop of \Cref{alg:trm}. Each gradient step performs one H-cycle, carrying
