@@ -15,15 +15,17 @@
 \renewcommand\subsection{\@startsection{subsection}{2}{\z@}{-0.10in}{0.01in}{\normalfont\normalsize\bfseries}}
 \renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}{-0.08in}{0.01in}{\normalfont\normalsize\bfseries}}
 
-% Title with horizontal rules.
+% Title with horizontal rules, author below.
 \def\@maketitle{%
   \hrule height1pt \vskip .35in
   \begin{center}%
     {\Large\bfseries \@title \par}%
-    \vskip 1em%
+  \end{center}%
+  \vskip .1in \hrule height1pt \vskip .25in
+  \begin{center}%
     {\normalsize \@author \par}%
   \end{center}%
-  \vskip 0in \hrule height1pt \vskip .2in}
+  \vskip .15in}
 \makeatother
 
 % Centered abstract title, slightly narrower.
