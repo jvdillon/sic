@@ -6,24 +6,18 @@
 
 \subsection{Setup}
 
-\paragraph{Dataset.} Sudoku-Extreme: 1,000 training puzzles (with 8$\times$
-dihedral augmentation and digit permutation) and a randomly sampled 38,400
-puzzle subset of 422,786 test puzzles. All puzzles have exactly 17 given digits
-(the minimum for a unique solution).
-
-\paragraph{Hardware.} All experiments use a single NVIDIA RTX 5090 (32GiB VRAM).
-Training completes in 48 minutes for 8k steps ($K{=}1$, bs${=}$384,
-${\sim}$16GiB) to 6 hours ($K{=}4$, bs${=}$192, ${\sim}$30GiB) for 36k steps.
-
-\paragraph{Architecture.} 2-layer MLP-Mixer~\citep{tolstikhin2021mlpmixer}, 512
-hidden (7M params), no attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (increased
-from 3, 6 in original TRM; this improves our baseline to 85.5\% $\pm$ 1.3\% from
-their ${\sim}$80\%; the best seed reached 87\%, though such results are rare due to variance).
-Modified SwiGLU to accommodate Muon.
-
-\paragraph{Evaluation.} We report puzzle accuracy (fraction of puzzles solved
-completely) and cell accuracy (fraction of cells correct). For ACT models, we
-use the halting signal with a maximum of 16 reasoning steps.
+We use Sudoku-Extreme: 1,000 training puzzles (with 8$\times$ dihedral
+augmentation and digit permutation) and a randomly sampled 38,400 puzzle subset
+of 422,786 test puzzles; all have exactly 17 given digits (the minimum for
+uniqueness). All experiments use a single NVIDIA RTX 5090 (32GiB VRAM), with
+training completing in 48 minutes for baseline ($K{=}1$, 8k steps) to 6 hours
+for WTA ($K{=}4$, 36k steps). The architecture is a 2-layer
+MLP-Mixer~\citep{tolstikhin2021mlpmixer}, 512 hidden (7M params), no attention,
+with $n_\text{H}{=}6$, $n_\text{L}{=}9$ (increased from 3, 6 in original TRM;
+this improves our baseline to 85.5\% $\pm$ 1.3\% from their ${\sim}$80\%) and
+modified SwiGLU to accommodate Muon. We report puzzle accuracy (fraction solved
+completely) and cell accuracy (fraction of cells correct), using the halting
+signal with a maximum of 16 reasoning steps.
 
 \subsection{Main Results}
 
@@ -132,17 +126,13 @@ lower accuracy (96.8\% $\pm$ 0.8\%). Dashed lines: baseline (85.5\%) and TTA-8 (
 \label{fig:learning-curves}
 \end{figure}
 
-\Cref{fig:learning-curves} shows learning curves across 4 random seeds. Key
-observations:
-%
-\begin{itemize}
-  \item \textbf{Rapid early learning.} Puzzle accuracy improves from 84\% to
-    94\% between steps 10k--20k.
-  \item \textbf{Convergence plateau.} Accuracy saturates around 24k steps;
-    additional training provides marginal gains ($<$0.5pp).
-  \item \textbf{Seed variance.} Final puzzle accuracy ranges from 95.7\% to
-    97.6\% across both init policies (mean 96.9\%), crossing the TTA-8 baseline.
-\end{itemize}
+\Cref{fig:learning-curves} shows learning curves across 4 random seeds. Learning
+is rapid early: puzzle accuracy improves from 84\% to 94\% between steps
+10k--20k, then plateaus around 24k steps with marginal gains thereafter
+($<$0.5pp). Final puzzle accuracy ranges from 95.7\% to 97.6\% across seeds and
+init policies (mean 96.9\%), with most runs crossing the TTA-8 baseline (97.3\%)
+by 30k steps. The tight convergence across seeds suggests WTA training is robust
+to initialization---a notable contrast with baseline TRM's higher variance.
 
 \subsection{Ablation Studies}
 \label{sec:ablations}
@@ -392,44 +382,43 @@ learning better selection (WTA) rather than increasing model capacity.
 
 % Source: x00.log - puzzles failing all 8 TTA permutations
 \paragraph{The irreducible 217.} We analyzed the 217 puzzles (0.6\%) that no
-permutation solves. Common traits: fewer ``naked singles'' (cells with only one
-candidate): avg.\ 3.1 vs.\ 12.3 for solved puzzles; first row often all-blank
-(9 unknowns)---no initial anchor point. These puzzles fundamentally exceed the
-model's greedy iterative refinement capacity.
+permutation solves. These represent genuine capability limits, not selection
+failures. Common traits:
+%
+\begin{itemize}
+  \item \textbf{Few naked singles}: avg.\ 3.1 cells with unique candidates vs.\
+    12.3 for solved puzzles. Without obvious starting points, the model must
+    reason about constraint interactions rather than propagate forced values.
+  \item \textbf{Sparse first row}: often all-blank (9 unknowns), removing the
+    natural left-to-right anchor that easier puzzles provide.
+  \item \textbf{Require bifurcation}: classical solvers need trial-and-error
+    (guess, propagate, backtrack if contradiction). TRM's greedy refinement
+    cannot backtrack from incorrect early commitments.
+\end{itemize}
+%
+These puzzles require fundamentally different reasoning---hypothesis testing
+rather than constraint propagation. Addressing them likely requires architectural
+changes (e.g., explicit backtracking or tree search), not just better selection.
 
-% Source: x00.log error analysis
-\paragraph{Cell-level error patterns.} Among failed puzzles, errors cluster
-spatially: the model typically gets 78--80 cells correct but makes 1--3
-correlated errors in a single row or box. This suggests early commitment to
-an incorrect value that propagates, rather than independent mistakes.
-
-% Source: x00.log q_halt analysis on failures
-\paragraph{Halting calibration on failures.} Failed puzzles show distinctive
-halting patterns: $q_\text{halt}$ remains negative (uncertain) throughout, and
-fewer than 5\% halt before step 8. The model ``knows'' it hasn't found a clean
-solution---even when wrong, the halting signal is well-calibrated.
+% Source: x00.log error analysis, q_halt analysis on failures
+\paragraph{Error patterns.} Among failed puzzles, errors cluster spatially:
+the model typically gets 78--80 cells correct but makes 1--3 correlated errors
+in a single row or box---early commitment to an incorrect value that propagates.
+Notably, the halting signal remains well-calibrated even on failures:
+$q_\text{halt}$ stays negative (uncertain) throughout, and fewer than 5\% halt
+before step 8. The model ``knows'' it hasn't found a clean solution.
 
 \subsection{Head Specialization Patterns}
 
 % Source: x182a.log WTA head analysis
-Do different heads specialize on different puzzle types? We analyze winner
-patterns across the test set for WTA $K{=}4$:
-
-% Source: x182a.log winner analysis
-\paragraph{Winner distribution.} Head 0 wins 31\% of puzzles, heads 1--3 win
-23\%, 24\%, 22\% respectively. No single head dominates, confirming that
-diversity is maintained.
-
-% Source: x182a.log, x182b.log, x182c.log, x182d.log cross-seed analysis
-\paragraph{Puzzle-head affinity.} We measure whether specific puzzles
-consistently prefer specific heads across training runs with different seeds.
-Correlation is weak ($r = 0.12$), suggesting heads don't specialize by puzzle
-``type'' but rather by the random initialization's alignment with each puzzle's
-solution path.
+Do different heads specialize on different puzzle types? Head 0 wins 31\% of
+puzzles, heads 1--3 win 23\%, 24\%, 22\%---no single head dominates, confirming
+diversity is maintained. However, puzzle-head affinity across seeds is weak
+($r = 0.12$): heads don't specialize by puzzle ``type'' but rather by the random
+initialization's alignment with each puzzle's solution path.
 
 % Source: x182a.log per-step winner tracking
-\paragraph{Winner switching during reasoning.} For puzzles requiring multiple
-H-steps, we track which head wins at each step:
+For puzzles requiring multiple H-steps, we track which head wins at each step:
 %
 \begin{center}
 \begin{tabular}{lcccc}

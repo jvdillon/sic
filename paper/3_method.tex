@@ -211,21 +211,29 @@ updates $z_H$ given the equilibrated $z_L^*$. This creates a natural hierarchy:
 $z_L$ handles cell-level constraint propagation while $z_H$ maintains
 puzzle-level state.
 
-% COMMENTED FOR SPACE:
-% \paragraph{Schur complement structure.} The implicit gradient through this
-% bilevel system has the form:
-% %
-% \begin{equation}
-%   \frac{d\mathcal{L}}{d\theta} \propto S^{-1}, \quad
-%   S = I - J_H - J_{HL} (I - J_L)^{-1} J_{LH}
-% \end{equation}
-% %
-% where $J_L = \partial f / \partial z_L$ and $J_H = \partial g / \partial z_H$
-% are the self-Jacobians of the L and H updates, while $J_{HL} = \partial g /
-% \partial z_L$ and $J_{LH} = \partial f / \partial z_H$ capture how each loop
-% depends on the other's state. The inner equilibrium's Jacobian $(I - J_L)^{-1}$
-% appears inside the outer inverse $S^{-1}$---good conditioning of the inner loop
-% propagates to the full system.
+\paragraph{Schur complement structure (intuition).} The implicit gradient through
+this bilevel system reveals an elegant structure. Writing the joint state
+$Z = (z_L, z_H)$ and joint Jacobian in block form:
+%
+\begin{equation}
+  I - J = \begin{bmatrix} I - J_L & -K_L \\ -K_H & I - J_H \end{bmatrix}
+\end{equation}
+%
+where $J_L, J_H$ are self-Jacobians and $K_L = \partial f/\partial z_H$,
+$K_H = \partial g/\partial z_L$ capture cross-coupling. Block inversion yields
+a Schur complement:
+%
+\begin{equation}
+  S = (I - J_H) - K_H (I - J_L)^{-1} K_L
+\end{equation}
+%
+The effective outer inverse $S^{-1}$ equals the naive inverse $(I-J_H)^{-1}$
+\emph{corrected} by how inner-outer coupling $(K_H, K_L)$ interacts through
+the inner equilibrium $(I-J_L)^{-1}$. This creates nested Neumann series:
+the inner equilibrium ``solves'' for $z_L^*$ given $z_H$, then the outer loop
+optimizes the simpler problem of finding good $z_H$---divide and conquer.
+In practice, TRM truncates these series, but the bilevel structure may make
+truncation less harmful: deep effective computation with shallow gradient paths.
 
 \paragraph{Architectural asymmetry stabilizes the inner loop.} L-cycles receive
 $z_L + z_H + z_x$ (three unit-variance terms), while H-cycles receive only

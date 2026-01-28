@@ -7,13 +7,42 @@ This repository contains the "Speed is Confidence" research paper and its associ
 
 ## Abstract
 
-Biological neural systems must be fast but are energy-constrained. Evolution's solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat when a neuron fires as an expression of confidence.
 
-We apply this principle to ensembles of Tiny Recursive Models (TRM) [Jolicoeur-Martineau et al., 2025]. On Sudoku-Extreme, halt-first selection achieves 97% accuracy vs. 91% for probability averaging—while requiring 10× fewer reasoning steps (early halting). A single baseline model achieves 85.5% +/- 1.3%. Inference speed is an implicit indication of confidence.
+Biological neural systems must be fast but are
+energy-constrained. Evolution’s solution: act on
+the first signal. Winner-take-all circuits and time-
+to-first-spike coding implicitly treat when a neu-
+ron fires as an expression of confidence.
 
-But can this capability be manifested as a training-only cost? Evidently yes: by maintaining K=4 parallel latent states during training but backpropping only through the lowest-loss "winner," we achieve 96.9% +/- 0.6% puzzle accuracy--roughly matching ensemble performance but at exactly the same cost as a single model, with half the variance of the baseline. (Four independent trials spanned 96.16% to 97.64%.)
 
-As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. This necessity compelled a modified SwiGLU [Shazeer, 2020] which made Muon [Jordan et al., 2024] viable. With these improvements and K=1 training, we match TRM baseline performance (∼85.5%) in just 48 min (8k steps, batch size 384, ∼16GiB). Higher accuracy (∼96.9%) is achieved in 36k steps and K=4 (batch size 192, ∼30GiB) and takes about 6 hours.
+
+We apply this principle to ensembles of Tiny
+Recursive Models (TRM) [Jolicoeur-Martineau
+et al., 2025]. On Sudoku-Extreme, halt-first se-
+lection achieves 97% accuracy vs. 91% for proba-
+bility averaging—while requiring 10× fewer rea-
+soning steps. A single baseline model achieves
+85.5% ± 1.3%.
+
+
+Can we internalize this as a training-only cost?
+Yes: by maintaining K=4 parallel latent states
+but backpropping only through the lowest-loss
+“winner,” we achieve 96.9% ± 0.6% accuracy—
+matching ensemble performance at 1× inference
+cost, with less than half the variance of the base-
+line. (Four trials spanned 96.2%–97.6%.) A key
+diagnostic: 89% of baseline failures are selection
+problems, revealing a 99% accuracy ceiling.
+
+
+As in nature, this work was also resource con-
+strained: all experiments used a single RTX
+5090. A modified SwiGLU [Shazeer, 2020] made
+Muon [Jordan et al., 2024] and high LR viable,
+enabling baseline training in 48 minutes and full
+WTA (K=4) in 6 hours on consumer hardware.
+
 
 ## Installation
 
