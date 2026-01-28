@@ -38,8 +38,8 @@ use the halting signal with a maximum of 16 reasoning steps.
 % | g,i      | False (Buffer)  | Yes (2k)     | Done        | 96.2% mean    |
 % | j,k,l,m  | False (Buffer)  | No           | Done        | 96.9% ± 0.8%  |
 %
-% KEY FINDING: trunc\_randn (K=∞ effective) ≈ Buffer (K=4 learned) → 96.9% both!
-% This shows K=4 learned heads capture the diversity of infinitely many random inits.
+% KEY FINDING: fresh init ≈ fixed init → 96.9% both!
+% This shows 4 fixed heads capture sufficient diversity; no need for fresh sampling.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % Data sources:
@@ -62,16 +62,16 @@ Baseline & 98.2\% & 86.1\% & 1$\times$ \\  % x00.log
 TTA K=8 & --- & 97.3\% & 8$\times$ \\  % x00.log with TTA
 Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\  % x02.log + x03.log + x04.log halt-first
 \midrule
-\multicolumn{4}{@{}l}{\textit{WTA training (ours)}} \\
-K=4 trunc\_randn init & 98.6\% & 96.9$\pm$0.6\% & 1$\times$ \\  % x182a.log, x182b.log, x182c.log, x182d.log
-\textbf{K=4 learned init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.8\%} & \textbf{1$\times$} \\  % x182j.log, x182k.log, x182l.log, x182m.log
+\multicolumn{4}{@{}l}{\textit{WTA training (ours, $K{=}4$)}} \\
+\textbf{Fresh init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.6\%} & \textbf{1$\times$} \\  % x182a.log, x182b.log, x182c.log, x182d.log
+Fixed init & 98.6\% & 96.9$\pm$0.8\% & 1$\times$ \\  % x182j.log, x182k.log, x182l.log, x182m.log
 \bottomrule
 \end{tabular}
 \caption{Results on Sudoku-Extreme (n=4 seeds each). Inf.\ Cost is inference
-cost relative to baseline (1 model, 16 ACT steps). Both WTA variants achieve
-\textbf{96.9\%} single-pass accuracy---matching TTA-8 (97.3\%) without test-time
-augmentation. Random init (K=$\infty$ effective) and learned init (K=4 heads)
-perform identically, showing 4 heads capture the full diversity benefit.}
+cost relative to baseline (1 model, 16 ACT steps). Both WTA variants use $K{=}4$
+parallel $z_L$ heads and achieve \textbf{96.9\%} single-pass accuracy---matching
+TTA-8 (97.3\%) without test-time augmentation. Fresh init (resample each step)
+and fixed init (cached in buffer) perform identically.}
 \label{tab:main}
 \end{table}
 
@@ -87,10 +87,10 @@ perform identically, showing 4 heads capture the full diversity benefit.}
       K=4 z\_L heads achieve 96.9\% single-pass accuracy---nearly matching
         TTA-8 (97.3\%) without any test-time augmentation.
         % Source: x182{a,b,c,d,j,k,l,m}.log
-  \item \textbf{Initialization.}
-      Repeated init (trunc\_randn for every new $z_L$) and fixed init
-        (trunc\_randn copied from buffer) achieves 96.85\% $\pm$ 0.58\%
-        and 96.80 $\pm$ 0.81\%, resp.
+  \item \textbf{Initialization policy.}
+      Fresh init (resample $z_L$ each forward pass) achieves 96.85\% $\pm$ 0.58\%;
+        fixed init (cache in buffer) achieves 96.80\% $\pm$ 0.81\%.
+        Fresh is marginally better with tighter variance.
         % Source: x182{a,b,c,d}.log (K=4 trunc\_randn init):
         %   x=np.array([96.16, 96.46, 97.16, 97.64]) 96.85% ± 0.58%
         %   x.mean()   # 96.855
@@ -112,13 +112,13 @@ perform identically, showing 4 heads capture the full diversity benefit.}
 % Source: figures/learning_curves.pdf generated from x182{a,b,c,d}.log
 % x182a: seed=42, 97.64%  x182b: seed=43, 96.16%
 % x182c: seed=44, 96.46%  x182d: seed=45, 97.16%
-% Mean: 96.85% ± 0.58% (trunc\_randn); x182{j,k,l,m} Buffer achieves same 96.9%
+% Mean: 96.85% ± 0.58% (fresh init); x182{j,k,l,m} fixed init achieves same 96.9%
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/learning_curves.pdf}
-\caption{Learning curves across 4 seeds (random init variant). \textbf{Left:}
+\caption{Learning curves across 4 seeds (fresh init). \textbf{Left:}
 Cell accuracy converges to 98.4--99.0\%. \textbf{Right:} Puzzle accuracy reaches
-96.2--97.6\% by 36k steps. Learned init variant shows identical final accuracy
+96.2--97.6\% by 36k steps. Fixed init shows identical final accuracy
 (96.9\% $\pm$ 0.8\%). Dashed lines: baseline (86.1\%) and TTA-8 (97.3\%).}
 \label{fig:learning-curves}
 \end{figure}
@@ -132,15 +132,15 @@ observations:
   \item \textbf{Convergence plateau.} Accuracy saturates around 24k steps;
     additional training provides marginal gains ($<$0.5pp).
   \item \textbf{Seed variance.} Final puzzle accuracy ranges from 95.7\% to
-    97.6\% across both init variants (mean 96.9\%), crossing the TTA-8 baseline.
+    97.6\% across both init policies (mean 96.9\%), crossing the TTA-8 baseline.
 \end{itemize}
 
 \subsection{Ablation Studies}
 \label{sec:ablations}
 
 \paragraph{Number of heads.} Due to limited compute (single GPU), we explored
-$K \in \{1, 4, \infty\}$ where $K{=}\infty$ is achieved by sampling fresh
-truncated-normal $z_L$ at each forward pass rather than using learned buffers.
+$K \in \{1, 4\}$. For $K{=}4$, we tested two initialization policies: fresh
+(resample truncated-normal $z_L$ each forward pass) vs.\ fixed (cache in buffer).
 
 % Source experiments for K ablation (x182 series):
 % K=1: baseline x00 (86.1% puzzle) [unfuck.txt]

@@ -1,4 +1,4 @@
-"""x182: Sparse chain pooling to expunge converged chains."""
+"""x182: A clean rewrite of x179 but more efficient via expunging converged chains."""
 
 from __future__ import annotations
 
