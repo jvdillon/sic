@@ -1,34 +1,92 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% EXPERIMENT REGISTRY - Single source of truth for all paper numbers
+% All experiments in ~/projects/sic/code/sudoku/
+%
+% =============================================================================
+% x182 FAMILY (main experiments, uses K_L parallelism with SVD-aligned init)
+% =============================================================================
+% Base config: K_H=1, carry_H="copy_top1", carry_L="all", z_L_init_svd=True
+%
+% BASELINE (K_L=1, K_H=1) - 8k steps, bs=384
+% -----------------------------------------------------------------------------
+% Exp    | Seed | Cell   | Puzzle | Notes
+% x182m  | 42   | 95.05% | 87.09% |
+% x182n  | 43   | 94.78% | 86.11% |
+% x182o  | 44   | 94.41% | 85.08% |
+% x182p  | 45   | 93.79% | 83.63% |
+% -----------------------------------------------------------------------------
+% Mean: 94.51% cell, 85.48% puzzle (± 1.28%, range 83.63-87.09%)
+%
+% WTA K=4 FRESH INIT (z_L_random_init=True) - 36k steps, bs=192
+% -----------------------------------------------------------------------------
+% Exp    | Seed | Cell   | Puzzle | Notes
+% x182a  | 42   | 99.03% | 97.64% | best
+% x182b  | 43   | 98.42% | 96.16% |
+% x182c  | 44   | 98.55% | 96.46% |
+% x182d  | 45   | 98.84% | 97.16% |
+% x182e  | 46   | 93.06% | 82.89% | OUTLIER - stopped at 12k steps
+% -----------------------------------------------------------------------------
+% Mean (excl e): 98.71% cell, 96.85% puzzle (± 0.58%, range 96.16-97.64%)
+%
+% WTA K=4 FIXED INIT (z_L_random_init=False) - 36k steps, bs=192
+% -----------------------------------------------------------------------------
+% Exp    | Seed | Cell   | Puzzle | Notes
+% x182j  | 42   | 98.92% | 97.38% |
+% x182k  | 43   | 98.23% | 95.65% |
+% x182l  | 44   | 98.90% | 97.36% |
+% -----------------------------------------------------------------------------
+% Mean: 98.68% cell, 96.80% puzzle (± 0.81%, range 95.65-97.38%)
+%
+% WTA K=4 WITH ACT WARMUP (H=1 for first 2k steps) - 36k steps, bs=192
+% -----------------------------------------------------------------------------
+% Exp    | Seed | Cell   | Puzzle | Init   | Notes
+% x182f  | 42   | 98.12% | 95.42% | fresh  |
+% x182h  | 43   | 97.30% | 93.43% | fresh  |
+% x182g  | 42   | 98.87% | 97.30% | fixed  |
+% x182i  | 43   | 98.05% | 95.18% | fixed  |
+% -----------------------------------------------------------------------------
+% Fresh mean: 94.4%, Fixed mean: 96.2% (warmup hurts fresh init more)
+%
+% =============================================================================
+% x179 FAMILY (carry policy ablations, uses K_H=4 parallelism)
+% =============================================================================
+% Note: x179 uses K_H=4 (not K_L=4), different from x182 architecture
+%
+% CARRY POLICY ABLATION - 28k steps
+% -----------------------------------------------------------------------------
+% Exp    | carry_H    | carry_L | Cell   | Puzzle | Paper notation
+% x179g  | all        | all     | 95.99% | 90.27% | all/all
+% x179f  | all        | top1    | 97.36% | 93.66% | all/copy
+% x179e  | top1       | top1    | 98.31% | 95.94% | copy/copy
+% x179q  | copy_top1  | all     | 99.05% | 97.70% | copy/all (best)
+% -----------------------------------------------------------------------------
+% Note: x179q uses K_L=4 (like x182), others use K_H=4
+%
+% =============================================================================
+% LEGACY EXPERIMENTS (for halt-first ensemble numbers)
+% =============================================================================
+% x00: Single model, no noise, seed=42 → 85.9% puzzle (used for TTA-8: 97.3%)
+% x02, x03, x04: Models with state noise (σ=0.1 on z_L), seeds 42,43,44
+%   - Individual: ~85.0% avg (86.0%, 83.9%, 85.0%)
+%   - Ensemble prob-avg (12 chains = 3 seeds × 4 rotations): 91.5%
+%   - Halt-first (12 chains): 97.2%
+%
+% =============================================================================
+% KEY NUMBERS FOR PAPER
+% =============================================================================
+% Baseline (K=1):           85.5% ± 1.3% puzzle, 94.5% cell [x182{m,n,o,p}]
+% WTA fresh (K=4):          96.9% ± 0.6% puzzle, 98.7% cell [x182{a,b,c,d}]
+% WTA fixed (K=4):          96.8% ± 0.8% puzzle, 98.7% cell [x182{j,k,l}]
+% TTA-8:                    97.3% puzzle [x00 with 8 rotations]
+% Halt-first (12 chains):   97.2% puzzle [x02,x03,x04 × 4 rotations]
+% Prob-avg (12 chains):     91.5% puzzle [x02,x03,x04 × 4 rotations]
+% Best carry (copy/all):    97.7% puzzle [x179q]
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 Biological neural systems must be fast but are energy-constrained. Evolution's solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat \emph{when} a neuron fires as an expression of confidence.
 
-% Sources:
-%   97.2% halt-first: x02.log, x03.log, x04.log (3 seeds × 4 rotations)
-%   85.5% baseline: x182{m,n,o,p}.log mean (± 1.3%, range 83.6-87.1%)
-%   97.3% TTA: x00.log with 8 rotations (unfuck.txt)
 We apply this principle to ensembles of Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm}. On Sudoku-Extreme, halt-first selection achieves 97\% accuracy vs.\ 91\% for probability averaging---while requiring 10$\times$ fewer reasoning steps (early halting). A single baseline model achieves 85.5\% $\pm$ 1.3\%. Inference speed is an implicit indication of confidence.
-
-% Source: x182{a,b,c,d}.log (K=4 trunc\_randn init):
-%   x=np.array([96.16, 96.46, 97.16, 97.64]) 96.85% ± 0.58%
-%   x.mean()   # 96.855
-%   x.std()    # 0.5805816049445609
-%   x.min()    # 96.16
-%   x.max()    # 97.64
-
-% Source: x182{j,k,l}.log (K=4 fixed init):
-%   x=np.array([97.38, 95.65, 97.36])
-%   x.mean()   # 96.79667
-%   x.std()    # 0.8108568855777711
-%   x.min()    # 95.65
-%   x.max()    # 97.38
-
-% Source: x182{m,n,o,p}.log (TRM baseline)
-%   x=np.array([87.09, 86.11, 85.08, 83.63])
-%   x.mean()   # 85.48
-%   x.std()    # 1.28
-%   x.min()    # 83.63
-%   x.max()    # 87.09
 
 But can this capability be manifested as a training-only cost? Evidently yes: by maintaining $K{=}4$ parallel latent states during training but backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} puzzle accuracy---roughly matching ensemble performance but at exactly the same cost as a single model, with half the variance of the baseline. (Four independent trials spanned 96.16\% to 97.64\%.)
 
 As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. This necessity compelled a modified SwiGLU~\citep{shazeer2020swiglu} which made Muon~\citep{jordan2024muon} viable. With these improvements and $K{=}1$ training, we match TRM baseline performance (${\sim}$85.5\%) in just 48 min (8k steps, batch size 384, ${\sim}$16GiB). Higher accuracy (${\sim}$96.9\%) is achieved in 36k steps and $K{=}4$ (batch size 192, ${\sim}$30GiB) and takes about 6 hours.
-
-% The path: biological principle $\to$ inference strategy that validates it $\to$ training procedure that internalizes the benefit. Speed is confidence.
