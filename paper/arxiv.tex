@@ -1,24 +1,38 @@
 \documentclass[10pt,twocolumn,letterpaper]{article}
-\usepackage[top=0.75in,bottom=1in,left=0.75in,right=0.75in,columnsep=0.25in]{geometry}
+\usepackage[top=0.75in,bottom=1.0625in,left=0.77in,right=0.77in,columnsep=0.25in]{geometry}
+%\usepackage[letterpaper,textwidth=6.75in,textheight=9.0in,left=0.77in,top=0.75in,columnsep=0.25in]{geometry}
 \usepackage{times}
 \usepackage{natbib}
 \input{preamble}
+
+% No paragraph indent, use vertical space instead.
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% Slightly tighter section spacing.
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}{-0.12in}{0.02in}{\normalfont\large\bfseries}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}{-0.10in}{0.01in}{\normalfont\normalsize\bfseries}}
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}{-0.08in}{0.01in}{\normalfont\normalsize\bfseries}}
+
+% Centered abstract title, slightly narrower (like ICML).
+\renewenvironment{abstract}{\centerline{\large\bfseries Abstract}\vspace{-0.12in}\begin{quote}\small}{\end{quote}}
+\makeatother
 
 \title{Speed is Confidence}
 \author{Joshua V.\ Dillon\\Independent Researcher\\\tt\small \href{mailto:jvdillon@gmail.com}{jvdillon@gmail.com}}
 
 \begin{document}
 
-\twocolumn[
+%\twocolumn[
 \maketitle
-\begin{@twocolumnfalse}
 \begin{abstract}
+%\setlength{\parskip}{6pt}
 \input{0_abstract}
 Code: \url{https://github.com/jvdillon/sic}
 \end{abstract}
-\vspace{0.5cm}
-\end{@twocolumnfalse}
-]
+%\vspace{0.5cm}
+%]
 
 \input{1_introduction}
 \input{2_background}
