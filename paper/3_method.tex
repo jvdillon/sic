@@ -103,7 +103,7 @@ $z_H$ and $z_L$ to the next step. This means the $K$ parallel chains evolve
 across multiple gradient updates, not within a single forward pass.
 
 \paragraph{Carry policy.} After each step, we must decide how to propagate
-states to the next iteration. We use \texttt{copy\_top1} for $z_H$: the
+states to the next iteration. We use \texttt{copy} for $z_H$: the
 winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 9). For $z_L$, we
 use \texttt{all}: each chain keeps its own $z_L$. This allows heads to benefit
 from shared high-level progress while maintaining low-level diversity (see
@@ -127,7 +127,7 @@ from shared high-level progress while maintaining low-level diversity (see
 %
 \noindent Here $\mathcal{L}_\text{CE}$ is cross-entropy with label smoothing
 ($\alpha{=}0.2$), $\mathcal{L}_\text{BCE}$ is binary cross-entropy for the
-halting signal where $q_k$ is the halting logit and $\sigma(q_k)$ is the
+halting signal where $q_k$ is the halting logit and $\sigmoid(q_k)$ is the
 halting probability, and $\lambda{=}0.05$.
 
 \paragraph{Counter-intuitive design.} WTA training deliberately spends compute
@@ -161,13 +161,15 @@ input/output interfaces from overfitting. In contrast, baseline TRM applies
 uniform high weight decay (1.0) to all parameters, which may over-constrain
 the reasoning layers.
 
-\paragraph{Modified SwiGLU.} We discovered that Muon fails completely with
-standard SwiGLU activation. Standard SwiGLU computes $\text{SiLU}(g) \odot v$
-where $[g, v] = xW$ (split in half). Our modification applies normalization
-before the down-projection: $\text{SwiGLU}_\text{mod}(x) = \sigma(g) \odot
-\text{RMSNorm}(g \odot v)$, using sigmoid rather than SiLU for the gate. This
-bounds the pre-activation magnitudes, preventing Muon's orthogonalized updates
-from causing training to diverge.
+\paragraph{Modified SwiGLU.} We observe that Muon with high LR underperforms
+with $\operatorname{SwiGLU}(x)\defeq\operatorname{SiLU}(g) \odot v$ where $[g,
+v] = xW$ (split in half). Evidently the issue stems from Muon being proximal
+descent with spectral norm (Stiefel manifold; orthogonal matrices) but $g \odot
+v$ of $\operatorname{SwiGLU} = \sigmoid(g) \odot g \odot v$ carries magnitude.
+To remedy, we introduce an additional normalization:
+$\operatorname{SwiGLU}_\text{muon}(x) = \sigmoid(g) \odot
+\operatorname{RMSNorm}(g \odot v)$. This bounds the magnitudes and prevents
+Muon's orthogonalized updates from being dominated by large values.
 
 \subsubsection{SVD-Aligned Initialization}
 
@@ -226,7 +228,7 @@ parallel initializations, we sample $K$ potential solution paths. The
 well-conditioned inner loop means these paths can diverge meaningfully without
 destabilizing training.
 
-\paragraph{Why shared $z_H$.} The \texttt{copy\_top1} policy copies the
+\paragraph{Why shared $z_H$.} The \texttt{copy} policy copies the
 winner's $z_H$ to all chains. This propagates successful high-level state
 (puzzle-level progress) while preserving low-level diversity. It also
 decorrelates each chain's $z_H$ from its own $z_L$, strengthening the

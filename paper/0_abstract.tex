@@ -6,16 +6,21 @@ Biological neural systems must be fast but are energy-constrained. Evolution's s
 %   97.3% TTA: x00.log with 8 rotations (unfuck.txt)
 We apply this principle to ensembles of Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm}. On Sudoku-Extreme, halt-first selection achieves 97\% accuracy vs.\ 91\% for probability averaging---while requiring 10$\times$ fewer reasoning steps (early halting). A single baseline model achieves 86\%. Inference speed is an implicit indication of confidence.
 
-% Source: x182{a,b,c,d}.log (trunc\_randn): x=np.array([96.16, 96.46, 97.16, 97.64]) 96.85% ± 0.58%
-% In [5]: x.mean()
-% Out[5]: np.float64(96.85499999999999)
-% In [6]: x.std()
-% Out[6]: np.float64(0.5805816049445609)
-% In [7]: x.min()
-% Out[7]: np.float64(96.16)
-% In [8]: x.max()
-% Out[8]: np.float64(97.64)
-But can this capability be manifested as a training-only cost? Evidently yes: by maintaining $K{=}4$ parallel latent states during training but backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} puzzle accuracy---roughly matching ensemble performance but at exactly the same cost as a single model. (Four independent trials spanned 96.2\% to 97.6\%.)
+% Source: x182{a,b,c,d}.log (K=4 trunc\_randn init):
+%   x=np.array([96.16, 96.46, 97.16, 97.64]) 96.85% ± 0.58%
+%   x.mean()   # 96.855
+%   x.std()    # 0.5805816049445609
+%   x.min()    # 96.16
+%   x.max()    # 97.64
+
+% Source: x182{j,k,l}.log (K=4 fixed init):
+%   x=np.array([97.38, 95.65, 97.36])
+%   x.mean()   # 96.79667
+%   x.std()    # 0.8108568855777711
+%   x.min()    # 95.65
+%   x.max()    # 97.38
+
+But can this capability be manifested as a training-only cost? Evidently yes: by maintaining $K{=}4$ parallel latent states during training but backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} puzzle accuracy---roughly matching ensemble performance but at exactly the same cost as a single model. (Four independent trials spanned 96.16\% to 97.64\%.)
 
 As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. Necessity compelled our invention of a modified SwiGLU~\citep{shazeer2020swiglu} which made Muon~\citep{jordan2024muon} viable. With these improvements and $K{=}1$ training, we match TRM baseline performance (${\sim}$86\%) in just 48 min (8k steps, bs${=}$384, ${\sim}$16GiB). Higher accuracy (${\sim}$97\%) is achieved in 36k steps and $K{=}4$ (bs${=}$192, ${\sim}$30GiB) and takes about 6 hours.
 
