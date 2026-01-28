@@ -21,6 +21,10 @@ uv sync
 uv run code/sudoku/x182.py  # Train K=4, for example.
 ```
 
+Much the code here builds on the excellent work of [Alexia
+Jolicoeur-Martineau](https://github.com/AlexiaJM) available from
+[TinyRecursiveModels](https://github.com/SamsungSAILMontreal/TinyRecursiveModels).
+
 ## License
 
 Apache-2.0

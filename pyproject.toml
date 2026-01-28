@@ -27,6 +27,11 @@ dependencies = [
     "einshape",
     "jaxtyping",
     "numpy>=2.1",
+    # dataset/build_sudoku_dataset.py deps
+    "argdantic",
+    "pydantic",
+    "tqdm",
+    "huggingface_hub",
 ]
 [dependency-groups]
 dev = [
