@@ -12,7 +12,7 @@ We apply this principle to ensembles of Tiny Recursive Models (TRM) [Jolicoeur-M
 
 But can this capability be manifested as a training-only cost? Evidently yes: by maintaining K=4 parallel latent states during training but backpropping only through the lowest-loss "winner," we achieve 96.9% +/- 0.6% puzzle accuracy--roughly matching ensemble performance but at exactly the same cost as a single model, with half the variance of the baseline. (Four independent trials spanned 96.16% to 97.64%.)
 
-As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. Necessity compelled our modified SwiGLU [Shazeer, 2020] which made Muon [Jordan et al., 2024] viable. With these improvements and K=1 training, we match TRM baseline performance (∼85.5%) in just 48 min (8k steps, batch size 384, ∼16GiB). Higher accuracy (∼96.9%) is achieved in 36k steps and K=4 (batch size 192, ∼30GiB) and takes about 6 hours.
+As in nature, this work was also resource constrained: all experimentation used a single RTX 5090. This necessity compelled a modified SwiGLU [Shazeer, 2020] which made Muon [Jordan et al., 2024] viable. With these improvements and K=1 training, we match TRM baseline performance (∼85.5%) in just 48 min (8k steps, batch size 384, ∼16GiB). Higher accuracy (∼96.9%) is achieved in 36k steps and K=4 (batch size 192, ∼30GiB) and takes about 6 hours.
 
 ## Installation
 
