@@ -170,8 +170,9 @@ the reasoning layers.
 \paragraph{Modified SwiGLU.} We observe that Muon with high LR underperforms
 with $\operatorname{SwiGLU}(x)\defeq\operatorname{SiLU}(g) \odot v$ where $[g,
 v] = xW$ (split in half). Evidently the issue stems from Muon being proximal
-descent with spectral norm (Stiefel manifold; orthogonal matrices) but $g \odot
-v$ of $\operatorname{SwiGLU} = \sigmoid(g) \odot g \odot v$ carries magnitude.
+descent with spectral norm (Stiefel manifold; orthogonal matrices), but since
+$\operatorname{SiLU}(g) = \sigmoid(g) \cdot g$, we have
+$\operatorname{SwiGLU} = \sigmoid(g) \odot g \odot v$, which carries magnitude.
 To remedy, we introduce an additional normalization:
 $\operatorname{SwiGLU}_\text{muon}(x) = \sigmoid(g) \odot
 \operatorname{RMSNorm}(g \odot v)$. This bounds the magnitudes and prevents

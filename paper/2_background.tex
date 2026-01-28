@@ -39,8 +39,8 @@ language models while using a fraction of the parameters.
 
 \subsection{Adaptive Computation Time}
 
-Rather than fixing $T$, TRM can learn \emph{when to stop} via Adaptive
-Computation Time (ACT)~\citep{graves2016act}. The model outputs a halting
+Rather than fixing the number of iterations $T$, TRM can learn \emph{when to
+stop} via Adaptive Computation Time (ACT)~\citep{graves2016act}. The model outputs a halting
 probability $q_\text{halt}\defeq\sigmoid(q)$
 at each step, trained to predict whether the current output is correct. When
 $q_\text{halt} > 0.5$, the model ``commits'' to its answer.

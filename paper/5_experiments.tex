@@ -3,9 +3,9 @@
 \subsection{Setup}
 
 \paragraph{Dataset.} Sudoku-Extreme: 1,000 training puzzles (with 8$\times$
-dihedral augmentation and digit permutation) and a 38,400 puzzle subset of
-422,786 test puzzles. All puzzles have exactly 17 given digits (the minimum for
-a unique solution).
+dihedral augmentation and digit permutation) and a randomly sampled 38,400
+puzzle subset of 422,786 test puzzles. All puzzles have exactly 17 given digits
+(the minimum for a unique solution).
 
 \paragraph{Hardware.} All experiments use a single NVIDIA RTX 5090 (32GiB VRAM).
 Training completes in 48 minutes for 8k steps ($K{=}1$, bs${=}$384,
@@ -61,8 +61,8 @@ Method & Cell & Puzzle & Inf.\ Cost \\
 Baseline ($K{=}1$) & 94.5\% & 85.5$\pm$1.3\% & 1$\times$ \\  % x182{m,n,o,p}.log
 \midrule
 \multicolumn{4}{@{}l}{\textit{Inference-time methods}} \\
-TTA-8 (test-time aug.) & --- & 97.3\% & 8$\times$ \\  % x00.log with TTA
-Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\  % x02.log + x03.log + x04.log halt-first
+TTA-8 (test-time aug.) & n/a & 97.3\% & 8$\times$ \\  % x00.log with TTA
+Halt-first (12 ch.) & n/a & 97.2\% & 1.5$\times$$^\dagger$ \\  % x02.log + x03.log + x04.log halt-first
 \midrule
 \multicolumn{4}{@{}l}{\textit{WTA training (ours, $K{=}4$)}} \\
 \textbf{Fresh init} & \textbf{98.6\%} & \textbf{96.9$\pm$0.6\%} & \textbf{1$\times$} \\  % x182a.log, x182b.log, x182c.log, x182d.log
@@ -73,7 +73,9 @@ Fixed init & 98.6\% & 96.8$\pm$0.8\% & 1$\times$ \\  % x182j.log, x182k.log, x18
 cost relative to baseline (1 model, 16 ACT steps). Both WTA variants use $K{=}4$
 parallel $z_L$ heads and achieve ${\sim}$\textbf{97\%} single-pass accuracy---matching
 TTA-8 (97.3\%) without test-time augmentation. Fresh init is slightly better
-(96.9\% vs 96.8\%) with lower variance ($\pm$0.6\% vs $\pm$0.8\%).}
+(96.9\% vs 96.8\%) with lower variance ($\pm$0.6\% vs $\pm$0.8\%).
+Cell accuracy is n/a for ensemble methods (not tracked per-puzzle).
+$^\dagger$Effective cost after early halting (86\% halt at step 0).}
 \label{tab:main}
 \end{table}
 
@@ -185,7 +187,8 @@ copy / copy (x179e) & 98.3\% & 95.9\% \\  % x179e.log
 %
 Sharing the winner's $z_H$ while preserving each head's $z_L$ works best (+7pp
 over all/all), allowing heads to benefit from high-level progress while
-maintaining low-level diversity.
+maintaining low-level diversity. (The x182 main results use copy/all; the 0.1pp
+difference from x179q reflects seed variance.)
 
 \paragraph{SVD-aligned initialization.} All x182 experiments use SVD-aligned
 initialization for z\_L heads, ensuring each head projects onto a distinct top
