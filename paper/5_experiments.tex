@@ -2,18 +2,20 @@
 
 \subsection{Setup}
 
-\paragraph{Dataset.} Sudoku-Extreme: 10,000 puzzles with exactly 17 given digits
-(the minimum for a unique solution). We use the same train/test split as
-TRM~\citep{jolicoeur2025trm}, with 8$\times$ augmentation (dihedral symmetries)
-and digit permutation applied during training.
+\paragraph{Dataset.} Sudoku-Extreme: 1,000 training puzzles (with 8$\times$
+dihedral augmentation and digit permutation) and a 38,400 puzzle subset of
+422,786 test puzzles. All puzzles have exactly 17 given digits (the minimum for
+a unique solution).
 
 \paragraph{Hardware.} All experiments use a single NVIDIA RTX 5090 (32GiB VRAM).
 Training completes in 48 minutes for 8k steps ($K{=}1$, bs${=}$384,
 ${\sim}$16GiB) to 6 hours ($K{=}4$, bs${=}$192, ${\sim}$30GiB) for 36k steps.
 
 \paragraph{Architecture.} 2-layer MLP-Mixer~\citep{tolstikhin2021mlpmixer}, 512
-hidden (7M params), no attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (vs.\ 3, 6
-in baseline TRM). Modified SwiGLU to accommodate Muon.
+hidden (7M params), no attention. $n_\text{H}{=}6$, $n_\text{L}{=}9$ (increased
+from 3, 6 in original TRM; this improves our baseline to 85.5\% $\pm$ 1.3\% from
+their ${\sim}$80\%; best seed reached 87\%, but high variance makes this rare).
+Modified SwiGLU to accommodate Muon.
 
 \paragraph{Evaluation.} We report puzzle accuracy (fraction of puzzles solved
 completely) and cell accuracy (fraction of cells correct). For ACT models, we
@@ -43,7 +45,7 @@ use the halting signal with a maximum of 16 reasoning steps.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % Data sources:
-% - Baseline (x00): 86.1% puzzle, 97.3% with TTA-8 [unfuck.txt]
+% - Baseline x182{m,n,o,p}: 85.5% ± 1.3% puzzle (range 83.6-87.1%)
 % - Halt-first 12 chains: 97.2% [analysis/ENSEMBLE.md]
 % - x182{a,b,c,d} (trunc\_randn): 96.85% ± 0.58%, range 96.2-97.6%
 %   x182a: 97.64%, x182b: 96.16%, x182c: 96.46%, x182d: 97.16%
@@ -56,10 +58,10 @@ use the halting signal with a maximum of 16 reasoning steps.
 \toprule
 Method & Cell & Puzzle & Inf.\ Cost \\
 \midrule
-Baseline & 98.2\% & 86.1\% & 1$\times$ \\  % x00.log
+Baseline ($K{=}1$) & 94.5\% & 85.5$\pm$1.3\% & 1$\times$ \\  % x182{m,n,o,p}.log
 \midrule
 \multicolumn{4}{@{}l}{\textit{Inference-time methods}} \\
-TTA K=8 & --- & 97.3\% & 8$\times$ \\  % x00.log with TTA
+TTA-8 (test-time aug.) & --- & 97.3\% & 8$\times$ \\  % x00.log with TTA
 Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\  % x02.log + x03.log + x04.log halt-first
 \midrule
 \multicolumn{4}{@{}l}{\textit{WTA training (ours, $K{=}4$)}} \\
@@ -67,7 +69,7 @@ Halt-first (12 ch.) & --- & 97.2\% & 1.5$\times$ \\  % x02.log + x03.log + x04.l
 Fixed init & 98.6\% & 96.9$\pm$0.8\% & 1$\times$ \\  % x182j.log, x182k.log, x182l.log, x182m.log
 \bottomrule
 \end{tabular}
-\caption{Results on Sudoku-Extreme (n=4 seeds each). Inf.\ Cost is inference
+\caption{Results on Sudoku-Extreme. Inf.\ Cost is inference
 cost relative to baseline (1 model, 16 ACT steps). Both WTA variants use $K{=}4$
 parallel $z_L$ heads and achieve \textbf{96.9\%} single-pass accuracy---matching
 TTA-8 (97.3\%) without test-time augmentation. Fresh init (resample each step)
@@ -81,11 +83,13 @@ and fixed init (cached in buffer) perform identically.}
   \item \textbf{Selection is the bottleneck.}
       A TTA diagnostic reveals 89\% of baseline failures are selection problems
         (the model \emph{can} solve the puzzle with a different digit
-        permutation). The ceiling is 99.4\%, not 86\%.
+        permutation). The ceiling is 99.4\%, not 85.5\%.
         % Source: analysis/digit_perm_inference.py - 1820/2037 failures solved by TTA
   \item \textbf{WTA training internalizes diversity.}
-      K=4 z\_L heads achieve 96.9\% single-pass accuracy---nearly matching
-        TTA-8 (97.3\%) without any test-time augmentation.
+      K=4 z\_L heads achieve 96.9\% $\pm$ 0.6\% single-pass accuracy---nearly
+        matching TTA-8 (97.3\%) without any test-time augmentation. Notably,
+        WTA also \emph{reduces variance} by 2$\times$ vs.\ baseline
+        (0.6\% vs.\ 1.3\%).
         % Source: x182{a,b,c,d,j,k,l,m}.log
   \item \textbf{Initialization policy.}
       Fresh init (resample $z_L$ each forward pass) achieves 96.85\% $\pm$ 0.58\%;
@@ -119,7 +123,7 @@ and fixed init (cached in buffer) perform identically.}
 \caption{Learning curves across 4 seeds (fresh init). \textbf{Left:}
 Cell accuracy converges to 98.4--99.0\%. \textbf{Right:} Puzzle accuracy reaches
 96.2--97.6\% by 36k steps. Fixed init shows identical final accuracy
-(96.9\% $\pm$ 0.8\%). Dashed lines: baseline (86.1\%) and TTA-8 (97.3\%).}
+(96.9\% $\pm$ 0.8\%). Dashed lines: baseline (85.5\%) and TTA-8 (97.3\%).}
 \label{fig:learning-curves}
 \end{figure}
 
@@ -143,7 +147,7 @@ $K \in \{1, 4\}$. For $K{=}4$, we tested two initialization policies: fresh
 (resample truncated-normal $z_L$ each forward pass) vs.\ fixed (cache in buffer).
 
 % Source experiments for K ablation (x182 series):
-% K=1: baseline x00 (86.1% puzzle) [unfuck.txt]
+% K=1: baseline x182{m,n,o,p} (85.5% ± 1.3% puzzle)
 % K=4: x182a (97.6% puzzle) [x182a.log]
 % Variance across x182 variants shows K=4 robustness
 \begin{center}
@@ -151,7 +155,7 @@ $K \in \{1, 4\}$. For $K{=}4$, we tested two initialization policies: fresh
 \toprule
 $K$ & Cell Acc. & Puzzle Acc. & $\Delta$ \\
 \midrule
-1 (baseline) & 98.2\% & 86.1\% & --- \\  % x00 [unfuck.txt]
+1 (baseline) & 94.5\% & 85.5\% & --- \\  % x182{m,n,o,p} mean
 4 (x182h) & 97.3\% & 93.4\% & +7.3pp \\  % x182h.log worst K=4
 4 (x182) & 98.9\% & 97.4\% & +11.3pp \\  % x182.log
 4 (x182a) & 99.0\% & 97.6\% & +11.5pp \\  % x182a.log best

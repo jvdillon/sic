@@ -28,14 +28,14 @@ application:
 \end{algorithm}
 %
 The model maintains two latent states: $z_L$ for ``low-level'' details (updated
-$n_\text{L}$ times per H-cycle) and $z_H$ for ``high-level'' reasoning
-(updated once per H-cycle). The $\operatorname{stop}(\cdot)$ operator detaches
+$n_\text{L}$ times per H-cycle, i.e., one outer loop iteration) and $z_H$ for
+``high-level'' reasoning (updated once per H-cycle). The $\operatorname{stop}(\cdot)$ operator detaches
 its argument from the computation graph, preventing gradient flow between
 H-cycles and enabling stable training.
 
-On Sudoku-Extreme (10,000 puzzles with 17 given digits), a 7M parameter TRM
-achieves ${\sim}$86\% puzzle accuracy---substantially outperforming larger language
-models while using a fraction of the parameters.
+On Sudoku-Extreme (17-clue puzzles, the minimum for uniqueness), a 7M parameter
+TRM achieves ${\sim}$86\% puzzle accuracy---substantially outperforming larger
+language models while using a fraction of the parameters.
 
 \subsection{Adaptive Computation Time}
 
