@@ -1,3 +1,5 @@
+% NARRATIVE: Plant the seed. Biological framing (speed = confidence) motivates
+% the entire paper. End with concrete contributions that deliver on this promise.
 \section{Introduction}
 
 When faced with uncertainty, biological neural systems don't perseverate
@@ -41,13 +43,13 @@ cost.
     internalizes ensemble diversity within a single model, achieving
     96.9\% $\pm$ 0.6\% accuracy with zero inference overhead.
     % Source: x182a.log (97.6%), x182b.log (96.2%), x182c.log (96.5%), x182d.log (97.2%)
+  \item We show that 89\% of baseline failures are \emph{selection} problems,
+    not capability limits---the model can solve these puzzles with different
+    initializations. This reveals that the accuracy ceiling is 99\%, not 86\%.
   \item We discover that Muon optimization fails with standard SwiGLU and
-    provide a fix: layer normalization before the down-projection. This
-    enables 4$\times$ higher learning rates than AdamW.
-  \item We provide a theoretical interpretation connecting halting speed to
-    the spectral properties of bilevel equilibria, grounding ``speed is
-    confidence'' in the conditioning of nested fixed points.
-  \item We conduct extensive hyperparameter exploration and identify critical
-	improvements related to TRM design, carry policy, SVD-aligned
-    initialization, and z\_L diversity.
+    provide a fix (RMSNorm before down-projection), enabling training in
+    48 minutes on consumer hardware (RTX 5090) vs.\ hours on datacenter GPUs
+    for baseline TRM---making rapid experimentation feasible.
+  \item We conduct extensive ablations identifying critical design choices:
+    carry policy, SVD-aligned initialization, and $z_L$ diversity.
 \end{enumerate}

@@ -1,3 +1,7 @@
+% NARRATIVE: "We begin with a biological intuition and follow it to its logical
+% conclusion." The bio motivation here is NOT redundant with intro - intro plants
+% the seed, method harvests it for the specific ensemble problem. Flow:
+% ensemble puzzle → bio inspiration → halt-first → oracle-first → faster training.
 \section{Method}
 
 \subsection{The Ensemble Puzzle}
@@ -95,13 +99,14 @@ selection: at inference, the fastest model wins; during training, the most
 accurate head wins. Both reward the same underlying property: having found a
 clean solution path.
 
-Why does lowest loss correlate with fastest halting? When iterative refinement
+Why does lowest loss correlate with fastest halting? Both are downstream effects
+of the same cause: \emph{solution path quality}. When iterative refinement
 encounters no contradictions, $z_L$ stabilizes quickly---the fixed-point
 iteration has a large basin of attraction. This rapid stabilization produces
 both correct outputs (low loss) and confident halting signals (the model
 detects its own convergence). Conversely, when refinement oscillates or drifts,
-both accuracy and halting confidence suffer. Loss and halting time are thus
-downstream effects of the same cause: solution path quality.
+both accuracy and halting confidence suffer. Oracle-first training thus learns
+to find the same ``clean paths'' that halt-first selection exploits.
 
 \paragraph{Training dynamics.} A key detail: TRM training ``unpacks'' the outer
 loop of \Cref{alg:trm}. Each gradient step performs one H-cycle, carrying
@@ -110,7 +115,7 @@ across multiple gradient updates, not within a single forward pass.
 
 \paragraph{Carry policy.} After each step, we must decide how to propagate
 states to the next iteration. We use \texttt{copy} for $z_H$: the
-winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 9). For $z_L$, we
+winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 10). For $z_L$, we
 use \texttt{all}: each chain keeps its own $z_L$. This allows heads to benefit
 from shared high-level progress while maintaining low-level diversity (see
 \Cref{sec:ablations} for ablations).
@@ -206,20 +211,21 @@ updates $z_H$ given the equilibrated $z_L^*$. This creates a natural hierarchy:
 $z_L$ handles cell-level constraint propagation while $z_H$ maintains
 puzzle-level state.
 
-\paragraph{Schur complement structure.} The implicit gradient through this
-bilevel system has the form:
-%
-\begin{equation}
-  \frac{d\mathcal{L}}{d\theta} \propto S^{-1}, \quad
-  S = I - J_H - J_{HL} (I - J_L)^{-1} J_{LH}
-\end{equation}
-%
-where $J_L = \partial f / \partial z_L$ and $J_H = \partial g / \partial z_H$
-are the self-Jacobians of the L and H updates, while $J_{HL} = \partial g /
-\partial z_L$ and $J_{LH} = \partial f / \partial z_H$ capture how each loop
-depends on the other's state. The inner equilibrium's Jacobian $(I - J_L)^{-1}$
-appears inside the outer inverse $S^{-1}$---good conditioning of the inner loop
-propagates to the full system.
+% COMMENTED FOR SPACE:
+% \paragraph{Schur complement structure.} The implicit gradient through this
+% bilevel system has the form:
+% %
+% \begin{equation}
+%   \frac{d\mathcal{L}}{d\theta} \propto S^{-1}, \quad
+%   S = I - J_H - J_{HL} (I - J_L)^{-1} J_{LH}
+% \end{equation}
+% %
+% where $J_L = \partial f / \partial z_L$ and $J_H = \partial g / \partial z_H$
+% are the self-Jacobians of the L and H updates, while $J_{HL} = \partial g /
+% \partial z_L$ and $J_{LH} = \partial f / \partial z_H$ capture how each loop
+% depends on the other's state. The inner equilibrium's Jacobian $(I - J_L)^{-1}$
+% appears inside the outer inverse $S^{-1}$---good conditioning of the inner loop
+% propagates to the full system.
 
 \paragraph{Architectural asymmetry stabilizes the inner loop.} L-cycles receive
 $z_L + z_H + z_x$ (three unit-variance terms), while H-cycles receive only
