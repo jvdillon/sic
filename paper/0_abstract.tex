@@ -87,6 +87,6 @@ Biological neural systems must be fast but are energy-constrained. Evolution's s
 
 We apply this principle to ensembles of Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm}. On Sudoku-Extreme, halt-first selection achieves 97\% accuracy vs.\ 91\% for probability averaging---while requiring 10$\times$ fewer reasoning steps. A single baseline model achieves 85.5\% $\pm$ 1.3\%.
 
-Can we internalize this as a training-only cost? Yes: by maintaining $K{=}4$ parallel latent states but backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} accuracy---matching ensemble performance at 1$\times$ inference cost, with less than half the variance of the baseline. (Four trials spanned 96.2\%--97.6\%.) A key diagnostic: 89\% of baseline failures are \emph{selection} problems, revealing a 99\% accuracy ceiling.
+Can we internalize this as a training-only cost? Yes: by maintaining $K{=}4$ parallel latent states but backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} accuracy---matching ensemble performance at 1$\times$ inference cost, with less than half the variance of the baseline. A key diagnostic: 89\% of baseline failures are \emph{selection} problems, revealing a 99\% accuracy ceiling.
 
 As in nature, this work was also resource constrained: all experiments used a single RTX 5090. A modified SwiGLU~\citep{shazeer2020swiglu} made Muon~\citep{jordan2024muon} and high LR viable, enabling baseline training in 48 minutes and full WTA ($K{=}4$) in 6 hours on consumer hardware.

@@ -62,7 +62,7 @@ neutral but diverged late (--3\% at convergence); extra weighting destabilized
 training.
 
 \paragraph{Stuck-puzzle loss weighting.} 3$\times$ weight for puzzles where
-$q_\text{halt} < 0$. With 91\% of puzzles marked ``stuck'' early in training,
+$q_\text{halt} < 0.5$. With 91\% of puzzles marked ``stuck'' early in training,
 this overwhelmed the loss landscape.
 
 \subsection{Fixed-Point and Contraction Losses}
@@ -89,7 +89,7 @@ constraints simultaneously.
 \subsection{Inference-Time Mechanisms at Training}
 
 \paragraph{Binary reset during training.} Resetting $z_H/z_L$ when
-$q_\text{halt} < 0$. DOA at step 500---destructive gradient signals from 41\%
+$q_\text{halt} < 0.5$. DOA at step 500---destructive gradient signals from 41\%
 of samples stuck at maximum iterations.
 
 \paragraph{Entropy regularization.} Encouraging uncertainty at early H-steps.

@@ -119,7 +119,7 @@ $^\ddagger$Efficiency = Puzzle Acc / Cost.}
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/learning_curves.pdf}
-\caption{Learning curves across 4 seeds (fresh init). \textbf{Left:}
+\caption{Learning curves across seeds (fresh init). \textbf{Left:}
 Cell accuracy converges to 98.4--99.0\%. \textbf{Right:} Puzzle accuracy reaches
 96.2--97.6\% by 36k steps (mean 96.9\% $\pm$ 0.6\%). Fixed init achieves slightly
 lower accuracy (96.8\% $\pm$ 0.8\%). Dashed lines: baseline (85.5\%) and TTA-8 (97.3\%).}
@@ -162,26 +162,30 @@ $K{=}4$ consistently outperforms baseline by 7--11pp. Variance across x182 varia
 (93.4\%--97.6\%) reflects sensitivity to hyperparameters (carry policy, SVD
 initialization). The best configuration (x182a) matches TTA-8 performance.
 
-\paragraph{Carry policy.} We compared strategies for propagating latent states
-between reasoning steps:
+\paragraph{Carry policy.} To understand \emph{where} parallelism helps, we ran a
+grid search over $K_H \in \{1,4\}$ and $K_L \in \{1,4\}$ with different carry
+policies. ``Copy'' means the winner's state is used for all $K$ chains;
+``all'' means each chain continues with its own state:
 %
 \begin{center}
 \begin{tabular}{lcc}
 \toprule
 $z_H$ / $z_L$ Policy & Cell Acc. & Puzzle Acc. \\
 \midrule
-all / all (x179g) & 96.0\% & 90.3\% \\  % x179g.log
-all / copy (x179f) & 97.4\% & 93.7\% \\  % x179f.log
-copy / copy (x179e) & 98.3\% & 95.9\% \\  % x179e.log
-\textbf{copy / all (x179q)} & \textbf{99.1\%} & \textbf{97.7\%} \\  % x179q.log
+all / all (x179g, $K_H{=}4$) & 96.0\% & 90.3\% \\  % x179g.log
+all / copy (x179f, $K_H{=}4$) & 97.4\% & 93.7\% \\  % x179f.log
+copy / copy (x179e, $K_H{=}4$) & 98.3\% & 95.9\% \\  % x179e.log
+\textbf{copy / all (x179q, $K_L{=}4$)} & \textbf{99.1\%} & \textbf{97.7\%} \\  % x179q.log
 \bottomrule
 \end{tabular}
 \end{center}
 %
-Sharing the winner's $z_H$ while preserving each head's $z_L$ works best (+7pp
-over all/all), allowing heads to benefit from high-level progress while
-maintaining low-level diversity. (The x182 main results use copy/all; the 0.1pp
-difference from x179q reflects seed variance.)
+The pattern is striking: $K_H{>}1$ with \texttt{carry\_H=all} (top row) is worst,
+while $K_L{=}4$ with \texttt{carry\_L=all} (bottom row) is best. This validates
+the intuition from \S3.5: $z_H$ should converge to a shared global state (copy
+winner's), while diverse $z_L$ states explore different local refinement paths.
+Parallelism in the \emph{inner} loop ($z_L$) enables exploration; parallelism in
+the \emph{outer} loop ($z_H$) just wastes capacity.
 
 \paragraph{SVD-aligned initialization.} All x182 experiments use SVD-aligned
 initialization for $z_L$ heads, ensuring each head projects onto a distinct top
@@ -405,7 +409,7 @@ changes (e.g., explicit backtracking or tree search), not just better selection.
 the model typically gets 78--80 cells correct but makes 1--3 correlated errors
 in a single row or box---early commitment to an incorrect value that propagates.
 Notably, the halting signal remains well-calibrated even on failures:
-$q_\text{halt}$ stays negative (uncertain) throughout, and fewer than 5\% halt
+$q_\text{halt}$ stays below 0.5 (uncertain) throughout, and fewer than 5\% halt
 before step 8. The model ``knows'' it hasn't found a clean solution.
 
 \subsection{Head Specialization Patterns}
