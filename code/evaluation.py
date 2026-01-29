@@ -145,7 +145,9 @@ def evaluate_multistart(
 
 
 def per_h_accuracy(
-    all_logits: list[Tensor], labels: Tensor, valid_count: int | None = None
+    all_logits: list[Tensor],
+    labels: Tensor,
+    valid_count: int | None = None,
 ) -> list[float]:
     """Accuracy at each H iteration."""
     accs = []
@@ -158,7 +160,8 @@ def per_h_accuracy(
 
 
 def h_cosine_similarities(
-    all_logits: list[Tensor], valid_count: int | None = None
+    all_logits: list[Tensor],
+    valid_count: int | None = None,
 ) -> list[float]:
     """Cosine similarity between consecutive H iterations."""
     v = valid_count if valid_count is not None else all_logits[0].shape[0]
