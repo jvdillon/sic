@@ -7,7 +7,7 @@ This repository contains the "Speed is Confidence" research paper and its associ
 
 ## Abstract
 
-Biological neural systems must be fast but are energy-constrained. Evolution’s solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat when a neuron fires as an expression of confidence.
+Biological neural systems must be fast but are energy-constrained. Evolution's solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat when a neuron fires as an expression of confidence.
 
 We apply this principle to ensembles of Tiny Recursive Models (TRM) [Jolicoeur-Martineau et al., 2025]. On Sudoku-Extreme, halt-first selection achieves 97% accuracy vs. 91% for probability averaging--while requiring 10x fewer reasoning steps. A single baseline model achieves 85.5% +/- 1.3%.
 
