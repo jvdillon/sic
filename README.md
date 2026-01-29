@@ -3,7 +3,7 @@
 This repository contains the "Speed is Confidence" research paper and its associated experiments.
 
 - [Paper (arxiv)](https://arxiv.org/abs/2601.19085)
-- [Paper (latest)](https://raw.githubusercontent.com/jvdillon/sic/main/paper/arxiv.pdf)
+- [Paper (latest)](https://github.com/jvdillon/sic/blob/main/paper/arxiv.pdf)
 
 ## Abstract
 
