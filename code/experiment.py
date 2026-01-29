@@ -1069,7 +1069,9 @@ class ExperimentBase:
         return cell_acc, puzzle_acc
 
     def evaluate_act_haltfast_wta(
-        self, loader: Any, progress: bool = False
+        self,
+        loader: Any,
+        progress: bool = False,
     ) -> tuple[float, float]:
         """WTA eval: run K heads, first to halt wins. Streaming replacement."""
         start_time = time.perf_counter()
