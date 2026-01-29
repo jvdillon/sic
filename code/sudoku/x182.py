@@ -111,7 +111,7 @@ class Experiment:
             seq_len=self.config.seq_len,
             hidden_size=self.config.hidden_size,
             K=self.K,
-            device=self.device,
+            device=self.device,  # pyright: ignore[reportArgumentType]
             dtype=self.dtype,
         )
         self._pending_inputs = torch.empty(
@@ -140,7 +140,7 @@ class Experiment:
 
     def setup_optimizers(self) -> None:
         """Must be called before step(). Called by main() before train()."""
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
             self.model,
             muon_lr=0.02,
         )
@@ -304,7 +304,7 @@ class Experiment:
             seq_len=self.config.seq_len,
             hidden_size=self.config.hidden_size,
             K=self.K,
-            device=self.device,
+            device=self.device,  # pyright: ignore[reportArgumentType]
             dtype=self.dtype,
         )
         self._pending_inputs = torch.empty(
@@ -393,15 +393,15 @@ class Experiment:
 
         # Forward all chains (active and inactive - padding for compile)
         assert self.device is not None
-        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportPrivateImportUsage]
+        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
             embeddings = self.model.embed_scale * self.model.embed_tokens(
                 tokens,
                 self.config.dtype,
             )
             core = (
-                self.model._core_compiled  # noqa: SLF001
+                self.model.core_compiled
                 if self.model.config.compile_core
-                else self.model._core  # noqa: SLF001
+                else self.model.core
             )
             z_H = state.z_H
             z_L = state.z_L
@@ -455,11 +455,11 @@ class Experiment:
             1 + math.cos(math.pi * self.current_step / self.total_train_steps)
         )
         for optimizer in [self.optimizer1, self.optimizer2]:
-            for param_group in optimizer.param_groups:
+            for param_group in optimizer.param_groups:  # pyright: ignore[reportOptionalMemberAccess]
                 param_group["lr"] = param_group["initial_lr"] * lr_scale
 
-        self.optimizer1.step()
-        self.optimizer2.step()
+        self.optimizer1.step()  # pyright: ignore[reportOptionalMemberAccess]
+        self.optimizer2.step()  # pyright: ignore[reportOptionalMemberAccess]
         self.model.zero_grad(set_to_none=True)
         self.current_step += 1
 
@@ -474,12 +474,12 @@ class Experiment:
         if self._train_loader is None:
             self._train_loader = self.make_train_loader()
         if self._data_iter is None:
-            self._data_iter = iter(self._train_loader)
+            self._data_iter = iter(self._train_loader)  # pyright: ignore[reportAttributeAccessIssue]
         try:
-            batch = next(self._data_iter)
+            batch = next(self._data_iter)  # pyright: ignore[reportArgumentType]
         except StopIteration:
-            self._data_iter = iter(self._train_loader)
-            batch = next(self._data_iter)
+            self._data_iter = iter(self._train_loader)  # pyright: ignore[reportAttributeAccessIssue]
+            batch = next(self._data_iter)  # pyright: ignore[reportArgumentType]
         return batch[0].to(self.device), batch[1].to(self.device)
 
     # --- Evaluation ---
@@ -487,10 +487,10 @@ class Experiment:
     # to avoid pulling in ExperimentBase's full __init__ and training logic).
 
     evaluate = ExperimentBase.evaluate
-    _evaluate_act = ExperimentBase._evaluate_act  # noqa: SLF001
-    _evaluate_act_full = ExperimentBase._evaluate_act_full  # noqa: SLF001
-    _evaluate_act_haltfast = ExperimentBase._evaluate_act_haltfast  # noqa: SLF001
-    _evaluate_act_haltfast_wta = ExperimentBase._evaluate_act_haltfast_wta  # noqa: SLF001
+    evaluate_act = ExperimentBase.evaluate_act
+    evaluate_act_full = ExperimentBase.evaluate_act_full
+    evaluate_act_haltfast = ExperimentBase.evaluate_act_haltfast
+    evaluate_act_haltfast_wta = ExperimentBase.evaluate_act_haltfast_wta
 
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
         """For ExperimentBase: Create initial z_H and z_L states for eval (single head)."""
@@ -499,7 +499,7 @@ class Experiment:
         z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()
         return z_H, z_L
 
-    def _make_z_L_single(self, puzzle_idx: int) -> Tensor:
+    def make_z_L_single(self, puzzle_idx: int) -> Tensor:
         """For ExperimentBase: Create z_L for all K heads for a single puzzle (WTA eval).
 
         Returns: [K, seq_len, hidden]
@@ -518,11 +518,11 @@ class Experiment:
         )
         return torch.cat([halt_tokens, inputs], dim=1)
 
-    def _make_checkpoint(self) -> dict[str, object]:
+    def make_checkpoint(self) -> dict[str, object]:
         checkpoint: dict[str, object] = {
             "model": self.model.state_dict(),
-            "optimizer1": self.optimizer1.state_dict(),
-            "optimizer2": self.optimizer2.state_dict(),
+            "optimizer1": self.optimizer1.state_dict(),  # pyright: ignore[reportOptionalMemberAccess]
+            "optimizer2": self.optimizer2.state_dict(),  # pyright: ignore[reportOptionalMemberAccess]
             "step": self.current_step,
             "best_acc": self.best_acc,
         }
@@ -764,4 +764,4 @@ class TrainingState:
 
 
 if __name__ == "__main__":
-    main(Experiment())  # pyright: ignore[reportArgumentType]
+    main(Experiment())

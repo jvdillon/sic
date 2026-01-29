@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pathlib
 
 from model import (
@@ -17,8 +19,8 @@ from model import (
     Sequential,
     SwiGLU,
     TransformerBlock,
-    _find_multiple,
-    _trunc_normal_init_,
+    _find_multiple,  # pyright: ignore[reportPrivateUsage]
+    _trunc_normal_init_,  # pyright: ignore[reportPrivateUsage]
 )
 from util import set_seed
 
@@ -69,14 +71,14 @@ class TestLinear:
 class TestEmbedding:
     def test_forward(self):
         emb = Embedding(100, 64)
-        x = torch.randint(0, 100, (2, 10))
+        x = torch.randint(low=0, high=100, size=(2, 10))
         y = emb(x, torch.float32)
         assert y.shape == (2, 10, 64)
         assert y.dtype == torch.float32
 
     def test_dtype_cast(self):
         emb = Embedding(50, 32)
-        x = torch.randint(0, 50, (2, 5))
+        x = torch.randint(low=0, high=50, size=(2, 5))
         y = emb(x, torch.float16)
         assert y.dtype == torch.float16
 
@@ -280,7 +282,7 @@ class TestTRM:
 
     def test_forward_basic(self, config: TRM.Config):
         model = config.setup()
-        x = torch.randint(0, 12, (2, 82))
+        x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init.expand(2, 82, -1)
         z_L = model.L_init.expand(2, 82, -1)
         out = model(x, z_H, z_L)
@@ -288,7 +290,7 @@ class TestTRM:
 
     def test_forward_with_z_states(self, act_config: TRM.Config):
         model = act_config.setup()
-        x = torch.randint(0, 12, (2, 82))
+        x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init.expand(2, 82, -1)
         z_L = model.L_init.expand(2, 82, -1)
         out = model(x, z_H, z_L)
@@ -301,7 +303,7 @@ class TestTRM:
 
     def test_all_logits(self, config: TRM.Config):
         model = config.setup()
-        x = torch.randint(0, 12, (2, 82))
+        x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init.expand(2, 82, -1)
         z_L = model.L_init.expand(2, 82, -1)
         out = model(x, z_H, z_L)
@@ -310,7 +312,7 @@ class TestTRM:
 
     def test_all_z_h(self, config: TRM.Config):
         model = config.setup()
-        x = torch.randint(0, 12, (2, 82))
+        x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init.expand(2, 82, -1)
         z_L = model.L_init.expand(2, 82, -1)
         out = model(x, z_H, z_L)
@@ -322,7 +324,7 @@ class TestTRM:
         config.state_noise = 0.1
         model = config.setup()
         model.train()
-        x = torch.randint(0, 12, (2, 82))
+        x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init.expand(2, 82, -1)
         z_L = model.L_init.expand(2, 82, -1)
 
@@ -340,7 +342,7 @@ class TestTRM:
             num_layers=1,
             H_cycles=2,
             L_cycles=2,
-            block_fn=None,
+            block_fn=None,  # pyright: ignore[reportArgumentType]
         )
         with pytest.raises(ValueError, match="block_fn is required"):
             config.setup()
@@ -348,7 +350,7 @@ class TestTRM:
     def test_step(self, act_config: TRM.Config):
         """Test step() for single H-cycle."""
         model = act_config.setup()
-        x = torch.randint(0, 12, (2, 82))
+        x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init.expand(2, 82, -1)
         z_L = model.L_init.expand(2, 82, -1)
         out = model.step(x, z_H, z_L)
@@ -403,13 +405,13 @@ class TestTRMBitForBit:
     """Bit-for-bit reproducibility tests for TRM."""
 
     @pytest.fixture
-    def checkpoint(self) -> dict:
+    def checkpoint(self) -> dict[str, Any]:
         ckpt_path = pathlib.Path(__file__).resolve().parent / "test_data" / "trm3.pt"
         if not ckpt_path.exists():
             pytest.skip(f"Checkpoint not found: {ckpt_path}")
         return torch.load(ckpt_path, weights_only=False)
 
-    def test_forward_bitforbit(self, checkpoint: dict):
+    def test_forward_bitforbit(self, checkpoint: dict[str, Any]):
         """Forward pass produces exact same logits as checkpoint."""
         set_seed(42)
         config = _trm_bitforbit_config()

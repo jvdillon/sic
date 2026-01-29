@@ -22,4 +22,4 @@ class Experiment(Experiment182):
 
 
 if __name__ == "__main__":
-    main(Experiment())  # pyright: ignore[reportArgumentType]
+    main(Experiment())

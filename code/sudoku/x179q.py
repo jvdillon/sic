@@ -2,7 +2,8 @@
 
 from experiment import main
 from model import TRM3, ModelConfigProtocol
-from x179 import Experiment as Experiment179
+
+from .x179 import Experiment as Experiment179
 
 
 class Experiment(Experiment179):
@@ -20,4 +21,4 @@ class Experiment(Experiment179):
 
 
 if __name__ == "__main__":
-    main(Experiment())  # pyright: ignore[reportArgumentType]
+    main(Experiment())

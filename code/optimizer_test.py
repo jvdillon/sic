@@ -3,7 +3,7 @@
 from optimizer import (
     DummyOptimizer,
     Muon,
-    _adjust_lr,
+    _adjust_lr,  # pyright: ignore[reportPrivateUsage]
     matrix_signum_via_newtonschulz,
 )
 from torch import nn
@@ -90,7 +90,7 @@ class TestAdjustLR:
         """Test that invalid adjustment mode raises ValueError."""
         param = nn.Parameter(torch.randn(10, 5))
         with pytest.raises(ValueError, match="not supported"):
-            _adjust_lr(0.01, param, "invalid_mode")
+            _adjust_lr(0.01, param, "invalid_mode")  # pyright: ignore[reportArgumentType]
 
 
 class TestMuon:

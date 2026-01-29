@@ -21,7 +21,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "gnureadline",
     "torch==2.9.0",
     "einops",
     "einshape",
@@ -36,9 +35,11 @@ dependencies = [
 [dependency-groups]
 dev = [
     "basedpyright>=1.10",
+    "codespell>=2.2.4",
+    "gnureadline",
+    "ipython",
     "pytest>=7.0",
     "ruff>=0.8",
-    "codespell>=2.2.4",
 ]
 
 [project.urls]
@@ -197,9 +198,9 @@ section-order = [
 
 [tool.basedpyright]
 typeCheckingMode = "recommended"
-extraPaths = ["research/", ".typings"]
-exclude = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", "research/projects", "research/third_party", "research/tools"]
-ignore = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", "research/projects", "research/third_party", "research/tools"]
+extraPaths = ["code/", "code/sudoku/", ".typings"]
+exclude = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", "paper"]
+ignore = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", "paper"]
 stubPath = ".typings"
 pythonPlatform = "Linux"
 pythonVersion = "3.11"
@@ -207,13 +208,19 @@ reportAny = false
 reportCallInDefaultInitializer = false
 reportConstantRedefinition = false
 reportExplicitAny = false
-# reportImplicitOverride = true
+reportImplicitOverride = false
 reportImplicitStringConcatenation = false  # Otherwise conflicts with Ruff ISC003 explicit-string-concatenation.
 reportIncompatibleMethodOverride = false
 reportMissingSuperCall = false
+reportPrivateImportUsage = false
 reportPrivateLocalImportUsage = false
 reportUnannotatedClassAttribute = false
+reportUnknownArgumentType = false
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
 reportUnsafeMultipleInheritance = false
+reportUnreachable = false
 reportUnusedCallResult = false
 reportUnusedImport = false
 

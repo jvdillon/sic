@@ -1,6 +1,6 @@
 """x179: Control for x179 family. A clean rewrite of x178d."""
 
-from typing import Literal
+from typing import Any, Literal
 
 import math
 import warnings
@@ -15,7 +15,6 @@ from model import (
     EMA,
     TRM3,
     ModelConfigProtocol,
-    ModelProtocol,
 )
 from torch import Tensor, nn
 from util import set_seed
@@ -32,7 +31,7 @@ torch.backends.cudnn.benchmark = False
 
 
 class Experiment:
-    model: ModelProtocol
+    model: nn.Module
     device: torch.device | None = None
     seed: int = 42
 
@@ -100,7 +99,7 @@ class Experiment:
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
         self._data_iter = None
         self._train_loader = None
-        self._act_carry: dict[str, Tensor] | None = None
+        self.act_carry: dict[str, Tensor] | None = None
 
     def setup_model(self) -> None:
         set_seed(self.seed, deterministic=True)
@@ -116,13 +115,14 @@ class Experiment:
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
 
     def setup_optimizers(self) -> None:
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
             self.model,
             muon_lr=0.02,
         )
 
     def make_train_loader(self):
         assert self.device is not None
+        assert self.dtype is not None
         return GPUCachedSudoku(
             data_dir=self.data_dir,
             device=self.device,
@@ -133,6 +133,7 @@ class Experiment:
 
     def make_test_loader(self):
         assert self.device is not None
+        assert self.dtype is not None
         bs = (
             self.eval_batch_size
             if self.eval_batch_size is not None
@@ -147,11 +148,11 @@ class Experiment:
             shuffle=False,
         )
 
-    def _init_act_carry(self) -> dict[str, Tensor]:
+    def _init_act_carry(self) -> dict[str, Any]:
         B = self.batch_size
         cfg = self.config
         return {
-            "model_carry": self.model.init_carry(B),
+            "model_carry": self.model.init_carry(B),  # pyright: ignore[reportCallIssue]
             "steps": torch.zeros(B, device=self.device, dtype=torch.long),
             "halted": torch.ones(B, device=self.device, dtype=torch.bool),
             "inputs": torch.zeros(
@@ -168,20 +169,20 @@ class Experiment:
             ),
         }
 
-    def step(self, inputs: Tensor, labels: Tensor) -> dict | None:
+    def step(self, inputs: Tensor, labels: Tensor) -> dict[str, Any] | None:
         if self.current_step >= self.total_train_steps:
             return None
         if self.augment_sudoku:
             inputs, labels = augment_sudoku(inputs, labels)
         return self._step_act(inputs, labels)
 
-    def _step_act(self, inputs: Tensor, labels: Tensor) -> dict:
+    def _step_act(self, inputs: Tensor, labels: Tensor) -> dict[str, Any]:
         """Generalized K_H/K head WTA with configurable pairing and carry policies."""
         B = self.batch_size
 
-        if self._act_carry is None:
-            self._act_carry = self._init_act_carry()
-        carry = self._act_carry
+        if self.act_carry is None:
+            self.act_carry = self._init_act_carry()
+        carry = self.act_carry
 
         # Reset halted puzzles with fresh state
         self._reset_halted_puzzles(carry, inputs, labels)
@@ -190,7 +191,7 @@ class Experiment:
         assert self.device is not None
         inputs_with_halt = self._prepend_halt_token(carry["inputs"])
         with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
-            out = self.model.wta_forward(
+            out = self.model.wta_forward(  # pyright: ignore[reportCallIssue]
                 inputs_with_halt,
                 carry["model_carry"],
                 carry["labels"],
@@ -266,7 +267,7 @@ class Experiment:
                     self.halt_steps_histogram[steps_taken - 1] += 1
 
         n_reset = min(len(halted_indices), len(inputs))
-        carry["model_carry"] = self.model.reset_carry_at_indices(
+        carry["model_carry"] = self.model.reset_carry_at_indices(  # pyright: ignore[reportCallIssue]
             carry["model_carry"], halted_indices, n_reset
         )
         for i in range(n_reset):
@@ -296,9 +297,9 @@ class Experiment:
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
             )
             min_steps = torch.randint(
-                2,
-                max(3, effective_max + 1),
-                (B,),
+                low=2,
+                high=max(3, effective_max + 1),
+                size=(B,),
                 device=self.device,
             )
             exploration_halt = steps >= min_steps
@@ -344,9 +345,9 @@ class Experiment:
             for n, p in self.model.named_parameters():
                 if p.requires_grad and n in self.ema.shadow:
                     self.ema.shadow[n].copy_(p.data)
-        self._act_carry = None
+        self.act_carry = None
 
-    def _make_checkpoint(self) -> dict:
+    def make_checkpoint(self) -> dict[str, Any]:
         """Create checkpoint dict with all state."""
         assert self.optimizer1 is not None
         assert self.optimizer2 is not None
@@ -395,26 +396,26 @@ class Experiment:
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
         """For ExperimentBase: Create initial z_H and z_L states for eval (single head)."""
         seq_len = self.config.seq_len
-        z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()
-        z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()
+        z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
+        z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
         return z_H, z_L
 
-    def _make_z_L_single(self, puzzle_idx: int) -> Tensor:
+    def make_z_L_single(self, puzzle_idx: int) -> Tensor:
         """For ExperimentBase: Create z_L for all K heads for a single puzzle (WTA eval).
 
         Returns: [K, seq_len, hidden]
         """
         del puzzle_idx
         # L_init is [K, hidden], expand to [K, seq_len, hidden]
-        return self.model.L_init.unsqueeze(1).expand(-1, self.config.seq_len, -1)
+        return self.model.L_init.unsqueeze(1).expand(-1, self.config.seq_len, -1)  # pyright: ignore[reportCallIssue]
 
     # Monkey patch in eval stuff from ExperimentBase.
     evaluate = ExperimentBase.evaluate
-    _evaluate_act = ExperimentBase._evaluate_act  # noqa: SLF001
-    _evaluate_act_full = ExperimentBase._evaluate_act_full  # noqa: SLF001
-    _evaluate_act_haltfast = ExperimentBase._evaluate_act_haltfast  # noqa: SLF001
-    _evaluate_act_haltfast_wta = ExperimentBase._evaluate_act_haltfast_wta  # noqa: SLF001
+    evaluate_act = ExperimentBase.evaluate_act
+    evaluate_act_full = ExperimentBase.evaluate_act_full
+    evaluate_act_haltfast = ExperimentBase.evaluate_act_haltfast
+    evaluate_act_haltfast_wta = ExperimentBase.evaluate_act_haltfast_wta
 
 
 if __name__ == "__main__":
-    main(Experiment())  # pyright: ignore[reportArgumentType]
+    main(Experiment())

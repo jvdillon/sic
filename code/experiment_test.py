@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Literal
+
 import tempfile
 
 from experiment import (
@@ -11,6 +13,7 @@ from experiment import (
     setup_muon_optimizers,
 )
 from model import TRM
+from torch import Tensor
 
 import torch
 
@@ -72,7 +75,7 @@ def _make_test_exp() -> ExperimentBase:
 
 def test_checkpoint_format():
     exp = _make_test_exp()
-    ckpt = exp._make_checkpoint()  # noqa: SLF001
+    ckpt = exp.make_checkpoint()
 
     assert "model" in ckpt
     assert "ema" in ckpt
@@ -115,7 +118,7 @@ def test_use_ema_false():
     exp = _make_test_exp_no_ema()
     assert exp.ema is None
 
-    ckpt = exp._make_checkpoint()  # noqa: SLF001
+    ckpt = exp.make_checkpoint()
     assert "ema" not in ckpt
 
     # reset_transient_state should not crash
@@ -127,7 +130,7 @@ def test_resume_no_ema():
     exp1.current_step = 500
 
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
-        torch.save(exp1._make_checkpoint(), f.name)  # noqa: SLF001
+        torch.save(exp1.make_checkpoint(), f.name)
         ckpt_path = f.name
 
     exp2 = _make_test_exp_no_ema()
@@ -138,12 +141,12 @@ def test_resume_no_ema():
 
 def test_reset_transient_state():
     exp = _make_test_exp()
-    exp._act_carry = {"dummy": torch.tensor(1.0)}  # noqa: SLF001
+    exp.act_carry = {"dummy": torch.tensor(1.0)}
     exp.current_step = 1000
 
     exp.reset_transient_state()
 
-    assert exp._act_carry is None  # noqa: SLF001
+    assert exp.act_carry is None
 
 
 def test_resume_from_checkpoint_new_format():
@@ -152,7 +155,7 @@ def test_resume_from_checkpoint_new_format():
     exp1.best_acc = 75.0
 
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
-        torch.save(exp1._make_checkpoint(), f.name)  # noqa: SLF001
+        torch.save(exp1.make_checkpoint(), f.name)
         ckpt_path = f.name
 
     exp2 = _make_test_exp()
@@ -167,7 +170,7 @@ def test_resume_from_checkpoint_no_optimizer():
     exp1.current_step = 500
 
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
-        torch.save(exp1._make_checkpoint(), f.name)  # noqa: SLF001
+        torch.save(exp1.make_checkpoint(), f.name)
         ckpt_path = f.name
 
     exp2 = _make_test_exp()
@@ -222,8 +225,8 @@ def test_data_loader_yields_valid_count():
     valid_count = 10
 
     # Simulate what the loader does for incomplete batch
-    inputs = torch.randint(1, 11, (valid_count, 81))
-    labels = torch.randint(1, 11, (valid_count, 81))
+    inputs = torch.randint(low=1, high=11, size=(valid_count, 81))
+    labels = torch.randint(low=1, high=11, size=(valid_count, 81))
 
     # Pad to batch_size
     pad_size = batch_size - valid_count
@@ -247,8 +250,8 @@ def test_eval_metrics_use_valid_count():
     valid_count = 10
 
     # Create predictions and labels with padding
-    preds = torch.randint(1, 11, (batch_size, 81))
-    labels = torch.randint(1, 11, (batch_size, 81))
+    preds = torch.randint(low=1, high=11, size=(batch_size, 81))
+    labels = torch.randint(low=1, high=11, size=(batch_size, 81))
 
     # Make first valid_count samples correct, rest wrong
     preds[:valid_count] = labels[:valid_count]
@@ -267,7 +270,7 @@ def test_fast_eval_streaming_replacement():
     """Test that fast_eval uses streaming replacement - halted samples are replaced with new puzzles."""
 
     class FastEvalExp(ExperimentBase):
-        eval_method: str = "fast"
+        eval_method: Literal["standard", "fast", "wta"] = "fast"
         max_reasoning_steps: int = 16
         config: TRM.Config = TRM.Config(
             compile_core=False,
@@ -292,29 +295,31 @@ def test_fast_eval_streaming_replacement():
     original_forward = exp.model.forward
     step_count = 0
 
-    def tracking_forward(*args, **kwargs):
+    def tracking_forward(*args: Any, **kwargs: Any) -> Any:
         nonlocal step_count
         step_count += 1
         out = original_forward(*args, **kwargs)
+        q_halt = out["q_halt"]
+        assert isinstance(q_halt, Tensor)
         # All samples halt after 2 steps
         if step_count % 2 == 0:
-            out["q_halt"] = torch.ones_like(out["q_halt"])
+            out["q_halt"] = torch.ones_like(q_halt)
         else:
-            out["q_halt"] = torch.full_like(out["q_halt"], -10.0)
+            out["q_halt"] = torch.full_like(q_halt, -10.0)
         return out
 
     exp.model.forward = tracking_forward
 
     # Create loader with 6 puzzles total (3 batches of 2)
     # With batch_size=2 and streaming, we should process all 6
-    all_inputs = [torch.randint(1, 11, (2, 81)) for _ in range(3)]
-    all_labels = [torch.randint(1, 11, (2, 81)) for _ in range(3)]
+    all_inputs = [torch.randint(low=1, high=11, size=(2, 81)) for _ in range(3)]
+    all_labels = [torch.randint(low=1, high=11, size=(2, 81)) for _ in range(3)]
 
     def fake_loader():
         for inp, lab in zip(all_inputs, all_labels, strict=False):
             yield (inp, lab, 2)
 
-    cell_acc, puzzle_acc = exp._evaluate_act_haltfast(fake_loader())
+    _, _ = exp.evaluate_act_haltfast(fake_loader())
 
     # With streaming: 6 puzzles processed
     # Batch stays at size 2, each puzzle takes 2 steps to halt
@@ -329,7 +334,7 @@ def test_fast_eval_metrics_at_halt_time():
     """Test that fast_eval computes metrics at halt time per sample."""
 
     class FastEvalExp(ExperimentBase):
-        eval_method: str = "fast"
+        eval_method: Literal["standard", "fast", "wta"] = "fast"
         max_reasoning_steps: int = 4
         config: TRM.Config = TRM.Config(
             compile_core=False,
@@ -353,18 +358,22 @@ def test_fast_eval_metrics_at_halt_time():
     step_count = 0
     original_forward = exp.model.forward
 
-    def controlled_forward(*args, **kwargs):
+    def controlled_forward(*args: Any, **kwargs: Any) -> Any:
         nonlocal step_count
         step_count += 1
         out = original_forward(*args, **kwargs)
+        logits = out["logits"]
+        q_halt = out["q_halt"]
+        assert isinstance(logits, Tensor)
+        assert isinstance(q_halt, Tensor)
 
         # Step 2: all samples predict 5 and halt
         if step_count == 2:
-            out["logits"] = torch.zeros_like(out["logits"])
+            out["logits"] = torch.zeros_like(logits)
             out["logits"][:, :, 5] = 100
-            out["q_halt"] = torch.ones_like(out["q_halt"])
+            out["q_halt"] = torch.ones_like(q_halt)
         else:
-            out["q_halt"] = torch.full_like(out["q_halt"], -10.0)
+            out["q_halt"] = torch.full_like(q_halt, -10.0)
 
         return out
 
@@ -372,23 +381,23 @@ def test_fast_eval_metrics_at_halt_time():
 
     # Labels are all 5s - should get 100% accuracy
     B = 2
-    inputs = torch.randint(1, 11, (B, 81))
+    inputs = torch.randint(low=1, high=11, size=(B, 81))
     labels = torch.full((B, 81), 5, dtype=torch.long)
 
     def fake_loader():
         yield (inputs, labels, B)
 
-    cell_acc, puzzle_acc = exp._evaluate_act_haltfast(fake_loader())
+    cell_acc, puzzle_acc = exp.evaluate_act_haltfast(fake_loader())
 
     assert cell_acc == 100.0, f"Expected 100% cell acc but got {cell_acc}%"
     assert puzzle_acc == 100.0, f"Expected 100% puzzle acc but got {puzzle_acc}%"
 
 
 def test_no_recompilation_all_paths():
-    """Test that step() and forward() use same _core signature (no recompile).
+    """Test that step() and forward() use same core signature (no recompile).
 
     The torch.compile issue was: different kwargs caused separate compiled graphs.
-    This test verifies all code paths call _core with identical positional args.
+    This test verifies all code paths call core with identical positional args.
     """
     config = TRM.Config(
         compile_core=False,
@@ -402,11 +411,16 @@ def test_no_recompilation_all_paths():
     )
     model = config.setup()
 
-    # Track _core calls
-    call_signatures: list[tuple[tuple[int, ...], ...]] = []
-    original_core = model._core
+    # Track core calls
+    call_signatures: list[object] = []
+    originalcore = model.core
 
-    def tracking_core(input_emb, z_H, z_L, cos_sin):
+    def trackingcore(
+        input_emb: torch.Tensor,
+        z_H: torch.Tensor,
+        z_L: torch.Tensor,
+        cos_sin: tuple[torch.Tensor, torch.Tensor] | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Record shapes of all args (signature proxy)
         sig = (
             tuple(input_emb.shape),
@@ -417,13 +431,13 @@ def test_no_recompilation_all_paths():
             else (tuple(cos_sin[0].shape), tuple(cos_sin[1].shape)),
         )
         call_signatures.append(sig)
-        return original_core(input_emb, z_H, z_L, cos_sin)
+        return originalcore(input_emb, z_H, z_L, cos_sin)
 
-    model._core = tracking_core
+    model.core = trackingcore
 
     # Test inputs
     B = 4
-    x = torch.randint(0, 12, (B, 82))
+    x = torch.randint(low=0, high=12, size=(B, 82))
     z_H = model.H_init.expand(B, 82, -1)
     z_L = model.L_init.expand(B, 82, -1)
 
@@ -468,8 +482,8 @@ def test_eval_methods_consistent_k1():
     # Create deterministic test data
     torch.manual_seed(42)
     n_puzzles = 4
-    inputs = torch.randint(1, 11, (n_puzzles, 81))
-    labels = torch.randint(1, 11, (n_puzzles, 81))
+    inputs = torch.randint(low=1, high=11, size=(n_puzzles, 81))
+    labels = torch.randint(low=1, high=11, size=(n_puzzles, 81))
 
     def make_loader():
         for i in range(0, n_puzzles, 2):
@@ -477,24 +491,20 @@ def test_eval_methods_consistent_k1():
 
     # Test full eval
     exp_full = EvalTestExp()
-    exp_full.eval_method = "full"
-    exp_full.fast_eval = False
     torch.manual_seed(0)
-    cell_full, puzzle_full = exp_full._evaluate_act_full(make_loader())
+    cell_full, puzzle_full = exp_full.evaluate_act_full(make_loader())
 
     # Test fast eval
     exp_fast = EvalTestExp()
-    exp_fast.eval_method = "fast"
-    exp_fast.fast_eval = True
     torch.manual_seed(0)
-    cell_fast, puzzle_fast = exp_fast._evaluate_act_haltfast(make_loader())
+    cell_fast, puzzle_fast = exp_fast.evaluate_act_haltfast(make_loader())
 
     # Test wta eval with K=1
     exp_wta = EvalTestExp()
     exp_wta.eval_method = "wta"
     exp_wta.K = 1
     torch.manual_seed(0)
-    cell_wta, puzzle_wta = exp_wta._evaluate_act_haltfast_wta(make_loader())
+    cell_wta, puzzle_wta = exp_wta.evaluate_act_haltfast_wta(make_loader())
 
     # All should give identical results
     assert cell_full == cell_fast, f"full={cell_full} vs fast={cell_fast}"
@@ -532,7 +542,7 @@ def test_wta_batched_vs_sequential():
         )
 
     # Create inputs
-    inputs = torch.randint(1, 11, (B, 82))
+    inputs = torch.randint(low=1, high=11, size=(B, 82))
     z_H_init = model.H_init.expand(B, seq_len, -1).clone()
 
     # Sequential: K separate forward passes

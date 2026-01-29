@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from numbers import Integral
-from typing import Any
+from types import TracebackType
+from typing import Any, Self, TextIO
 
 import hashlib
 import math
@@ -11,9 +12,16 @@ import sys
 import traceback
 
 from torch import Tensor
+from typing_extensions import override
 
 import numpy as np
+import pytest
 import torch
+
+
+# Module-level numpy Generator for modern random API.
+# Use set_seed() to initialize, then use numpy_rng for random operations.
+numpy_rng: np.random.Generator = np.random.default_rng()
 
 
 def salt(*args: object) -> int:
@@ -25,8 +33,9 @@ def salt(*args: object) -> int:
 def set_seed(seed: int, deterministic: bool = False) -> None:
     """Set random seed locally (non-distributed)."""
     random.seed(salt("python", seed))
-    np.random.seed(salt("numpy", seed))  # noqa: NPY002
-    torch.manual_seed(salt("torch", seed))  # pyright: ignore[reportUnknownMemberType]
+    # Reset the Generator's bit_generator state with the new seed
+    numpy_rng.bit_generator.state = np.random.PCG64(salt("numpy", seed)).state
+    torch.manual_seed(salt("torch", seed))
     if torch.cuda.is_available():
         # Initialize CUDA before seeding to ensure deterministic behavior
         if not torch.cuda.is_initialized():
@@ -46,13 +55,15 @@ def set_seed(seed: int, deterministic: bool = False) -> None:
 class Tee:
     """Write to both stdout/stderr and a file simultaneously."""
 
+    stream: dict[str, TextIO]
+
     def __init__(
         self,
-        log,
-        stream=(sys.stdout, sys.stderr),
+        log: str | pathlib.Path | TextIO,
+        stream: tuple[TextIO, ...] = (sys.stdout, sys.stderr),
         flush_after_write: bool = True,
-    ):
-        log_file = (
+    ) -> None:
+        log_file: TextIO = (
             pathlib.Path(log).open("w") if isinstance(log, (str, pathlib.Path)) else log  # noqa: SIM115
         )
         self.stream = {
@@ -61,17 +72,17 @@ class Tee:
         }
         self.flush_after_write = flush_after_write
 
-    def write(self, message):
+    def write(self, message: str) -> None:
         for s in self.stream.values():
             s.write(message)
         if self.flush_after_write:
             self.flush()
 
-    def flush(self):
+    def flush(self) -> None:
         for s in self.stream.values():
             s.flush()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         log = self.stream["log"]
         for k, stream_obj in self.stream.items():
             if k == "log":
@@ -80,7 +91,12 @@ class Tee:
             setattr(sys, k, tee_obj)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
         if exc_type is not None:
             self.stream["log"].write(
                 "".join(
@@ -107,25 +123,28 @@ class AutocastWrapper:
     except for forward(), which applies autocast.
     """
 
-    def __init__(self, model, device_type, dtype):
+    def __init__(self, model: object, device_type: str, dtype: torch.dtype) -> None:
         object.__setattr__(self, "_model", model)
         object.__setattr__(self, "_device_type", device_type)
         object.__setattr__(self, "_dtype", dtype)
 
-    def __call__(self, x):
+    def __call__(self, x: Tensor) -> Tensor:
         with torch.amp.autocast(
-            device_type=self._device_type,
-            dtype=self._dtype,
+            device_type=object.__getattribute__(self, "_device_type"),
+            dtype=object.__getattribute__(self, "_dtype"),
             cache_enabled=False,
         ):
-            return self._model(x)
+            model = object.__getattribute__(self, "_model")
+            return model(x)  # type: ignore[operator]
 
-    def __getattribute__(self, name):
+    @override
+    def __getattribute__(self, name: str) -> object:
         if name in ("_model", "_device_type", "_dtype", "__call__", "__class__"):
             return object.__getattribute__(self, name)
         return getattr(object.__getattribute__(self, "_model"), name)
 
-    def __setattr__(self, name, value):
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
         if name in ("_model", "_device_type", "_dtype"):
             object.__setattr__(self, name, value)
         else:
@@ -144,8 +163,6 @@ def test_main(test_file: str) -> None:
         test_file: The test file path (usually __file__)
 
     """
-    import pytest  # noqa: PLC0415
-
     sys.exit(
         pytest.main(
             [
@@ -186,7 +203,7 @@ def log1mexp(x: Tensor) -> Tensor:
 def log_softmax(
     x: Tensor,
     *,
-    dim: Integral | Sequence[Integral] = -1,
+    dim: int | Sequence[int] = -1,
     nansafe: bool = True,
 ) -> Tensor:
     dim = _dims(dim)
@@ -195,7 +212,7 @@ def log_softmax(
     lsm = _log_softmax_nansafe if nansafe else torch.log_softmax
     if len(dim) == 1:
         return lsm(x, dim=dim[0])
-    dim = tuple(set(d % x.ndim for d in dim))  # dedupe + normalize
+    dim = tuple({d % x.ndim for d in dim})  # dedupe + normalize
     dest = tuple(range(-len(dim), 0))
     x = torch.movedim(x, dim, dest)
     shape = x.shape
@@ -209,14 +226,14 @@ def log_softmax(
 def softmax(
     x: Tensor,
     *,
-    dim: Integral | Sequence[Integral] = -1,
+    dim: int | Sequence[int] = -1,
     nansafe: bool = True,
 ) -> Tensor:
     return log_softmax(x, dim=dim, nansafe=nansafe).exp()
 
 
 def _log_softmax_nansafe(x: Tensor, dim: int = -1) -> Tensor:
-    kw = dict(dim=dim, keepdim=True)
+    kw = {"dim": dim, "keepdim": True}
 
     # Benchmarked alternatives for _log_softmax_nansafe (eager / compiled on CUDA):
     #
@@ -282,14 +299,15 @@ def _log_softmax_nansafe(x: Tensor, dim: int = -1) -> Tensor:
 def logsumexp(
     x: Tensor,
     *,
-    dim: Integral | Sequence[Integral] = -1,
+    dim: int | Sequence[int] = -1,
     keepdim: bool = False,
     nansafe: bool = True,
 ) -> Tensor:
+    dim = dim if isinstance(dim, int) else tuple(dim)
     if not nansafe:
         return torch.logsumexp(x, dim=dim, keepdim=keepdim)
 
-    kw = dict(dim=dim, keepdim=True)
+    kw: dict[str, int | tuple[int, ...] | bool] = {"dim": dim, "keepdim": True}
 
     # Notice that both corner cases are identical to log_softmax but we have additional
     # cleanup. (Evidently since `nabla_x lse = softmax(x)`.)
@@ -316,7 +334,7 @@ def logsumexp(
 def logmeanexp(
     x: Tensor,
     *,
-    dim: Integral | Sequence[Integral] = -1,
+    dim: int | Sequence[int] = -1,
     keepdim: bool = False,
     nansafe: bool = True,
 ) -> Tensor:
@@ -332,11 +350,12 @@ def logmeanexp(
 def entropy(
     logp: Tensor,
     *,
-    dim: Integral | Sequence[Integral] = -1,
+    dim: int | Sequence[int] = -1,
     keepdim: bool = False,
 ) -> Tensor:
     """H(p) = -sum(p * log(p)) in log-domain for numerical stability."""
     # Note: entropy is nansafe=True by definition/convention hence lacks this argument.
+    dim = dim if isinstance(dim, int) else tuple(dim)
     safe_logp = torch.where(torch.isneginf(logp), 0, logp)
     return -torch.sum(logp.exp() * safe_logp, dim=dim, keepdim=keepdim)
 
@@ -344,8 +363,8 @@ def entropy(
 def jsd(
     logp: Tensor,
     *,
-    ensemble_dim: Integral | Sequence[Integral] = 0,
-    event_dim: Integral | Sequence[Integral] = -1,
+    ensemble_dim: int | Sequence[int] = 0,
+    event_dim: int | Sequence[int] = -1,
 ) -> Tensor:
     """JSD over K distributions in log-domain.
 
@@ -367,9 +386,9 @@ def jsd(
     return (H_avg - avg_H).squeeze(dim=ensemble_dim + event_dim)
 
 
-def _dims(dim: Integral | Sequence[Integral]) -> tuple[int, ...]:
+def _dims(dim: int | Integral | Sequence[int | Integral]) -> tuple[int, ...]:
     """Sanitize helper for `dims`-like or `shape`-like values."""
-    if isinstance(dim, Integral):
+    if isinstance(dim, (int, Integral)):
         return (operator.index(dim),)
     return tuple(operator.index(d) for d in dim)
 

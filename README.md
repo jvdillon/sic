@@ -18,6 +18,8 @@ As in nature, this work was also resource constrained: all experiments used a si
 ## Installation
 
 ```bash
+sudo apt install curl -y
+curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 uv run code/sudoku/x182.py  # Train K=4, for example.
 ```

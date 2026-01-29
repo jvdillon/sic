@@ -5,6 +5,9 @@ Provides GPUCachedSudoku for efficient GPU-cached training with stratified sampl
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from typing import TypedDict
+
 import json
 import pathlib
 
@@ -12,6 +15,13 @@ from torch import Tensor
 
 import numpy as np
 import torch
+
+
+class SudokuDataset(TypedDict):
+    inputs: Tensor
+    labels: Tensor
+    vocab_size: int
+    seq_len: int
 
 
 def augment_sudoku(inputs: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
@@ -28,8 +38,8 @@ def augment_sudoku(inputs: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
         if valid.any():
             labels_aug[i, valid] = perm[labels[i, valid].long()].to(labels_aug.dtype)
 
-        k = torch.randint(0, 4, (1,)).item()
-        flip = torch.randint(0, 2, (1,)).item()
+        k = int(torch.randint(low=0, high=4, size=(1,)).item())
+        flip = int(torch.randint(low=0, high=2, size=(1,)).item())
         grid_in = inputs_aug[i].reshape(9, 9)
         grid_lab = labels_aug[i].reshape(9, 9)
         if flip:
@@ -43,7 +53,7 @@ def augment_sudoku(inputs: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
     return inputs_aug, labels_aug
 
 
-def load_sudoku_dataset(data_dir: str, split: str = "train") -> dict:
+def load_sudoku_dataset(data_dir: str, split: str = "train") -> SudokuDataset:
     """Load Sudoku dataset into memory.
 
     Returns dict with:
@@ -79,7 +89,7 @@ class GPUCachedSudoku:
         self,
         data_dir: str,
         device: torch.device,
-        dtype: torch.dtype,
+        dtype: torch.dtype | None,
         batch_size: int,
         train: bool = True,
         shuffle: bool = True,
@@ -107,12 +117,12 @@ class GPUCachedSudoku:
             self.n_groups = len(self.group_starts)
             self.augs_per_group = int(group_indices[1] - group_indices[0])
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[Tensor, Tensor, int]]:
         if self.stratified:
             aug_offsets = torch.randint(
-                0,
-                self.augs_per_group,
-                (self.n_groups,),
+                low=0,
+                high=self.augs_per_group,
+                size=(self.n_groups,),
                 device=self.device,
             )
             indices = self.group_starts + aug_offsets

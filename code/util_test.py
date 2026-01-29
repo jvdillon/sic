@@ -26,7 +26,7 @@ class TestTee:
         with tee:
             sys.stdout.write("hello stdout\n")
 
-        with open(log_path) as f:
+        with pathlib.Path(log_path).open() as f:
             content = f.read()
         assert "hello stdout" in content
 
@@ -41,7 +41,7 @@ class TestTee:
         with tee:
             sys.stderr.write("hello stderr\n")
 
-        with open(log_path) as f:
+        with pathlib.Path(log_path).open() as f:
             content = f.read()
         assert "hello stderr" in content
 
@@ -59,7 +59,7 @@ class TestTee:
             sys.stdout.write("from stdout\n")
             sys.stderr.write("from stderr\n")
 
-        with open(log_path) as f:
+        with pathlib.Path(log_path).open() as f:
             content = f.read()
         assert "from stdout" in content
         assert "from stderr" in content
@@ -100,11 +100,14 @@ class TestTee:
         mock_stderr = io.StringIO()
         mock_stderr.name = "<stderr>"
 
+        def inner():
+            raise ValueError("test exception")
+
         try:
             with Tee(log_path, stream=(mock_stdout, mock_stderr)):
                 sys.stdout.write("stdout message\n")
                 sys.stderr.write("stderr message\n")
-                raise ValueError("test exception")
+                inner()
         except ValueError:
             pass
 

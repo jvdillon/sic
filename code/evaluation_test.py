@@ -19,7 +19,7 @@ import torch
 
 
 def test_prepend_halt():
-    inputs = torch.randint(0, 10, (2, 81))
+    inputs = torch.randint(low=0, high=10, size=(2, 81))
     device = inputs.device
     out = prepend_halt(inputs, device)
     assert out.shape == (2, 82)
@@ -41,7 +41,7 @@ def test_run_act_steps():
 
     device = torch.device("cpu")
     dtype = torch.float32
-    inputs = torch.randint(0, 10, (2, 81))
+    inputs = torch.randint(low=0, high=10, size=(2, 81))
     z_H = model.H_init.expand(2, 82, -1)
     z_L = model.L_init.expand(2, 82, -1)
 
@@ -67,8 +67,8 @@ def test_evaluate_single_start():
     model = config.setup()
     model.eval()
 
-    inputs = torch.randint(0, 10, (4, 81))
-    labels = torch.randint(1, 10, (4, 81))
+    inputs = torch.randint(low=0, high=10, size=(4, 81))
+    labels = torch.randint(low=1, high=10, size=(4, 81))
 
     cell_acc, puzzle_acc = evaluate_single_start(
         model,
@@ -95,8 +95,8 @@ def test_evaluate_multistart():
     model = config.setup()
     model.eval()
 
-    inputs = torch.randint(0, 10, (4, 81))
-    labels = torch.randint(1, 10, (4, 81))
+    inputs = torch.randint(low=0, high=10, size=(4, 81))
+    labels = torch.randint(low=1, high=10, size=(4, 81))
 
     cell_acc, puzzle_acc = evaluate_multistart(
         model,
@@ -115,7 +115,7 @@ def test_evaluate_multistart():
 
 def test_per_h_accuracy():
     all_logits = [torch.randn(4, 81, 10) for _ in range(3)]
-    labels = torch.randint(0, 10, (4, 81))
+    labels = torch.randint(low=0, high=10, size=(4, 81))
     accs = per_h_accuracy(all_logits, labels)
     assert len(accs) == 3
     assert all(0 <= a <= 100 for a in accs)

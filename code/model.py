@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import Literal, Protocol, Self, TypedDict
+from typing import Any, Literal, Protocol, Self, TypedDict
 
 import dataclasses
 import functools
@@ -16,6 +16,82 @@ import torch
 
 
 InitFn = Callable[[Tensor], Tensor]
+
+
+#############################################
+#               Protocols                   #
+#############################################
+
+
+class ModuleProtocol(Protocol):
+    """Protocol for nn.Module-like objects."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+    def eval(self) -> Self: ...
+    def load_state_dict(
+        self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False
+    ) -> Any: ...
+    def named_parameters(self) -> Iterator[tuple[str, Tensor]]: ...
+    def parameters(self) -> Iterator[Tensor]: ...
+    def register_parameter(self, name: str, param: nn.Parameter | None) -> None: ...
+    def state_dict(self) -> dict[str, Tensor]: ...
+    def train(self, mode: bool = True) -> Self: ...
+    def zero_grad(self, set_to_none: bool = False) -> None: ...
+
+
+class TRM1ConfigProtocol(Protocol):
+    """Config protocol for TRM1 models."""
+
+    seq_len: int
+    hidden_size: int
+    vocab_size: int
+    dtype: torch.dtype | None
+    num_heads: int
+    num_layers: int
+    H_cycles: int
+    L_cycles: int
+    state_noise: float
+    rope_theta: float
+    head_bias: bool
+    act: bool
+    act_q_head_bias_init: float
+    block_fn: Callable[[int], nn.Module]
+    use_rope: bool
+    causal: bool
+    no_grad_inner: bool
+    head_init_weight_fn: InitFn
+    compile_core: bool
+    compile_reasoning: bool
+    max_num_compile_core: int
+
+    @property
+    def n_iters(self) -> int: ...
+
+    def setup(self, *args: Any, **kwargs: Any) -> nn.Module: ...
+
+
+class TRM3ConfigProtocol(Protocol):
+    """Config protocol for TRM3 models with K_H/K_L heads."""
+
+    seq_len: int
+    hidden_size: int
+    vocab_size: int
+    dtype: torch.dtype | None
+    num_layers: int
+    H_cycles: int
+    L_cycles: int
+    head_bias: bool
+    block_fn: Callable[[int], nn.Module]
+    compile_core: bool
+    compile_reasoning: bool
+    max_num_compile_core: int
+    K_H: int
+    K_L: int
+
+    @property
+    def num_effective_heads(self) -> int: ...
+
+    def setup(self, *args: Any, **kwargs: Any) -> nn.Module: ...
 
 
 class CarryState(TypedDict):
@@ -42,9 +118,63 @@ class WTAForwardOutput(TypedDict):
     l_indices: Tensor  # [N] L indices used
 
 
-torch._logging.set_logs(recompiles=True, recompiles_verbose=True)  # noqa: SLF001
-# or, same as:
+class TRM1Protocol(ModuleProtocol, Protocol):
+    """Protocol for TRM1 models (used by ExperimentBase)."""
+
+    config: TRM1ConfigProtocol
+    H_init: Tensor  # nn.Buffer extends Tensor
+    L_init: Tensor  # nn.Buffer extends Tensor
+
+    def forward(
+        self,
+        input_ids: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+    ) -> dict[str, Tensor | list[Tensor]]: ...
+
+    def step(
+        self,
+        input_ids: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+    ) -> dict[str, Tensor]: ...
+
+
+class TRM3Protocol(ModuleProtocol, Protocol):
+    """Protocol for TRM3 models with carry state and WTA."""
+
+    config: TRM3ConfigProtocol
+    H_init: Tensor
+    L_init: Tensor
+
+    def init_carry(self, batch_size: int) -> CarryState: ...
+
+    def reset_carry_at_indices(
+        self,
+        carry: CarryState,
+        indices: Tensor,
+        n_reset: int,
+    ) -> CarryState: ...
+
+    def wta_forward(
+        self,
+        input_ids: Tensor,
+        carry: CarryState,
+        labels: Tensor,
+        *,
+        label_smoothing: float = 0.0,
+        z_L_noise: float = 0.0,
+    ) -> WTAForwardOutput: ...
+
+
+# Backwards compatibility aliases
+ModelConfigProtocol = TRM3ConfigProtocol
+ModelProtocol = TRM3Protocol
+
+
+# Enable recompilation logging via environment variable:
 # $ TORCH_LOGS="recompiles_verbose" python script.py
+# or set os.environ["TORCH_LOGS"] = "recompiles_verbose" before importing torch
 
 _compile_traces: dict[str, list[str]] = {}
 
@@ -74,8 +204,9 @@ def _normal_init_(tensor: Tensor, std: float | None = None) -> Tensor:
         c_in = tensor.shape[-1]
         std = c_in ** (-0.5)
     elif std == 0:
-        nn.init.zero_(tensor)
+        nn.init.zeros_(tensor)
         return tensor
+    assert std is not None
     nn.init.normal_(tensor, std=std)
     return tensor
 
@@ -122,6 +253,7 @@ def _kaiming_uniform_init_(
         if c_in is None:
             raise ValueError("_kaiming_uniform_init_ requires bound or c_in")
         bound = c_in**-0.5
+    assert bound is not None
     nn.init.uniform_(tensor, -bound, bound)
     return tensor
 
@@ -919,7 +1051,7 @@ class GroupNorm(nn.GroupNorm):
 class Sequential(nn.Sequential):
     """Sequential that passes args and kwargs to blocks."""
 
-    def forward(self, z: Tensor, *args, **kwargs) -> Tensor:
+    def forward(self, z: Tensor, *args: Any, **kwargs: Any) -> Tensor:
         for block in self:
             z = block(z, *args, **kwargs)
         return z
@@ -928,7 +1060,7 @@ class Sequential(nn.Sequential):
 class SequentialWithEntropy(nn.Sequential):
     """Sequential that accumulates entropy from TransformerBlockWithEntropy."""
 
-    def forward(self, z: Tensor, *args, **kwargs) -> tuple[Tensor, Tensor]:
+    def forward(self, z: Tensor, *args: Any, **kwargs: Any) -> tuple[Tensor, Tensor]:
         total_entropy = torch.tensor(0.0, device=z.device, dtype=z.dtype)
         for block in self:
             z, entropy = block(z, *args, **kwargs)
@@ -939,20 +1071,20 @@ class SequentialWithEntropy(nn.Sequential):
 class EMA:
     """Exponential Moving Average of model parameters."""
 
-    def __init__(self, model: nn.Module, decay: float = 0.9):
+    def __init__(self, model: ModuleProtocol, decay: float = 0.9):
         self.decay = decay
         self.shadow = {
             n: p.data.clone() for n, p in model.named_parameters() if p.requires_grad
         }
         self.backup: dict[str, Tensor] = {}
 
-    @torch.no_grad()
-    def update(self, model: nn.Module) -> None:
+    @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
+    def update(self, model: ModuleProtocol) -> None:
         for n, p in model.named_parameters():
             if p.requires_grad:
                 self.shadow[n].lerp_(p.data, 1 - self.decay)
 
-    def apply(self, model: nn.Module) -> None:
+    def apply(self, model: ModuleProtocol) -> None:
         self.backup = {
             n: p.data.clone() for n, p in model.named_parameters() if p.requires_grad
         }
@@ -960,7 +1092,7 @@ class EMA:
             if p.requires_grad:
                 p.data.copy_(self.shadow[n])
 
-    def restore(self, model: nn.Module) -> None:
+    def restore(self, model: ModuleProtocol) -> None:
         for n, p in model.named_parameters():
             if p.requires_grad:
                 p.data.copy_(self.backup[n])
@@ -982,7 +1114,7 @@ class TRM(nn.Module):
         state_noise: float = 0.0
 
         rope_theta: float = 10e3
-        dtype: torch.dtype = torch.bfloat16
+        dtype: torch.dtype | None = torch.bfloat16
         head_bias: bool = True
         act: bool = True
         act_q_head_bias_init: float = -5.0
@@ -1009,12 +1141,12 @@ class TRM(nn.Module):
         def n_iters(self) -> int:
             return self.H_cycles * (self.L_cycles + 1)
 
-        def setup(self, *args, **kwargs) -> TRM:
+        def setup(self, *args: Any, **kwargs: Any) -> TRM:
             return TRM(self, *args, **kwargs)
 
-    def __init__(self, config: Config):
+    def __init__(self, config: TRM1ConfigProtocol):
         super().__init__()
-        self.config = config
+        self.config: TRM1ConfigProtocol = config
         self.embed_scale = config.hidden_size**0.5
         self.embed_tokens = Embedding(
             config.vocab_size,
@@ -1067,14 +1199,14 @@ class TRM(nn.Module):
             # Doing as a side-effect means checkpoints are unaffected.
             self.reasoning.compile(mode="default", fullgraph=True)
 
-        self.H_init = nn.Buffer(
+        self.H_init: Tensor = nn.Buffer(
             _trunc_normal_init_(
                 torch.empty(config.hidden_size, dtype=config.dtype),
                 std=1,
             ),
             persistent=True,
         )
-        self.L_init = nn.Buffer(
+        self.L_init: Tensor = nn.Buffer(
             _trunc_normal_init_(
                 torch.empty(config.hidden_size, dtype=config.dtype),
                 std=1,
@@ -1082,7 +1214,7 @@ class TRM(nn.Module):
             persistent=True,
         )
 
-    def _core(
+    def core(
         self,
         input_emb: Tensor,
         z_H: Tensor,
@@ -1120,7 +1252,7 @@ class TRM(nn.Module):
         return logits, q_halt, z_H, z_L
 
     @torch.compile(mode="default", fullgraph=True)
-    def _core_compiled(
+    def core_compiled(
         self,
         input_emb: Tensor,
         z_H: Tensor,
@@ -1129,18 +1261,18 @@ class TRM(nn.Module):
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         if torch.compiler.is_compiling():
             _ = trace_compile(
-                "_core_compiled",
+                "core_compiled",
                 max_compiles=self.config.max_num_compile_core,
                 always_print=False,
             )
-        return self._core(input_emb, z_H, z_L, cos_sin)
+        return self.core(input_emb, z_H, z_L, cos_sin)
 
     def step(
         self,
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Single H-cycle step for ACT training/eval loops.
 
         Args:
@@ -1158,7 +1290,7 @@ class TRM(nn.Module):
         """
         input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
         cos_sin = None if self.rope is None else self.rope()
-        core = self._core_compiled if self.config.compile_core else self._core
+        core = self.core_compiled if self.config.compile_core else self.core
         logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
         return {
             "logits": logits,
@@ -1172,7 +1304,7 @@ class TRM(nn.Module):
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Convenience wrapper - runs H_cycles, collects outputs.
 
         Args:
@@ -1197,7 +1329,7 @@ class TRM(nn.Module):
         all_logits = []
         all_z_H = []
 
-        core = self._core_compiled if self.config.compile_core else self._core
+        core = self.core_compiled if self.config.compile_core else self.core
 
         if self.config.no_grad_inner:
             # We ensure to detach all inputs to avoid graph recompilation with eval
@@ -1257,7 +1389,7 @@ class TRM2(TRM):
         )
         head_init_weight_fn: InitFn = _trunc_normal_init_
 
-        def setup(self, *args, **kwargs) -> TRM2:
+        def setup(self, *args: Any, **kwargs: Any) -> TRM2:
             return TRM2(self, *args, **kwargs)
 
 
@@ -1360,7 +1492,7 @@ class TRM3(nn.Module):
                 return n
             return min(n, self.HL_random_subset_size)
 
-        def setup(self, *args, **kwargs) -> TRM3:
+        def setup(self, *args: Any, **kwargs: Any) -> TRM3:
             return TRM3(self, *args, **kwargs)
 
     def __init__(self, config: Config):
@@ -1414,11 +1546,11 @@ class TRM3(nn.Module):
         # PRNG_EQUIVALENCE: Must use dtype=config.dtype because uniform_() produces
         # different values for bfloat16 vs float32 tensors with the same RNG seed.
         init_fn = functools.partial(_trunc_normal_init_, std=1)
-        self.H_init = nn.Buffer(
+        self.H_init: Tensor = nn.Buffer(
             init_fn(torch.empty([1, config.hidden_size], dtype=config.dtype)),
             persistent=True,
         )
-        self.L_init = nn.Buffer(
+        self.L_init: Tensor = nn.Buffer(
             init_fn(torch.empty([1, config.hidden_size], dtype=config.dtype)),
             persistent=True,
         )
@@ -1466,11 +1598,15 @@ class TRM3(nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return self._dummy.device
+        dev = self._dummy.device
+        assert isinstance(dev, torch.device)
+        return dev
 
     @property
     def dtype(self) -> torch.dtype:
-        return self._dummy.dtype
+        dt = self._dummy.dtype
+        assert isinstance(dt, torch.dtype)
+        return dt
 
     def init_carry(self, batch_size: int) -> CarryState:
         """Initialize model carry state with N = K_H * K_L chains."""
@@ -1656,7 +1792,7 @@ class TRM3(nn.Module):
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Single H-cycle step.
 
         Shapes: B = batch, S = seq_len, C = hidden_size, V = vocab_size.
@@ -1671,7 +1807,7 @@ class TRM3(nn.Module):
 
         """
         input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
-        core = self._core_compiled if self.config.compile_core else self._core
+        core = self.core_compiled if self.config.compile_core else self.core
         logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, None)
         return {
             "logits": logits,
@@ -1687,7 +1823,8 @@ class TRM3(nn.Module):
             init_tensor: [K, hidden_size] tensor (H_init or L_init)
 
         """
-        up_proj = self.reasoning[0].mlp.up_proj.weight
+        block: Any = self.reasoning[0]
+        up_proj: Tensor = block.mlp.up_proj.weight
         _, _, V = torch.linalg.svd(up_proj.float(), full_matrices=False)
         V_top = V[:10, :].T.to(dtype=init_tensor.dtype)  # [hidden_size, 10]
 
@@ -1716,7 +1853,7 @@ class TRM3(nn.Module):
             vec_new = vec_new / vec_new.norm() * orig_norm
             init_tensor[k] = vec_new
 
-    @torch.no_grad()
+    @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
     def _apply_svd_alignment_batched(self, z: Tensor) -> None:
         """Apply SVD alignment to batched random init tensor in-place.
 
@@ -1727,11 +1864,13 @@ class TRM3(nn.Module):
         SVD alignment logic as _equalize_svd_alignment.
 
         """
-        up_proj = self.reasoning[0].mlp.up_proj.weight
+        block: Any = self.reasoning[0]
+        up_proj: Tensor = block.mlp.up_proj.weight
         _, _, V = torch.linalg.svd(up_proj.float(), full_matrices=False)
         V_top = V[:10, :].T.to(dtype=z.dtype)  # [C, 10]
 
         B, K, S, C = z.shape
+        del B, S, C
 
         # Use first head as reference for target alignment
         ref = z[:, 0, :, :]  # [B, S, C]
@@ -1950,7 +2089,7 @@ class TRM3(nn.Module):
     ) -> dict[str, Tensor | list[Tensor]]:
         """Standard forward: H_cycles-1 under no_grad, final with grad."""
         input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
-        core = self._core_compiled if self.config.compile_core else self._core
+        core = self.core_compiled if self.config.compile_core else self.core
 
         H_cycles = self.config.H_cycles
         all_logits = []
@@ -1994,7 +2133,7 @@ class TRM3(nn.Module):
         """
         cfg = self.config
         input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
-        core = self._core_compiled if cfg.compile_core else self._core
+        core = self.core_compiled if cfg.compile_core else self.core
 
         H_cycles = cfg.H_cycles
         all_logits = []
@@ -2056,7 +2195,7 @@ class TRM3(nn.Module):
         }
 
     @torch.compile(mode="default", fullgraph=True)
-    def _core_compiled(
+    def core_compiled(
         self,
         input_emb: Tensor,
         z_H: Tensor,
@@ -2065,13 +2204,13 @@ class TRM3(nn.Module):
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         if torch.compiler.is_compiling():
             _ = trace_compile(
-                "_core_compiled",
+                "core_compiled",
                 max_compiles=self.config.max_num_compile_core,
                 always_print=False,
             )
-        return self._core(input_emb, z_H, z_L, cos_sin)
+        return self.core(input_emb, z_H, z_L, cos_sin)
 
-    def _core(
+    def core(
         self,
         input_emb: Tensor,
         z_H: Tensor,
@@ -2103,74 +2242,6 @@ class TRM3(nn.Module):
         z_H = self.reasoning(z_H + z_L, cos_sin)
 
         logits = self.head(z_H)
-        q_halt = (
-            self.q_head(z_H[:, 0]).squeeze(-1)
-            if self.q_head is not None
-            else z_H.new_zeros(z_H.shape[0])
-        )
+        q_halt = self.q_head(z_H[:, 0]).squeeze(-1)
 
         return logits, q_halt, z_H, z_L
-
-
-class ModuleProtocol(Protocol):
-    """Protocol for nn.Module-like objects."""
-
-    def eval(self) -> Self: ...
-    def named_parameters(self) -> Iterator[tuple[str, Tensor]]: ...
-    def parameters(self) -> Iterator[Tensor]: ...
-    def state_dict(self) -> dict[str, Tensor]: ...
-    def train(self, mode: bool = True) -> Self: ...
-    def zero_grad(self, set_to_none: bool = False) -> None: ...
-
-
-class ModelConfigProtocol(Protocol):
-    seq_len: int
-    hidden_size: int
-    vocab_size: int
-    dtype: torch.dtype | None
-    K_H: int
-    K_L: int
-
-    @property
-    def num_effective_heads(self) -> int: ...
-
-    def setup(self, *args, **kwargs) -> nn.Module: ...
-
-
-class ModelProtocol(ModuleProtocol, Protocol):
-    config: ModelConfigProtocol
-    H_init: Tensor
-    L_init: Tensor
-
-    def init_carry(self, batch_size: int) -> CarryState: ...
-
-    def reset_carry_at_indices(
-        self,
-        carry: CarryState,
-        indices: Tensor,
-        n_reset: int,
-    ) -> CarryState: ...
-
-    def wta_forward(
-        self,
-        input_ids: Tensor,
-        carry: CarryState,
-        labels: Tensor,
-        *,
-        label_smoothing: float = 0.0,
-        z_L_noise: float = 0.0,
-    ) -> WTAForwardOutput: ...
-
-    def forward(
-        self,
-        input_ids: Tensor,
-        z_H: Tensor,
-        z_L: Tensor,
-    ) -> dict[str, Tensor | list[Tensor]]: ...
-
-    def step(
-        self,
-        input_ids: Tensor,
-        z_H: Tensor,
-        z_L: Tensor,
-    ) -> dict[str, Tensor]: ...

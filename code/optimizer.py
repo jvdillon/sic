@@ -1,4 +1,5 @@
-from typing import Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import math
 
@@ -79,7 +80,9 @@ def matrix_signum_via_newtonschulz(
 def _adjust_lr(
     lr: float,
     param: nn.Parameter,
-    adjust_lr_fn: Literal["original", "match_rms_adamw", "conv_heuristic"] = "original",
+    adjust_lr_fn: Literal[
+        "original", "match_rms_adamw", "conv_heuristic", "keller", "other1", "other2"
+    ] = "original",
     ensemble_dims: int = 0,
 ) -> float:
     """Learning rate adjustment used by Muon."""
@@ -109,7 +112,8 @@ class Muon(torch.optim.Optimizer):
 
     def __init__(
         self,
-        params,
+        # Type matches torch.optim.Optimizer signature; dict[str, Any] is forced by torch.
+        params: Iterable[Tensor] | Iterable[dict[str, Any]],
         lr: float = 1e-3,
         weight_decay: float | None = 0.1,
         momentum: float = 0.95,
@@ -121,6 +125,9 @@ class Muon(torch.optim.Optimizer):
             "original",
             "match_rms_adamw",
             "conv_heuristic",
+            "keller",
+            "other1",
+            "other2",
         ] = "original",
         ensemble_dims: int = 0,
     ):
@@ -147,8 +154,8 @@ class Muon(torch.optim.Optimizer):
         }
         super().__init__(params, defaults)
 
-    @torch.no_grad()
-    def step(self):
+    @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
+    def step(self) -> None:
         for group in self.param_groups:
             lr = group["lr"]
             weight_decay = group["weight_decay"]
@@ -246,7 +253,7 @@ class Muon(torch.optim.Optimizer):
 
 class DummyOptimizer:
     def __init__(self) -> None:
-        self.param_groups: list[object] = []
+        self.param_groups: list[dict[str, Any]] = []
 
     def step(self) -> None:
         pass
@@ -254,8 +261,8 @@ class DummyOptimizer:
     def zero_grad(self) -> None:
         pass
 
-    def state_dict(self) -> dict:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: dict) -> None:
+    def load_state_dict(self, _state_dict: dict[str, Any]) -> None:
         pass

@@ -3,10 +3,47 @@
 Provides diagnostics and metrics for TRM experiments.
 """
 
-from torch import Tensor, nn
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+from torch import Tensor
 from torch.nn import functional
 
 import torch
+
+
+class _EvalModelProtocol(Protocol):
+    @property
+    def H_init(self) -> Tensor: ...
+
+    @property
+    def L_init(self) -> Tensor: ...
+
+    @property
+    def config(self) -> Any: ...
+
+    def step(
+        self,
+        input_ids: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+    ) -> dict[str, Any]: ...
+
+
+# Re-export for backwards compat
+__all__ = [
+    "HALT_TOKEN_ID",
+    "cells_fixed_broken",
+    "evaluate_multistart",
+    "evaluate_single_start",
+    "h_cosine_similarities",
+    "per_h_accuracy",
+    "prepend_halt",
+    "print_diagnostics",
+    "run_act_steps",
+    "z_h_deltas",
+]
 
 
 HALT_TOKEN_ID = 11
@@ -20,17 +57,18 @@ def prepend_halt(inputs: Tensor, device: torch.device) -> Tensor:
 
 
 def run_act_steps(
-    model: nn.Module,
+    model: _EvalModelProtocol,
     inputs: Tensor,
     z_H: Tensor,
     z_L: Tensor,
     max_steps: int,
     device: torch.device,
-    dtype: torch.dtype,  # noqa: ARG001
+    dtype: torch.dtype,  # noqa: ARG001  # pyright: ignore[reportUnusedParameter]
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Run ACT steps and return predictions, q_halt, and final z_H."""
     inputs_with_halt = prepend_halt(inputs, device)
 
+    out: dict[str, Tensor] = {}
     for _ in range(max_steps):
         out = model.step(inputs_with_halt, z_H, z_L)
         z_H = out["z_H"]
@@ -42,7 +80,7 @@ def run_act_steps(
 
 
 def evaluate_single_start(
-    model: nn.Module,
+    model: _EvalModelProtocol,
     inputs: Tensor,
     labels: Tensor,
     max_steps: int,
@@ -65,7 +103,7 @@ def evaluate_single_start(
 
 
 def evaluate_multistart(
-    model: nn.Module,
+    model: _EvalModelProtocol,
     inputs: Tensor,
     labels: Tensor,
     max_steps: int,
@@ -165,7 +203,7 @@ def cells_fixed_broken(
 def print_diagnostics(
     all_logits: list[Tensor],
     labels: Tensor,
-    z_info: dict,
+    z_info: dict[str, list[Tensor]],
     valid_count: int | None = None,
 ) -> None:
     """Print standard TRM diagnostics.

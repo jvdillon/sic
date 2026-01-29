@@ -1,7 +1,8 @@
 """TRM experiment framework."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import contextlib
 import math
@@ -12,11 +13,11 @@ import time
 import warnings
 
 from evaluation import print_diagnostics
-from model import EMA, TRM
+from model import EMA, TRM, ModuleProtocol, TRM1Protocol
 from optimizer import DummyOptimizer, Muon
 from torch import Tensor, nn
-from torch.optim import Optimizer
-from util import Tee, set_seed
+from torch.optim import AdamW
+from util import Tee, numpy_rng, set_seed
 
 import numpy as np
 import torch
@@ -34,7 +35,7 @@ HALT_TOKEN_ID = 11
 class _PuzzleIterState:
     """Mutable state for streaming puzzle iteration."""
 
-    puzzle_iter: object
+    puzzle_iter: Iterator[Any]
     max_samples: int
     pending_inputs: Tensor | None = None
     pending_labels: Tensor | None = None
@@ -61,6 +62,8 @@ def _get_next_puzzle(state: _PuzzleIterState) -> tuple[Tensor | None, Tensor | N
         state.pending_valid = batch[2] if len(batch) > 2 else batch[0].shape[0]
         state.pending_idx = 0
         if state.pending_valid > 0:
+            assert state.pending_inputs is not None
+            assert state.pending_labels is not None
             inp = state.pending_inputs[state.pending_idx]
             lab = state.pending_labels[state.pending_idx]
             state.pending_idx += 1
@@ -72,7 +75,7 @@ def _get_next_puzzle(state: _PuzzleIterState) -> tuple[Tensor | None, Tensor | N
 
 
 def _reset_eval_slot(
-    exp,
+    exp: Any,
     idx: int,
     inp: Tensor,
     lab: Tensor,
@@ -92,8 +95,8 @@ def _reset_eval_slot(
     inputs[idx] = inp
     labels[idx] = lab
     z_H[idx] = H_init_single.expand(exp.K, seq_len, -1)
-    if hasattr(exp, "_make_z_L_single"):
-        z_L[idx] = exp._make_z_L_single(puzzle_idx)
+    if hasattr(exp, "make_z_L_single"):
+        z_L[idx] = exp.make_z_L_single(puzzle_idx)
     else:
         for k in range(exp.K):
             z_L[idx, k] = L_inits[k]
@@ -105,8 +108,8 @@ def _reset_eval_slot(
 class ExperimentBase:
     """TRM experiment with ACT training."""
 
-    model: nn.Module
-    device: torch.device | None = None
+    model: TRM1Protocol
+    device: torch.device  # Set in __init__ if not provided by subclass
     seed: int = 42
 
     # Dataset
@@ -165,7 +168,7 @@ class ExperimentBase:
     def __init__(self):
         """Set self.model before calling super().__init__()."""
         set_seed(self.seed)
-        if self.device is None:
+        if not hasattr(self, "device"):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = self.config.dtype
         self.model = self.config.setup().to(device=self.device, dtype=self.dtype)
@@ -176,8 +179,8 @@ class ExperimentBase:
         if self.K > 1 and self.auto_register_k_heads:
             self._register_k_heads()
 
-        self.optimizer1: torch.optim.Optimizer | None = None
-        self.optimizer2: torch.optim.Optimizer | None = None
+        self.optimizer1: AdamW | DummyOptimizer | None = None
+        self.optimizer2: Muon | DummyOptimizer | None = None
 
         self.current_step = 0
         self.best_acc = 0.0
@@ -190,7 +193,7 @@ class ExperimentBase:
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
         self._data_iter = None
         self._train_loader = None
-        self._act_carry: dict[str, Tensor] | None = None
+        self.act_carry: dict[str, Tensor] | None = None
 
     def _register_k_heads(self) -> None:
         """Register K-1 additional L_init parameters for WTA."""
@@ -209,8 +212,10 @@ class ExperimentBase:
         """Set up optimizers. Override in subclass for custom optimizer config."""
         self.optimizer1, self.optimizer2 = setup_muon_optimizers(self.model)
 
-    def _make_checkpoint(self) -> dict:
+    def make_checkpoint(self) -> dict[str, Any]:
         """Create checkpoint dict with all state including RNG."""
+        assert self.optimizer1 is not None
+        assert self.optimizer2 is not None
         ckpt = {
             "model": self.model.state_dict(),
             "optimizer1": self.optimizer1.state_dict(),
@@ -218,7 +223,7 @@ class ExperimentBase:
             "step": self.current_step,
             "best_acc": self.best_acc,
             "rng_python": random.getstate(),
-            "rng_numpy": np.random.get_state(),
+            "rng_numpy": numpy_rng.bit_generator.state,
             "rng_torch": torch.get_rng_state(),
             "rng_cuda": torch.cuda.get_rng_state_all(),
         }
@@ -234,7 +239,7 @@ class ExperimentBase:
             for n, p in self.model.named_parameters():
                 if p.requires_grad and n in self.ema.shadow:
                     self.ema.shadow[n].copy_(p.data)
-        self._act_carry = None
+        self.act_carry = None
 
     def _prepend_halt_token(self, inputs: Tensor) -> Tensor:
         """Prepend HALT token for ACT mode."""
@@ -292,7 +297,7 @@ class ExperimentBase:
             shuffle=False,
         )
 
-    def step(self, inputs: Tensor, labels: Tensor) -> Tensor | None:
+    def step(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor] | None:
         if self.current_step >= self.total_train_steps:
             return None
 
@@ -318,10 +323,10 @@ class ExperimentBase:
         B = self.batch_size
         seq_len = self.model.config.seq_len
 
-        if self._act_carry is None:
-            self._act_carry = self._init_act_carry()
+        if self.act_carry is None:
+            self.act_carry = self._init_act_carry()
 
-        carry = self._act_carry
+        carry = self.act_carry
         halted = carry["halted"]
 
         if halted.any():
@@ -432,9 +437,9 @@ class ExperimentBase:
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
             )
             min_steps = torch.randint(
-                2,
-                self.max_reasoning_steps + 1,
-                (B,),
+                low=2,
+                high=self.max_reasoning_steps + 1,
+                size=(B,),
                 device=self.device,
             )
             exploration_halt = carry["steps"] >= min_steps
@@ -447,7 +452,7 @@ class ExperimentBase:
             "q_halt": q_halt_loss.detach() / B,
         }
 
-    def _step_act_wta(self, inputs: Tensor, labels: Tensor) -> dict:
+    def _step_act_wta(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor]:
         """K-head WTA ACT step. Batches K heads into single [B*K] forward pass.
 
         Note: BatchNorm would break with this batching (stats computed across heads).
@@ -456,10 +461,10 @@ class ExperimentBase:
         B = self.batch_size
         seq_len = self.model.config.seq_len
 
-        if self._act_carry is None:
-            self._act_carry = self._init_act_carry()
+        if self.act_carry is None:
+            self.act_carry = self._init_act_carry()
 
-        carry = self._act_carry
+        carry = self.act_carry
         halted = carry["halted"]
 
         if halted.any():
@@ -610,9 +615,9 @@ class ExperimentBase:
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
             )
             min_steps = torch.randint(
-                2,
-                self.max_reasoning_steps + 1,
-                (B,),
+                low=2,
+                high=self.max_reasoning_steps + 1,
+                size=(B,),
                 device=self.device,
             )
             exploration_halt = carry["steps"] >= min_steps
@@ -638,7 +643,7 @@ class ExperimentBase:
         ).mean()
         return H_avg - avg_H
 
-    def _step_act_wta_jsd(self, inputs: Tensor, labels: Tensor) -> dict:
+    def _step_act_wta_jsd(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor]:
         """K-head WTA + JSD ACT step. Batches K heads into single [B*K] forward pass.
 
         Note: BatchNorm would break with this batching (stats computed across heads).
@@ -647,10 +652,10 @@ class ExperimentBase:
         B = self.batch_size
         seq_len = self.model.config.seq_len
 
-        if self._act_carry is None:
-            self._act_carry = self._init_act_carry()
+        if self.act_carry is None:
+            self.act_carry = self._init_act_carry()
 
-        carry = self._act_carry
+        carry = self.act_carry
         halted = carry["halted"]
 
         if halted.any():
@@ -802,9 +807,9 @@ class ExperimentBase:
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
             )
             min_steps = torch.randint(
-                2,
-                self.max_reasoning_steps + 1,
-                (B,),
+                low=2,
+                high=self.max_reasoning_steps + 1,
+                size=(B,),
                 device=self.device,
             )
             exploration_halt = carry["steps"] >= min_steps
@@ -824,6 +829,8 @@ class ExperimentBase:
 
     def _update_weights(self) -> None:
         """Common weight update logic with gradient accumulation."""
+        assert self.optimizer1 is not None
+        assert self.optimizer2 is not None
         self._grad_accum_counter += 1
 
         # Only step optimizer every grad_accum_steps
@@ -851,14 +858,16 @@ class ExperimentBase:
                         self.ema.shadow[n].copy_(p.data)
             self.ema.update(self.model)
 
-    def evaluate(self, loader) -> tuple[float, float]:
-        use_ema = self.ema is not None and self.current_step >= self.ema_warmup_steps
+    def evaluate(self, loader: Any) -> tuple[float, float]:
+        ema = self.ema  # Local var for type narrowing
+        use_ema = ema is not None and self.current_step >= self.ema_warmup_steps
         if use_ema:
-            self.ema.apply(self.model)
+            assert ema is not None  # Type guard
+            ema.apply(self.model)
 
         try:
             self.model.eval()
-            cell_acc, puzzle_acc = self._evaluate_act(loader)
+            cell_acc, puzzle_acc = self.evaluate_act(loader)
 
             ckpt_start = time.perf_counter()
             script_path = pathlib.Path(sys.argv[0]).resolve()
@@ -871,14 +880,14 @@ class ExperimentBase:
                 and self.current_step in self.checkpoint_steps
             ):
                 path = ckpt_dir / f"step{self.current_step:05d}.pt"
-                torch.save(self._make_checkpoint(), path)
+                torch.save(self.make_checkpoint(), path)
                 ckpt_elapsed = time.perf_counter() - ckpt_start
                 print(f"  saved: {path} acc={cell_acc:.2f}% ({ckpt_elapsed:5.3f}s)")
 
             if cell_acc > self.best_acc:
                 self.best_acc = cell_acc
                 path = ckpt_dir / "best.pt"
-                torch.save(self._make_checkpoint(), path)
+                torch.save(self.make_checkpoint(), path)
                 ckpt_elapsed = time.perf_counter() - ckpt_start
                 print(f"  saved: {path} acc={cell_acc:.2f}% ({ckpt_elapsed:5.3f}s)")
 
@@ -886,16 +895,17 @@ class ExperimentBase:
         finally:
             self.model.train()
             if use_ema:
-                self.ema.restore(self.model)
+                assert ema is not None  # Type guard
+                ema.restore(self.model)
 
-    def _evaluate_act(self, loader) -> tuple[float, float]:
+    def evaluate_act(self, loader: Any) -> tuple[float, float]:
         if self.eval_method == "wta":
-            return self._evaluate_act_haltfast_wta(loader)
+            return self.evaluate_act_haltfast_wta(loader)
         if self.eval_method == "fast":
-            return self._evaluate_act_haltfast(loader)
-        return self._evaluate_act_full(loader)
+            return self.evaluate_act_haltfast(loader)
+        return self.evaluate_act_full(loader)
 
-    def _evaluate_act_haltfast(self, loader) -> tuple[float, float]:
+    def evaluate_act_haltfast(self, loader: Any) -> tuple[float, float]:
         """Fast eval: streaming replacement when q_halt > 0, fixed batch size.
 
         Mirrors qhalt_eval.py: uses model() not step(), halted samples replaced with new puzzles.
@@ -951,6 +961,7 @@ class ExperimentBase:
                 return None, None
 
             if pending_inputs is not None and pending_idx < pending_valid:
+                assert pending_labels is not None
                 inp = pending_inputs[pending_idx]
                 lab = pending_labels[pending_idx]
                 pending_idx += 1
@@ -979,6 +990,7 @@ class ExperimentBase:
         for i in range(B):
             inp, lab = get_next_puzzle()
             if inp is not None:
+                assert lab is not None
                 inputs[i] = inp
                 labels[i] = lab
                 valid[i] = True
@@ -1031,18 +1043,20 @@ class ExperimentBase:
 
                     # Replace halted samples with new puzzles (must be sequential for iterator)
                     halted_idx = halted.nonzero(as_tuple=True)[0]
-                    for idx in halted_idx:
-                        idx = idx.item()
+                    for idx_tensor in halted_idx:
+                        idx = idx_tensor.item()
                         inp, lab = get_next_puzzle()
                         if inp is not None:
-                            inputs[idx] = inp
-                            labels[idx] = lab
-                            z_H[idx] = H_init_single
-                            z_L[idx] = L_init_single
-                            steps[idx] = 0
-                            valid[idx] = True
+                            assert lab is not None
+                            i = int(idx)
+                            inputs[i] = inp
+                            labels[i] = lab
+                            z_H[i] = H_init_single
+                            z_L[i] = L_init_single
+                            steps[i] = 0
+                            valid[i] = True
                         else:
-                            valid[idx] = False
+                            valid[int(idx)] = False
 
         cell_acc = 100 * total_cell_correct / total_cells if total_cells > 0 else 0.0
         puzzle_acc = 100 * total_correct / total_puzzles if total_puzzles > 0 else 0.0
@@ -1054,12 +1068,10 @@ class ExperimentBase:
 
         return cell_acc, puzzle_acc
 
-    def _evaluate_act_haltfast_wta(
-        self, loader, progress: bool = False
+    def evaluate_act_haltfast_wta(
+        self, loader: Any, progress: bool = False
     ) -> tuple[float, float]:
         """WTA eval: run K heads, first to halt wins. Streaming replacement."""
-        import time
-
         start_time = time.perf_counter()
         seq_len = self.model.config.seq_len
         hidden = self.model.config.hidden_size
@@ -1108,6 +1120,7 @@ class ExperimentBase:
             puzzle_idx = puz_state.samples_seen
             inp, lab = _get_next_puzzle(puz_state)
             if inp is not None:
+                assert lab is not None
                 _reset_eval_slot(
                     self,
                     i,
@@ -1191,8 +1204,8 @@ class ExperimentBase:
 
                     # Score done puzzles
                     done_idx = done.nonzero(as_tuple=True)[0]
-                    for idx in done_idx:
-                        idx = idx.item()
+                    for idx_tensor in done_idx:
+                        idx = int(idx_tensor.item())
                         preds = winner_logits[idx].argmax(dim=-1)
                         correct = (preds == labels[idx]).sum().item()
                         total_cells_correct += correct
@@ -1212,6 +1225,7 @@ class ExperimentBase:
                         puzzle_idx = puz_state.samples_seen
                         inp, lab = _get_next_puzzle(puz_state)
                         if inp is not None:
+                            assert lab is not None
                             _reset_eval_slot(
                                 self,
                                 idx,
@@ -1237,7 +1251,7 @@ class ExperimentBase:
         print(f"  cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
         return cell_acc, puzzle_acc
 
-    def _evaluate_act_full(self, loader) -> tuple[float, float]:
+    def evaluate_act_full(self, loader: Any) -> tuple[float, float]:
         """Full eval: run all 16 steps with diagnostics."""
         correct = torch.tensor(0, device=self.device)
         puzzles_correct = torch.tensor(0, device=self.device)
@@ -1281,6 +1295,7 @@ class ExperimentBase:
                     dtype=torch.int32,
                 )
 
+                out: dict[str, Tensor] = {}
                 for step in range(self.max_reasoning_steps):
                     with torch.amp.autocast(
                         device_type=self.device.type, dtype=self.dtype
@@ -1334,6 +1349,7 @@ class ExperimentBase:
                         inputs_stuck = inputs_with_halt[stuck_idx]
 
                         # Re-run H-cycles for stuck puzzles
+                        out_retry: dict[str, Tensor] = {}
                         for _ in range(self.max_reasoning_steps):
                             with torch.amp.autocast(
                                 device_type=self.device.type, dtype=self.dtype
@@ -1395,10 +1411,11 @@ class ExperimentBase:
                 with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self.model(inputs_with_halt, z_H, z_L)
                 all_logits = [lg[:, 1:] for lg in out["all_logits"]]
+                all_z_H = list(out["all_z_H"])
                 print_diagnostics(
                     all_logits,
                     sample_labels,
-                    {"z_H": out["all_z_H"]},
+                    {"z_H": all_z_H},
                     valid_count=diag_valid,
                 )
 
@@ -1474,11 +1491,11 @@ def train(experiment: ExperimentBase):
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     step0_path = ckpt_dir / "step00000_rng.pt"
     if not step0_path.exists():
-        torch.save(experiment._make_checkpoint(), step0_path)
+        torch.save(experiment.make_checkpoint(), step0_path)
         print(f"Saved step 0 checkpoint with RNG: {step0_path}")
 
     train_start = epoch_start = time.perf_counter()
-    epoch_losses: list = []
+    epoch_losses: list[dict[str, Tensor] | Tensor] = []
     step_count = 0
     done = False
 
@@ -1492,17 +1509,20 @@ def train(experiment: ExperimentBase):
         epoch_elapsed = eval_start - epoch_start
         train_loss = ""
         if epoch_losses:
-            if isinstance(epoch_losses[0], dict):
-                keys = list(epoch_losses[0].keys())
+            first = epoch_losses[0]
+            if isinstance(first, dict):
+                keys = list(first.keys())
                 parts = []
+                dicts = [d for d in epoch_losses if isinstance(d, dict)]
                 for k in keys:
-                    vals = torch.stack([d[k] for d in epoch_losses])
+                    vals = torch.stack([d[k] for d in dicts])
                     parts.append(
                         f"{k}={vals.mean():.4f}±{vals.std():.4f}ϵ[{vals.min():.4f},{vals.max():.4f}]"
                     )
                 train_loss = "  Train " + " ".join(parts)
             else:
-                losses = torch.stack(epoch_losses)
+                tensors = [t for t in epoch_losses if isinstance(t, Tensor)]
+                losses = torch.stack(tensors)
                 train_loss = f"  Train {losses.mean():.4f}±{losses.std():.4f} [{losses.min():.4f}, {losses.max():.4f}]"
             epoch_losses = []
 
@@ -1530,10 +1550,8 @@ def train(experiment: ExperimentBase):
         step_count += 1
         if loss is None:
             done = True
-        elif isinstance(loss, dict):
-            epoch_losses.append({k: v.detach() for k, v in loss.items()})
         else:
-            epoch_losses.append(loss.detach().mean())
+            epoch_losses.append({k: v.detach() for k, v in loss.items()})
 
         if eval_every_steps and step_count % eval_every_steps == 0:
             eval_start = do_eval()
@@ -1544,7 +1562,9 @@ def train(experiment: ExperimentBase):
     return experiment.model
 
 
-def main(experiment: ExperimentBase):
+def main(
+    experiment: ExperimentBase | object,
+):  # object: kludge for duck-typed experiments
     """TRM main entry point."""
     script_path = pathlib.Path(sys.argv[0])
     with (
@@ -1552,8 +1572,8 @@ def main(experiment: ExperimentBase):
         if script_path.name
         else contextlib.nullcontext()
     ):
-        experiment.setup_optimizers()
-        return train(experiment)
+        experiment.setup_optimizers()  # pyright: ignore[reportAttributeAccessIssue]
+        return train(experiment)  # pyright: ignore[reportArgumentType]
 
 
 def resume_from_checkpoint(
@@ -1580,6 +1600,8 @@ def resume_from_checkpoint(
         exp.best_acc = ckpt.get("best_acc", 0.0)
 
         if resume_optimizer and "optimizer1" in ckpt:
+            assert exp.optimizer1 is not None
+            assert exp.optimizer2 is not None
             exp.optimizer1.load_state_dict(ckpt["optimizer1"])
             exp.optimizer2.load_state_dict(ckpt["optimizer2"])
         else:
@@ -1594,6 +1616,15 @@ def resume_from_checkpoint(
                 for n, p in exp.model.named_parameters():
                     if p.requires_grad and n in exp.ema.shadow:
                         exp.ema.shadow[n].copy_(p.data)
+        # Restore RNG state if available
+        if "rng_numpy" in ckpt:
+            rng_state = ckpt["rng_numpy"]
+            # Handle both old (tuple from np.random.get_state) and new (dict from Generator)
+            if isinstance(rng_state, dict):
+                numpy_rng.bit_generator.state = rng_state
+            else:
+                # Old tuple format from np.random.get_state() - restore to global RNG
+                np.random.set_state(rng_state)  # noqa: NPY002
     else:
         # Old format: just model state_dict
         exp.model.load_state_dict(ckpt)
@@ -1604,7 +1635,7 @@ def resume_from_checkpoint(
                 if p.requires_grad and n in exp.ema.shadow:
                     exp.ema.shadow[n].copy_(p.data)
 
-    exp._act_carry = None  # noqa: SLF001
+    exp.act_carry = None
     print(f"Resumed from {ckpt_path} at step {exp.current_step}")
 
 
@@ -1622,13 +1653,13 @@ def compute_diversity_loss(all_logits: list[Tensor]) -> Tensor:
 
 
 def setup_muon_optimizers(
-    model: nn.Module,
+    model: ModuleProtocol,
     muon_lr: float = 0.02,
     adamw_lr: float = 1e-4,
     muon_wd: float | None = None,
     adamw_wd: float | None = None,
     qk_wd: float | None = None,
-) -> tuple[Optimizer, Optimizer]:
+) -> tuple[AdamW | DummyOptimizer, Muon | DummyOptimizer]:
     """Muon + AdamW optimizer setup for TRM.
 
     Args:

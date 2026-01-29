@@ -8,16 +8,16 @@ from data import augment_sudoku
 
 
 def test_augment_sudoku_shapes():
-    inputs = torch.randint(1, 10, (4, 81))
-    labels = torch.randint(1, 10, (4, 81))
+    inputs = torch.randint(low=1, high=10, size=(4, 81))
+    labels = torch.randint(low=1, high=10, size=(4, 81))
     inputs_aug, labels_aug = augment_sudoku(inputs, labels)
     assert inputs_aug.shape == (4, 81)
     assert labels_aug.shape == (4, 81)
 
 
 def test_augment_sudoku_valid_range():
-    inputs = torch.randint(1, 10, (4, 81))
-    labels = torch.randint(1, 10, (4, 81))
+    inputs = torch.randint(low=1, high=10, size=(4, 81))
+    labels = torch.randint(low=1, high=10, size=(4, 81))
     inputs_aug, labels_aug = augment_sudoku(inputs, labels)
     assert inputs_aug.min() >= 0
     assert inputs_aug.max() <= 10
@@ -26,8 +26,8 @@ def test_augment_sudoku_valid_range():
 
 
 def test_augment_sudoku_deterministic_with_seed():
-    inputs = torch.randint(1, 10, (4, 81))
-    labels = torch.randint(1, 10, (4, 81))
+    inputs = torch.randint(low=1, high=10, size=(4, 81))
+    labels = torch.randint(low=1, high=10, size=(4, 81))
 
     torch.manual_seed(42)
     out1 = augment_sudoku(inputs.clone(), labels.clone())
