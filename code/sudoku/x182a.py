@@ -1,12 +1,12 @@
 """x182a: x182 with random z_L init."""
 
 from experiment import main
-from model import TRM3
+from model import TRM3, TRM3ConfigProtocol
 from x182 import Experiment as Experiment182
 
 
 class Experiment(Experiment182):
-    config: TRM3.Config = TRM3.Config(
+    config: TRM3ConfigProtocol = TRM3.Config(
         K_H=1,
         K_L=4,
         carry_H="copy_top1",

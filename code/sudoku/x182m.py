@@ -1,7 +1,7 @@
 """x182m: TRM baseline but way faster; seed=42."""
 
 from experiment import main
-from model import TRM3
+from model import TRM3, TRM3ConfigProtocol
 from x182 import Experiment as Experiment182
 
 
@@ -11,7 +11,7 @@ class Experiment(Experiment182):
     eval_every_steps: int = 500
     K: int = 1  # Must match K_H * K_L
 
-    config: TRM3.Config = TRM3.Config(
+    config: TRM3ConfigProtocol = TRM3.Config(
         K_H=1,
         K_L=1,
         carry_H="all",

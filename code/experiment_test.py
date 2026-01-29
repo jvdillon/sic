@@ -12,7 +12,7 @@ from experiment import (
     resume_from_checkpoint,
     setup_muon_optimizers,
 )
-from model import TRM
+from model import TRM, TRM1ConfigProtocol
 from torch import Tensor
 
 import torch
@@ -272,7 +272,7 @@ def test_fast_eval_streaming_replacement():
     class FastEvalExp(ExperimentBase):
         eval_method: Literal["standard", "fast", "wta"] = "fast"
         max_reasoning_steps: int = 16
-        config: TRM.Config = TRM.Config(
+        config: TRM1ConfigProtocol = TRM.Config(
             compile_core=False,
             vocab_size=12,
             seq_len=82,
@@ -336,7 +336,7 @@ def test_fast_eval_metrics_at_halt_time():
     class FastEvalExp(ExperimentBase):
         eval_method: Literal["standard", "fast", "wta"] = "fast"
         max_reasoning_steps: int = 4
-        config: TRM.Config = TRM.Config(
+        config: TRM1ConfigProtocol = TRM.Config(
             compile_core=False,
             vocab_size=12,
             seq_len=82,
@@ -462,7 +462,7 @@ def test_eval_methods_consistent_k1():
     class EvalTestExp(ExperimentBase):
         max_reasoning_steps: int = 4
         K: int = 1
-        config: TRM.Config = TRM.Config(
+        config: TRM1ConfigProtocol = TRM.Config(
             compile_core=False,
             vocab_size=12,
             seq_len=82,

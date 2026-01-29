@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import field
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 import dataclasses
 import math
@@ -15,7 +15,7 @@ from experiment import (
     main,
     setup_muon_optimizers,
 )
-from model import EMA, TRM3
+from model import EMA, TRM3, TRM3ConfigProtocol
 from torch import Tensor, nn
 from util import set_seed
 
@@ -38,7 +38,7 @@ class Experiment:
     seed: int = 42
     device: torch.device | None = None
 
-    config: TRM3.Config = TRM3.Config(
+    config: TRM3ConfigProtocol = TRM3.Config(
         K_H=1,
         K_L=4,
         carry_H="copy_top1",
@@ -132,9 +132,12 @@ class Experiment:
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype: torch.dtype = self.config.dtype or torch.bfloat16
-        self.model: TRM3 = self.config.setup().to(
-            device=self.device,
-            dtype=self.dtype if self.cast_model_to_dtype else None,
+        self.model: TRM3 = cast(
+            TRM3,
+            self.config.setup().to(
+                device=self.device,
+                dtype=self.dtype if self.cast_model_to_dtype else None,
+            ),
         )
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
 

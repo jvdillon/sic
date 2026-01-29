@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import contextlib
 import math
@@ -13,7 +13,7 @@ import time
 import warnings
 
 from evaluation import print_diagnostics
-from model import EMA, TRM, ModuleProtocol, TRM1Protocol
+from model import EMA, TRM, ModuleProtocol, TRM1ConfigProtocol, TRM1Protocol
 from optimizer import DummyOptimizer, Muon
 from torch import Tensor, nn
 from torch.optim import AdamW
@@ -163,7 +163,7 @@ class ExperimentBase:
     jsd_weight_final: float = 0.1
     jsd_warmup_steps: int = 2000
 
-    config: TRM.Config = TRM.Config()
+    config: TRM1ConfigProtocol = TRM.Config()
 
     def __init__(self):
         """Set self.model before calling super().__init__()."""
@@ -171,7 +171,10 @@ class ExperimentBase:
         if not hasattr(self, "device"):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = self.config.dtype
-        self.model = self.config.setup().to(device=self.device, dtype=self.dtype)
+        self.model = cast(
+            TRM1Protocol,
+            cast(object, self.config.setup().to(device=self.device, dtype=self.dtype)),
+        )
 
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
 

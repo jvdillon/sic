@@ -1,7 +1,7 @@
 """x182g: x182a without random init and with q_halt warmup (force H=1 for first 4k steps)."""
 
 from experiment import main
-from model import TRM3
+from model import TRM3, TRM3ConfigProtocol
 from x182 import Experiment as Experiment182
 
 
@@ -10,7 +10,7 @@ class Experiment(Experiment182):
         0: (1, False),
         2000: (16, True),
     }
-    config: TRM3.Config = TRM3.Config(
+    config: TRM3ConfigProtocol = TRM3.Config(
         K_H=1,
         K_L=4,
         carry_H="copy_top1",
