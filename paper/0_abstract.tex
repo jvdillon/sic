@@ -36,7 +36,7 @@
 % x182l  | 44   | 98.90% | 97.36% |
 % x182ll | 45   | 98.81% | 97.12% |
 % -----------------------------------------------------------------------------
-% Mean: 98.68% cell, 96.80% puzzle (± 0.81%, range 95.65-97.38%)
+% Mean: 98.72% cell, 96.88% puzzle (± 0.72%, range 95.65-97.38%)
 %
 % WTA K=4 WITH ACT WARMUP (H=1 for first 2k steps) - 36k steps, bs=192
 % -----------------------------------------------------------------------------
@@ -77,7 +77,7 @@
 % =============================================================================
 % Baseline (K=1):           85.5% ± 1.3% puzzle, 94.5% cell [x182{m,n,o,p}]
 % WTA fresh (K=4):          96.9% ± 0.6% puzzle, 98.7% cell [x182{a,b,c,d}]
-% WTA fixed (K=4):          96.8% ± 0.8% puzzle, 98.7% cell [x182{j,k,l}]
+% WTA fixed (K=4):          96.9% ± 0.7% puzzle, 98.7% cell [x182{j,k,l,ll}]
 % TTA-8:                    97.3% puzzle [x00 with 8 rotations]
 % Halt-first (12 chains):   97.2% puzzle [x02,x03,x04 × 4 rotations]
 % Prob-avg (12 chains):     91.5% puzzle [x02,x03,x04 × 4 rotations]
@@ -86,8 +86,8 @@
 
 Biological neural systems must be fast but are energy-constrained. Evolution's solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat \emph{when} a neuron fires as an expression of confidence.
 
-We apply this principle to ensembles of Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm}. On Sudoku-Extreme, halt-first selection achieves 97\% accuracy vs.\ 91\% for probability averaging---while requiring 10$\times$ fewer reasoning steps. A single baseline model achieves 85.5\% $\pm$ 1.3\%.
+We apply this principle to Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm}. On Sudoku-Extreme, a baseline TRM achieves 85.5\% $\pm$ 1.3\%. But a key diagnostic reveals untapped potential: 89\% of failures are \emph{selection} problems---the model can solve these puzzles with a different random initialization. The true capability ceiling is 99\%, not 86\%.
 
-Can we internalize this as a training-only cost? Yes: by maintaining $K{=}4$ parallel latent states but backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} accuracy---matching ensemble performance at 1$\times$ inference cost, with less than half the variance of the baseline. A key diagnostic: 89\% of baseline failures are \emph{selection} problems, revealing a 99\% accuracy ceiling.
+Halt-first ensembling unlocks this potential: by selecting the first model to halt, we achieve 97\% accuracy vs.\ 91\% for probability averaging---while requiring 10$\times$ fewer reasoning steps. But can we internalize this as a training-only cost? Yes: by maintaining $K{=}4$ parallel latent states and backpropping only through the lowest-loss ``winner,'' we achieve \textbf{96.9\% $\pm$ 0.6\%} accuracy---matching ensemble performance at 1$\times$ inference cost.
 
-As in nature, this work was also resource constrained: all experiments used a single RTX 5090. A modified SwiGLU~\citep{shazeer2020swiglu} made Muon~\citep{jordan2024muon} and high LR viable, enabling baseline training in 48 minutes and full WTA ($K{=}4$) in 6 hours on consumer hardware.
+As in nature, this work was also resource constrained: all experiments used a single RTX 5090. A modified SwiGLU~\citep{shazeer2020swiglu} made Muon~\citep{jordan2024muon} and high LR viable, enabling baseline training in 48 minutes and full WTA ($K{=}4$) in 6 hours---compared to TRM's 20 hours on an L40S.

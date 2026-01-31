@@ -36,9 +36,9 @@ signal with a maximum of 16 reasoning steps.
 % | e        | True (trunc\_randn)    | No           | Outlier     | 82.9% (drop)  |
 % | f,h      | True (trunc\_randn)    | Yes (2k)     | Done        | 94.4% mean    |
 % | g,i      | False (Buffer)  | Yes (2k)     | Done        | 96.2% mean    |
-% | j,k,l    | False (Buffer)  | No           | Done        | 96.8% ± 0.8%  |
+% | j,k,l,ll | False (Buffer)  | No           | Done        | 96.9% ± 0.7%  |
 %
-% KEY FINDING: fresh init (96.9%) ≈ fixed init (96.8%)
+% KEY FINDING: fresh init (96.9%) ≈ fixed init (96.9%)
 % This shows 4 fixed heads capture sufficient diversity; no need for fresh sampling.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
@@ -47,8 +47,8 @@ signal with a maximum of 16 reasoning steps.
 % - Halt-first 12 chains: 97.2% [analysis/ENSEMBLE.md]
 % - x182{a,b,c,d} (trunc\_randn): 96.85% ± 0.58%, range 96.2-97.6%
 %   x182a: 97.64%, x182b: 96.16%, x182c: 96.46%, x182d: 97.16%
-% - x182{j,k,l} (Buffer): 96.80% ± 0.81%, range 95.65-97.38%
-%   x182j: 97.38%, x182k: 95.65%, x182l: 97.36%
+% - x182{j,k,l,ll} (Buffer): 96.88% ± 0.72%, range 95.65-97.38%
+%   x182j: 97.38%, x182k: 95.65%, x182l: 97.36%, x182ll: 97.12%
 \begin{table}[t]
 \centering
 \small
@@ -64,13 +64,13 @@ Halt-first (12 ch.) & n/a & 97.2\% & 1.5$\times$$^\dagger$ & 64.8 \\  % x02.log 
 \midrule
 \multicolumn{5}{@{}l}{\textit{WTA training (ours, $K{=}4$)}} \\
 \textbf{Fresh init} & \textbf{98.7\%} & \textbf{96.9$\pm$0.6\%} & \textbf{1$\times$} & \textbf{96.9} \\  % x182a.log, x182b.log, x182c.log, x182d.log
-Fixed init & 98.7\% & 96.8$\pm$0.8\% & 1$\times$ & 96.8 \\  % x182j.log, x182k.log, x182l.log
+Fixed init & 98.7\% & 96.9$\pm$0.7\% & 1$\times$ & 96.9 \\  % x182j.log, x182k.log, x182l.log, x182ll.log
 \bottomrule
 \end{tabular}
 \caption{Results on Sudoku-Extreme. Cost is inference cost relative to baseline.
 WTA achieves ${\sim}$\textbf{97\%} accuracy at 1$\times$ cost---Pareto-dominating
-all other methods. Fresh init is slightly better (96.9\% vs 96.8\%) with lower
-variance ($\pm$0.6\% vs $\pm$0.8\%).
+all other methods. Fresh and fixed init achieve equivalent accuracy (96.9\%);
+fresh has lower variance ($\pm$0.6\% vs $\pm$0.7\%).
 $^\dagger$Effective cost after early halting (86\% halt at step 0).
 $^\ddagger$Efficiency = Puzzle Acc / Cost.}
 \label{tab:main}
@@ -92,16 +92,16 @@ $^\ddagger$Efficiency = Puzzle Acc / Cost.}
         % Source: x182{a,b,c,d,j,k,l,m}.log
   \item \textbf{Initialization policy.}
       Fresh init (resample $z_L$ each forward pass) achieves 96.85\% $\pm$ 0.58\%;
-        fixed init (cache in buffer) achieves 96.80\% $\pm$ 0.81\%.
-        Fresh init is both slightly more accurate and has lower variance across seeds.
+        fixed init (cache in buffer) achieves 96.88\% $\pm$ 0.72\%.
+        Fresh init has slightly lower variance across seeds.
         % Source: x182{a,b,c,d}.log (K=4 trunc\_randn init):
         %   x=np.array([96.16, 96.46, 97.16, 97.64]) 96.85% ± 0.58%
         %   x.mean()   # 96.855
         %   x.std()    # 0.5805816049445609
         %   x.min()    # 96.16
         %   x.max()    # 97.64
-        % Source: x182{j,k,l}.log (K=4 fixed init):
-        %   x=np.array([97.38, 95.65, 97.36])  # Lacked time for 4. :(
+        % Source: x182{j,k,l,ll}.log (K=4 fixed init):
+        %   x=np.array([97.38, 95.65, 97.36, 97.12])  # 96.88% ± 0.72%
         %   x.mean()   # 96.79667
         %   x.std()    # 0.8108568855777711
         %   x.min()    # 95.65
@@ -115,14 +115,14 @@ $^\ddagger$Efficiency = Puzzle Acc / Cost.}
 % Source: figures/learning_curves.pdf generated from x182{a,b,c,d}.log
 % x182a: seed=42, 97.64%  x182b: seed=43, 96.16%
 % x182c: seed=44, 96.46%  x182d: seed=45, 97.16%
-% Mean: 96.85% ± 0.58% (fresh init); x182{j,k,l} fixed init achieves 96.8%
+% Mean: 96.85% ± 0.58% (fresh init); x182{j,k,l,ll} fixed init achieves 96.9%
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/learning_curves.pdf}
 \caption{Learning curves across seeds (fresh init). \textbf{Left:}
 Cell accuracy converges to 98.4--99.0\%. \textbf{Right:} Puzzle accuracy reaches
-96.2--97.6\% by 36k steps (mean 96.9\% $\pm$ 0.6\%). Fixed init achieves slightly
-lower accuracy (96.8\% $\pm$ 0.8\%). Dashed lines: baseline (85.5\%) and TTA-8 (97.3\%).}
+96.2--97.6\% by 36k steps (mean 96.9\% $\pm$ 0.6\%). Fixed init achieves similar
+accuracy (96.9\% $\pm$ 0.7\%). Dashed lines: baseline (85.5\%) and TTA-8 (97.3\%).}
 \label{fig:learning-curves}
 \end{figure}
 
