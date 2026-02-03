@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+import numpy as np
 import torch
 
 from data import augment_sudoku, GPUCachedSudoku
@@ -53,7 +54,6 @@ def _make_mock_dataset(n_samples: int, seq_len: int = 81):
 
 def _make_mock_group_indices(n_groups: int, augs_per_group: int):
     """Create group indices array for stratified sampling."""
-    import numpy as np
     return np.arange(0, n_groups * augs_per_group + 1, augs_per_group)
 
 
