@@ -1,10 +1,10 @@
+from code.dataset.common import PuzzleDatasetMetadata
 from pathlib import Path
 
 import csv
 import json
 
 from argdantic import ArgParser
-from code.dataset.common import PuzzleDatasetMetadata
 from huggingface_hub import hf_hub_download
 from pydantic import BaseModel
 from tqdm import tqdm

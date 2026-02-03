@@ -1,3 +1,8 @@
+from code.dataset.common import (
+    PuzzleDatasetMetadata,
+    dihedral_transform,
+    inverse_dihedral_transform,
+)
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,11 +12,6 @@ import hashlib
 import json
 
 from argdantic import ArgParser
-from code.dataset.common import (
-    PuzzleDatasetMetadata,
-    dihedral_transform,
-    inverse_dihedral_transform,
-)
 from pydantic import BaseModel
 
 import numpy as np

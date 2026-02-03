@@ -1,3 +1,4 @@
+from code.dataset.common import PuzzleDatasetMetadata, dihedral_transform
 from pathlib import Path
 from typing import Any
 
@@ -6,7 +7,6 @@ import json
 import math
 
 from argdantic import ArgParser
-from code.dataset.common import PuzzleDatasetMetadata, dihedral_transform
 from huggingface_hub import hf_hub_download
 from pydantic import BaseModel
 from tqdm import tqdm
