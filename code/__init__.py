@@ -1,2 +1,2 @@
-# type: ignore[reportShadowedImports]  # noqa: A005
+# pyright: ignore[reportShadowedImports]  # noqa: A005
 """Speed is Confidence."""
