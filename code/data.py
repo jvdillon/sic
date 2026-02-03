@@ -126,59 +126,21 @@ class GPUCachedSudoku:
                 device=self.device,
             )
             indices = self.group_starts + aug_offsets
-            if self.shuffle:
-                perm = torch.randperm(self.n_groups, device=self.device)
-                indices = indices[perm]
-            for i in range(0, self.n_groups, self.batch_size):
-                idx = indices[i : i + self.batch_size]
-                valid_count = len(idx)
-                if valid_count < self.batch_size:
-                    pad_size = self.batch_size - valid_count
-                    inputs_pad = torch.zeros(
-                        pad_size,
-                        *self.inputs.shape[1:],
-                        device=self.device,
-                        dtype=self.inputs.dtype,
-                    )
-                    labels_pad = torch.zeros(
-                        pad_size,
-                        *self.labels.shape[1:],
-                        device=self.device,
-                        dtype=self.labels.dtype,
-                    )
-                    yield (
-                        torch.cat([self.inputs[idx], inputs_pad]),
-                        torch.cat([self.labels[idx], labels_pad]),
-                        valid_count,
-                    )
-                else:
-                    yield (self.inputs[idx], self.labels[idx], valid_count)
+            n_samples = self.n_groups
         else:
-            if self.shuffle:
-                indices = torch.randperm(self.n, device=self.device)
-            else:
-                indices = torch.arange(self.n, device=self.device)
-            for i in range(0, self.n, self.batch_size):
-                idx = indices[i : i + self.batch_size]
-                valid_count = len(idx)
-                if valid_count < self.batch_size:
-                    pad_size = self.batch_size - valid_count
-                    inputs_pad = torch.zeros(
-                        pad_size,
-                        *self.inputs.shape[1:],
-                        device=self.device,
-                        dtype=self.inputs.dtype,
-                    )
-                    labels_pad = torch.zeros(
-                        pad_size,
-                        *self.labels.shape[1:],
-                        device=self.device,
-                        dtype=self.labels.dtype,
-                    )
-                    yield (
-                        torch.cat([self.inputs[idx], inputs_pad]),
-                        torch.cat([self.labels[idx], labels_pad]),
-                        valid_count,
-                    )
-                else:
-                    yield (self.inputs[idx], self.labels[idx], valid_count)
+            indices = torch.arange(self.n, device=self.device)
+            n_samples = self.n
+
+        if self.shuffle:
+            perm = torch.randperm(n_samples, device=self.device)
+            indices = indices[perm]
+
+        for i in range(0, n_samples, self.batch_size):
+            idx = indices[i : i + self.batch_size]
+            valid_count = len(idx)
+            inputs, labels = self.inputs[idx], self.labels[idx]
+            if valid_count < self.batch_size:
+                pad_size = self.batch_size - valid_count
+                inputs = torch.cat([inputs, inputs.new_zeros(pad_size, *inputs.shape[1:])])
+                labels = torch.cat([labels, labels.new_zeros(pad_size, *labels.shape[1:])])
+            yield inputs, labels, valid_count
