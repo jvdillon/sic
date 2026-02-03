@@ -21,7 +21,7 @@ from util import set_seed
 
 import torch
 
-from data import GPUCachedSudoku, augment_sudoku
+from data import PuzzleDatasetIterator, augment_sudoku
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")
@@ -123,10 +123,9 @@ class Experiment:
     def make_train_loader(self):
         assert self.device is not None
         assert self.dtype is not None
-        return GPUCachedSudoku(
+        return PuzzleDatasetIterator(
             data_dir=self.data_dir,
             device=self.device,
-            dtype=self.dtype,
             batch_size=self.batch_size,
             train=True,
         )
@@ -139,10 +138,9 @@ class Experiment:
             if self.eval_batch_size is not None
             else self.batch_size
         )
-        return GPUCachedSudoku(
+        return PuzzleDatasetIterator(
             data_dir=self.data_dir,
             device=self.device,
-            dtype=self.dtype,
             batch_size=bs,
             train=False,
             shuffle=False,
@@ -190,7 +188,7 @@ class Experiment:
         # WTA forward pass (samples heads, computes losses, updates carry)
         assert self.device is not None
         inputs_with_halt = self._prepend_halt_token(carry["inputs"])
-        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             out = self.model.wta_forward(  # pyright: ignore[reportCallIssue]
                 inputs_with_halt,
                 carry["model_carry"],

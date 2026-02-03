@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from unittest import mock
+from pathlib import Path
+
+import json
+import tempfile
+
+from util import set_seed
 
 import numpy as np
 import torch
 
-from data import GPUCachedSudoku, augment_sudoku
+from data import PuzzleDatasetIterator, augment_sudoku, load_puzzle_dataset
 
 
 def test_augment_sudoku_shapes():
@@ -42,155 +47,455 @@ def test_augment_sudoku_deterministic_with_seed():
     assert torch.equal(out1[1], out2[1])
 
 
-def _make_mock_dataset(n_samples: int, seq_len: int = 81):
-    """Create mock dataset dict for testing."""
-    return {
-        "inputs": torch.arange(n_samples).unsqueeze(1).expand(-1, seq_len),
-        "labels": torch.arange(n_samples).unsqueeze(1).expand(-1, seq_len) + 100,
-        "vocab_size": 11,
-        "seq_len": seq_len,
-    }
+class TestBackwardCompatibility:
+    """Verify new loader matches old loader behavior exactly."""
 
+    def test_stratified_sampling_matches_old_loader(self):
+        """New loader produces exact same indices as old loader for Sudoku."""
+        n_puzzles, augs_per_puzzle, batch_size = 10, 100, 4
 
-def _make_mock_group_indices(n_groups: int, augs_per_group: int):
-    """Create group indices array for stratified sampling."""
-    return np.arange(0, n_groups * augs_per_group + 1, augs_per_group)
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-
-class TestGPUCachedSudokuIter:
-    """Tests for GPUCachedSudoku.__iter__."""
-
-    def test_non_stratified_visits_all_samples(self):
-        """Each sample visited exactly once per epoch."""
-        n_samples, batch_size = 10, 3
-        mock_data = _make_mock_dataset(n_samples)
-
-        with mock.patch("data.load_sudoku_dataset", return_value=mock_data):
-            loader = GPUCachedSudoku(
-                data_dir="/fake",
+            # Run new loader (for Sudoku, both sampling modes are equivalent)
+            set_seed(42)
+            new_loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
                 device=torch.device("cpu"),
-                dtype=None,
                 batch_size=batch_size,
-                train=False,
+                train=True,
+                shuffle=False,  # No shuffle so we can compare indices directly
+                stratified=True,
+            )
+            new_indices = []
+            for inputs, _, _, vc in new_loader:
+                new_indices.extend(inputs[:vc, 0].tolist())
+
+            # Run old loader logic manually (from origin/main)
+            set_seed(42)
+            group_starts = torch.arange(0, n_puzzles * augs_per_puzzle, augs_per_puzzle)
+            aug_offsets = torch.randint(0, augs_per_puzzle, (n_puzzles,))
+            old_indices = (group_starts + aug_offsets).tolist()
+
+            assert new_indices == old_indices, (
+                f"New loader indices don't match old loader!\n"
+                f"New: {new_indices}\nOld: {old_indices}"
+            )
+
+    def test_non_stratified_matches_old_loader(self):
+        """Non-stratified mode produces same sequential iteration."""
+        n_puzzles, augs_per_puzzle, batch_size = 5, 4, 3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
+            n_samples = n_puzzles * augs_per_puzzle
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=False,  # Non-stratified
                 shuffle=False,
                 stratified=False,
             )
 
-        all_indices = []
-        for inputs, _, valid_count in loader:
-            all_indices.extend(inputs[:valid_count, 0].tolist())
+            all_indices = []
+            for inputs, _, _, vc in loader:
+                all_indices.extend(inputs[:vc, 0].tolist())
 
-        assert sorted(all_indices) == list(range(n_samples))
+            assert all_indices == list(range(n_samples))
 
-    def test_non_stratified_padding(self):
-        """Final batch padded to batch_size with valid_count correct."""
-        n_samples, batch_size = 10, 4
-        mock_data = _make_mock_dataset(n_samples)
 
-        with mock.patch("data.load_sudoku_dataset", return_value=mock_data):
-            loader = GPUCachedSudoku(
-                data_dir="/fake",
-                device=torch.device("cpu"),
-                dtype=None,
-                batch_size=batch_size,
-                train=False,
-                shuffle=False,
-                stratified=False,
+class TestSudokuDataset:
+    """Tests for Sudoku dataset format."""
+
+    def test_loads_correct_shapes(self):
+        n_puzzles, augs_per_puzzle, seq_len = 5, 10, 81
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(
+                Path(tmp), n_puzzles, augs_per_puzzle, seq_len
             )
 
-        batches = list(loader)
-        assert len(batches) == 3  # ceil(10/4) = 3
+            data = load_puzzle_dataset(str(data_dir), "train")
 
-        # Last batch should be padded
-        inputs, _, valid_count = batches[-1]
-        assert inputs.shape[0] == batch_size
-        assert valid_count == 2  # 10 % 4 = 2
+            assert data["inputs"].shape == (n_puzzles * augs_per_puzzle, seq_len)
+            assert data["labels"].shape == (n_puzzles * augs_per_puzzle, seq_len)
+            assert data["vocab_size"] == 11
+            assert data["seq_len"] == seq_len
 
-    def test_shuffle_changes_order(self):
-        """Shuffle produces different orderings."""
-        n_samples, batch_size = 20, 5
-        mock_data = _make_mock_dataset(n_samples)
+    def test_stratified_visits_each_group_once(self):
+        n_puzzles, augs_per_puzzle, batch_size = 8, 50, 3
 
-        with mock.patch("data.load_sudoku_dataset", return_value=mock_data):
-            loader = GPUCachedSudoku(
-                data_dir="/fake",
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
                 device=torch.device("cpu"),
-                dtype=None,
-                batch_size=batch_size,
-                train=False,
-                shuffle=True,
-                stratified=False,
-            )
-
-        torch.manual_seed(1)
-        order1 = [inputs[:vc, 0].tolist() for inputs, _, vc in loader]
-
-        torch.manual_seed(2)
-        order2 = [inputs[:vc, 0].tolist() for inputs, _, vc in loader]
-
-        assert order1 != order2  # Different seeds -> different order
-
-    def test_stratified_picks_one_aug_per_group(self):
-        """Stratified sampling visits each group exactly once."""
-        n_groups, augs_per_group, batch_size = 5, 4, 2
-        n_samples = n_groups * augs_per_group
-        mock_data = _make_mock_dataset(n_samples)
-        mock_group_idx = _make_mock_group_indices(n_groups, augs_per_group)
-
-        with (
-            mock.patch("data.load_sudoku_dataset", return_value=mock_data),
-            mock.patch("numpy.load", return_value=mock_group_idx),
-        ):
-            loader = GPUCachedSudoku(
-                data_dir="/fake",
-                device=torch.device("cpu"),
-                dtype=None,
                 batch_size=batch_size,
                 train=True,
                 shuffle=False,
                 stratified=True,
             )
 
-        all_indices = []
-        for inputs, _, valid_count in loader:
-            all_indices.extend(inputs[:valid_count, 0].tolist())
+            all_indices = []
+            for inputs, _, _, vc in loader:
+                all_indices.extend(inputs[:vc, 0].tolist())
 
-        # Should have exactly n_groups samples (one per group)
-        assert len(all_indices) == n_groups
+            # Should have exactly n_puzzles samples
+            assert len(all_indices) == n_puzzles
 
-        # Each index should be within its group's range
-        groups_visited = [idx // augs_per_group for idx in all_indices]
-        assert sorted(groups_visited) == list(range(n_groups))
+            # Each index should map to a different group
+            groups = [idx // augs_per_puzzle for idx in all_indices]
+            assert sorted(groups) == list(range(n_puzzles))
 
-    def test_stratified_different_augs_each_epoch(self):
-        """Different epochs pick different augmentations."""
-        n_groups, augs_per_group, batch_size = 5, 4, 10
-        n_samples = n_groups * augs_per_group
-        mock_data = _make_mock_dataset(n_samples)
-        mock_group_idx = _make_mock_group_indices(n_groups, augs_per_group)
 
-        with (
-            mock.patch("data.load_sudoku_dataset", return_value=mock_data),
-            mock.patch("numpy.load", return_value=mock_group_idx),
-        ):
-            loader = GPUCachedSudoku(
-                data_dir="/fake",
+class TestMazeDataset:
+    """Tests for Maze dataset format."""
+
+    def test_loads_correct_shapes(self):
+        n_puzzles, augs_per_puzzle, seq_len = 5, 10, 225
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_maze_dataset(
+                Path(tmp), n_puzzles, augs_per_puzzle, seq_len
+            )
+
+            data = load_puzzle_dataset(str(data_dir), "train")
+
+            assert data["inputs"].shape == (n_puzzles * augs_per_puzzle, seq_len)
+            assert data["seq_len"] == seq_len
+            assert data["vocab_size"] == 5
+
+    def test_stratified_iteration(self):
+        n_puzzles, augs_per_puzzle, batch_size = 6, 20, 4
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_maze_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
                 device=torch.device("cpu"),
-                dtype=None,
                 batch_size=batch_size,
                 train=True,
                 shuffle=False,
                 stratified=True,
             )
 
-        torch.manual_seed(1)
-        indices1 = [inputs[:vc, 0].tolist() for inputs, _, vc in loader]
+            all_indices = []
+            for inputs, _, _, vc in loader:
+                all_indices.extend(inputs[:vc, 0].tolist())
 
-        torch.manual_seed(2)
-        indices2 = [inputs[:vc, 0].tolist() for inputs, _, vc in loader]
+            assert len(all_indices) == n_puzzles
+            groups = [idx // augs_per_puzzle for idx in all_indices]
+            assert sorted(groups) == list(range(n_puzzles))
 
-        # Different seeds should pick different augmentations
-        assert indices1 != indices2
+
+class TestARCDataset:
+    """Tests for ARC dataset format (multi-example)."""
+
+    def test_loads_correct_shapes(self):
+        n_groups, puzzles_per_group, examples_per_puzzle = 3, 4, 5
+        seq_len = 900
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_arc_dataset(
+                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle, seq_len
+            )
+
+            data = load_puzzle_dataset(str(data_dir), "train")
+
+            n_puzzles = n_groups * puzzles_per_group
+            n_examples = n_puzzles * examples_per_puzzle
+
+            assert data["inputs"].shape == (n_examples, seq_len)
+            assert data["puzzle_identifiers"] is not None
+            assert data["puzzle_identifiers"].shape == (n_puzzles,)
+
+    def test_stratified_single_visits_each_group_once(self):
+        """With sampling='single', visits each group exactly once."""
+        n_groups, puzzles_per_group, examples_per_puzzle = 4, 3, 5
+        batch_size = 2
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_arc_dataset(
+                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+            )
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=True,
+                shuffle=False,
+                stratified=True,
+                sampling="single",
+            )
+
+            all_example_indices = []
+            all_puzzle_ids = []
+            for inputs, _, puzzle_ids, vc in loader:
+                all_example_indices.extend(inputs[:vc, 0].tolist())
+                all_puzzle_ids.extend(puzzle_ids[:vc].tolist())
+
+            # Should have n_groups samples (one per group)
+            assert len(all_example_indices) == n_groups
+
+            # Each example index should be valid
+            n_examples = n_groups * puzzles_per_group * examples_per_puzzle
+            for idx in all_example_indices:
+                assert 0 <= idx < n_examples
+
+            # Puzzle IDs should map to different groups
+            groups = [pid // puzzles_per_group for pid in all_puzzle_ids]
+            assert sorted(groups) == list(range(n_groups))
+
+    def test_stratified_pack_packs_multiple_examples(self):
+        """With sampling='pack' (default), packs multiple examples from puzzle."""
+        n_groups, puzzles_per_group, examples_per_puzzle = 4, 3, 5
+        batch_size = 8  # Larger than examples_per_puzzle to test packing
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_arc_dataset(
+                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+            )
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=True,
+                shuffle=False,
+                stratified=True,
+                sampling="pack",
+            )
+
+            all_example_indices = []
+            all_puzzle_ids = []
+            for inputs, _, puzzle_ids, vc in loader:
+                all_example_indices.extend(inputs[:vc, 0].tolist())
+                all_puzzle_ids.extend(puzzle_ids[:vc].tolist())
+
+            # With pack mode, we should have more samples than groups
+            # (up to examples_per_puzzle per group)
+            assert len(all_example_indices) >= n_groups
+
+            # Each group should be visited (check via puzzle_ids)
+            groups_visited = {pid // puzzles_per_group for pid in all_puzzle_ids}
+            assert groups_visited == set(range(n_groups))
+
+    def test_puzzle_ids_correct_for_examples(self):
+        """Verify puzzle_ids correctly identifies which puzzle each example belongs to."""
+        n_groups, puzzles_per_group, examples_per_puzzle = 2, 2, 3
+        batch_size = 10
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_arc_dataset(
+                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+            )
+
+            # Test with pack mode (default) - puzzle_ids should still be correct
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=True,
+                shuffle=False,
+                stratified=True,
+                sampling="pack",
+            )
+
+            for inputs, _, puzzle_ids, vc in loader:
+                for i in range(vc):
+                    example_idx = inputs[i, 0].item()
+                    puzzle_id = puzzle_ids[i].item()
+                    # Example index should be in the range for this puzzle
+                    expected_puzzle = example_idx // examples_per_puzzle
+                    assert puzzle_id == expected_puzzle, (
+                        f"Example {example_idx} should have puzzle_id {expected_puzzle}, "
+                        f"got {puzzle_id}"
+                    )
+
+
+class TestPuzzleDatasetIterator:
+    """General tests for PuzzleDatasetIterator."""
+
+    def test_padding_last_batch(self):
+        n_puzzles, augs_per_puzzle, batch_size = 3, 2, 4
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=False,
+                shuffle=False,
+                stratified=False,
+            )
+
+            batches = list(loader)
+            assert len(batches) == 2  # ceil(6/4) = 2
+
+            # First batch: 4 valid
+            inputs, _, _, vc = batches[0]
+            assert inputs.shape[0] == batch_size
+            assert vc == 4
+
+            # Second batch: 2 valid, 2 padded
+            inputs, _, _, vc = batches[1]
+            assert inputs.shape[0] == batch_size
+            assert vc == 2
+
+    def test_gpu_cache_false(self):
+        """Test that gpu_cache=False keeps data on CPU until batch time."""
+        n_puzzles, augs_per_puzzle, batch_size = 3, 2, 2
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=False,
+                shuffle=False,
+                stratified=False,
+                gpu_cache=False,
+            )
+
+            # Data should be on CPU
+            assert loader.inputs.device == torch.device("cpu")
+
+            # Iteration should still work
+            all_indices = []
+            for inputs, _, _, vc in loader:
+                all_indices.extend(inputs[:vc, 0].tolist())
+
+            assert sorted(all_indices) == list(range(n_puzzles * augs_per_puzzle))
+
+
+# --- Private test helpers ---
+
+
+def _create_sudoku_dataset(
+    tmp_path: Path,
+    n_puzzles: int,
+    augs_per_puzzle: int,
+    seq_len: int = 81,
+    vocab_size: int = 11,
+) -> Path:
+    """Create a Sudoku-style dataset on disk (both train and test splits).
+
+    File structure mirrors real datasets in /opt/scratch/datasets/:
+      {split}/all__inputs.npy        - [n_samples, seq_len] int32
+      {split}/all__labels.npy        - [n_samples, seq_len] int32
+      {split}/all__group_indices.npy - [n_groups + 1] boundary array
+      {split}/all__puzzle_indices.npy - [n_samples + 1] sequential (single-example)
+      {split}/dataset.json           - {vocab_size, seq_len}
+    """
+    n_samples = n_puzzles * augs_per_puzzle
+
+    for split in ["train", "test"]:
+        split_path = tmp_path / split
+        split_path.mkdir()
+
+        # Create data where sample i has value i in first position (for easy tracking)
+        inputs = np.arange(n_samples, dtype=np.int32).reshape(-1, 1)
+        inputs = np.broadcast_to(inputs, (n_samples, seq_len)).copy()
+        labels = inputs + 100
+
+        np.save(split_path / "all__inputs.npy", inputs)
+        np.save(split_path / "all__labels.npy", labels)
+
+        # Group indices: [0, augs, 2*augs, ..., n_samples]
+        group_indices = np.arange(0, n_samples + 1, augs_per_puzzle)
+        np.save(split_path / "all__group_indices.npy", group_indices)
+
+        # Puzzle indices: for single-example, just [0, 1, 2, ..., n_samples]
+        puzzle_indices = np.arange(n_samples + 1)
+        np.save(split_path / "all__puzzle_indices.npy", puzzle_indices)
+
+        with (split_path / "dataset.json").open("w") as f:
+            json.dump({"vocab_size": vocab_size, "seq_len": seq_len}, f)
+
+    return tmp_path
+
+
+def _create_maze_dataset(
+    tmp_path: Path,
+    n_puzzles: int,
+    augs_per_puzzle: int,
+    seq_len: int = 225,  # 15x15 maze
+    vocab_size: int = 5,
+) -> Path:
+    """Create a Maze-style dataset on disk (both train and test splits).
+
+    Maze format is identical to Sudoku, just different seq_len/vocab_size.
+    """
+    return _create_sudoku_dataset(
+        tmp_path, n_puzzles, augs_per_puzzle, seq_len, vocab_size
+    )
+
+
+def _create_arc_dataset(
+    tmp_path: Path,
+    n_groups: int,
+    puzzles_per_group: int,
+    examples_per_puzzle: int,
+    seq_len: int = 900,  # 30x30 grid
+    vocab_size: int = 11,
+) -> Path:
+    """Create an ARC-style dataset on disk (multi-example, both train and test).
+
+    ARC differs from Sudoku/Maze:
+      - Multiple examples per puzzle (input-output pairs)
+      - puzzle_indices has gaps (non-sequential)
+      - puzzle_identifiers maps puzzle index to ID
+
+    File structure:
+      {split}/all__inputs.npy             - [n_examples, seq_len]
+      {split}/all__labels.npy             - [n_examples, seq_len]
+      {split}/all__puzzle_identifiers.npy - [n_puzzles] puzzle IDs
+      {split}/all__group_indices.npy      - [n_groups + 1] group boundaries
+      {split}/all__puzzle_indices.npy     - [n_puzzles + 1] example boundaries
+      {split}/dataset.json                - {vocab_size, seq_len}
+    """
+    n_puzzles = n_groups * puzzles_per_group
+    n_examples = n_puzzles * examples_per_puzzle
+
+    for split in ["train", "test"]:
+        split_path = tmp_path / split
+        split_path.mkdir()
+
+        # Create data where example i has value i in first position
+        inputs = np.arange(n_examples, dtype=np.int32).reshape(-1, 1)
+        inputs = np.broadcast_to(inputs, (n_examples, seq_len)).copy()
+        labels = inputs + 100
+
+        np.save(split_path / "all__inputs.npy", inputs)
+        np.save(split_path / "all__labels.npy", labels)
+
+        # Puzzle identifiers: one per puzzle (not per example)
+        puzzle_identifiers = np.arange(n_puzzles, dtype=np.int32)
+        np.save(split_path / "all__puzzle_identifiers.npy", puzzle_identifiers)
+
+        # Group indices: maps group -> first puzzle index
+        # [0, puzzles_per_group, 2*puzzles_per_group, ..., n_puzzles]
+        group_indices = np.arange(0, n_puzzles + 1, puzzles_per_group)
+        np.save(split_path / "all__group_indices.npy", group_indices)
+
+        # Puzzle indices: maps puzzle -> first example index
+        # [0, examples_per_puzzle, 2*examples_per_puzzle, ..., n_examples]
+        puzzle_indices = np.arange(0, n_examples + 1, examples_per_puzzle)
+        np.save(split_path / "all__puzzle_indices.npy", puzzle_indices)
+
+        with (split_path / "dataset.json").open("w") as f:
+            json.dump({"vocab_size": vocab_size, "seq_len": seq_len}, f)
+
+    return tmp_path
 
 
 if __name__ == "__main__":

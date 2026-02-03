@@ -22,7 +22,7 @@ from util import Tee, numpy_rng, set_seed
 import numpy as np
 import torch
 
-from data import GPUCachedSudoku, augment_sudoku
+from data import PuzzleDatasetIterator, augment_sudoku
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")
@@ -59,7 +59,10 @@ def _get_next_puzzle(state: _PuzzleIterState) -> tuple[Tensor | None, Tensor | N
         batch = next(state.puzzle_iter)
         state.pending_inputs = batch[0]
         state.pending_labels = batch[1]
-        state.pending_valid = batch[2] if len(batch) > 2 else batch[0].shape[0]
+        # batch[3] is valid_count: number of non-padded samples in the batch.
+        # Last batch may be zero-padded to batch_size; valid_count indicates
+        # how many samples are real data vs padding.
+        state.pending_valid = batch[3]
         state.pending_idx = 0
         if state.pending_valid > 0:
             assert state.pending_inputs is not None
@@ -277,10 +280,9 @@ class ExperimentBase:
         return batch[0].to(self.device), batch[1].to(self.device)
 
     def make_train_loader(self):
-        return GPUCachedSudoku(
+        return PuzzleDatasetIterator(
             data_dir=self.data_dir,
             device=self.device,
-            dtype=self.dtype,
             batch_size=self.batch_size,
             train=True,
         )
@@ -291,10 +293,9 @@ class ExperimentBase:
             if self.eval_batch_size is not None
             else self.batch_size
         )
-        return GPUCachedSudoku(
+        return PuzzleDatasetIterator(
             data_dir=self.data_dir,
             device=self.device,
-            dtype=self.dtype,
             batch_size=bs,
             train=False,
             shuffle=False,
@@ -366,7 +367,7 @@ class ExperimentBase:
         z_H = carry["z_H"]
         z_L = carry["z_L"]
 
-        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             # Call forward which runs H_cycles internally
             out = self.model(inputs_with_halt, z_H, z_L)
             logits = out["logits"][:, 1:]  # Strip halt position
@@ -533,7 +534,7 @@ class ExperimentBase:
             inputs_with_halt.unsqueeze(1).expand(B, self.K, -1).reshape(B * self.K, -1)
         )
 
-        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             out = self.model(inputs_batched, z_H=z_H_batched, z_L=z_L_batched)
 
         # Reshape outputs back: [B*K, ...] -> [B, K, ...]
@@ -721,7 +722,7 @@ class ExperimentBase:
             inputs_with_halt.unsqueeze(1).expand(B, self.K, -1).reshape(B * self.K, -1)
         )
 
-        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             out = self.model(inputs_batched, z_H=z_H_batched, z_L=z_L_batched)
 
         logits_all = out["logits"][:, 1:].reshape(B, self.K, 81, -1)
@@ -976,7 +977,9 @@ class ExperimentBase:
                 batch = next(puzzle_iter)
                 pending_inputs = batch[0]
                 pending_labels = batch[1]
-                pending_valid = batch[2] if len(batch) > 2 else batch[0].shape[0]
+                # batch[3] is valid_count: number of non-padded samples (last batch
+                # may be zero-padded to batch_size).
+                pending_valid = batch[3]
                 pending_idx = 0
                 if pending_valid > 0:
                     inp = pending_inputs[pending_idx]
@@ -1010,7 +1013,7 @@ class ExperimentBase:
             while valid.any():
                 # Forward pass
                 inputs_with_halt = torch.cat([halt_token, inputs], dim=1)
-                with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+                with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self.model(inputs_with_halt, z_H, z_L)
 
                 z_H = out["z_H"]
@@ -1165,7 +1168,7 @@ class ExperimentBase:
                     .reshape(B * self.K, -1)
                 )
 
-                with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+                with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self.model(inputs_batched, z_H_batched, z_L_batched)
 
                 # Reshape outputs back: [B*K, ...] -> [B, K, ...]
@@ -1278,7 +1281,9 @@ class ExperimentBase:
 
                 inputs = batch[0].to(self.device)
                 labels = batch[1].to(self.device)
-                valid_count = batch[2] if len(batch) > 2 else inputs.shape[0]
+                # batch[3] is valid_count: number of non-padded samples (last batch
+                # may be zero-padded to batch_size).
+                valid_count = batch[3]
                 B = inputs.shape[0]
 
                 z_H, z_L = self._init_z(B)
@@ -1302,9 +1307,7 @@ class ExperimentBase:
 
                 out: dict[str, Tensor] = {}
                 for step in range(self.max_reasoning_steps):
-                    with torch.amp.autocast(
-                        device_type=self.device.type, dtype=self.dtype
-                    ):
+                    with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                         out = self.model(inputs_with_halt, z_H, z_L)
                     z_H = out["z_H"]
                     z_L = out["z_L"]
@@ -1356,7 +1359,7 @@ class ExperimentBase:
                         # Re-run H-cycles for stuck puzzles
                         out_retry: dict[str, Tensor] = {}
                         for _ in range(self.max_reasoning_steps):
-                            with torch.amp.autocast(
+                            with torch.autocast(
                                 device_type=self.device.type, dtype=self.dtype
                             ):
                                 out_retry = self.model(
@@ -1405,15 +1408,14 @@ class ExperimentBase:
                 # Use full batch to avoid torch.compile recompilation
                 sample_inputs = last_batch[0].to(self.device)
                 sample_labels = last_batch[1].to(self.device)
-                diag_valid = (
-                    last_batch[2] if len(last_batch) > 2 else sample_inputs.shape[0]
-                )
+                # batch[3] is valid_count: number of non-padded samples.
+                diag_valid = last_batch[3]
                 inputs_with_halt = self._prepend_halt_token(sample_inputs)
                 diag_B = sample_inputs.shape[0]
 
                 # Get per-H logits from single model call
                 z_H, z_L = self._init_z(diag_B)
-                with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+                with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self.model(inputs_with_halt, z_H, z_L)
                 all_logits = [lg[:, 1:] for lg in out["all_logits"]]
                 all_z_H = list(out["all_z_H"])
@@ -1429,9 +1431,7 @@ class ExperimentBase:
                 step_logits = []
                 step_q_halts = []
                 for _ in range(self.max_reasoning_steps):
-                    with torch.amp.autocast(
-                        device_type=self.device.type, dtype=self.dtype
-                    ):
+                    with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                         out = self.model.step(inputs_with_halt, z_H, z_L)
                     step_logits.append(out["logits"][:, 1:])
                     step_q_halts.append(out["q_halt"])

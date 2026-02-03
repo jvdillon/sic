@@ -670,6 +670,10 @@ class SwiGLU(nn.Module):
             if self.norm is None:
                 x = self.act(gate) * x
             else:
+                # When SwiGLU is `silu(gate) * x` then this is the same as:
+                # sigmoid(gate) * gate * x. But `gate * x` can have magnitude
+                # information which is problematic for Muon. So instead we norm
+                # just that part.
                 x = torch.sigmoid(gate) * self.norm(gate * x)
         else:
             x = self.act(x)

@@ -21,7 +21,7 @@ from util import set_seed
 
 import torch
 
-from data import GPUCachedSudoku, augment_sudoku
+from data import PuzzleDatasetIterator, augment_sudoku
 
 
 class ForwardResult(TypedDict):
@@ -103,8 +103,8 @@ class Experiment:
         self.halt_steps_histogram = [0] * max(
             v[0] for v in self.max_steps_schedule.values()
         )
-        self._train_loader: GPUCachedSudoku | None = None
-        self._data_iter: Iterator[tuple[Tensor, Tensor]] | None = None
+        self._train_loader: PuzzleDatasetIterator | None = None
+        self._data_iter: Iterator[tuple[Tensor, Tensor, Tensor, int]] | None = None
 
         self._state = TrainingState(
             num_chains=self.num_chains,
@@ -148,23 +148,21 @@ class Experiment:
             muon_lr=0.02,
         )
 
-    def make_train_loader(self) -> GPUCachedSudoku:
+    def make_train_loader(self) -> PuzzleDatasetIterator:
         assert self.device is not None
-        return GPUCachedSudoku(
+        return PuzzleDatasetIterator(
             data_dir=self.data_dir,
             device=self.device,
-            dtype=self.dtype,
             batch_size=self.batch_size,
             train=True,
         )
 
-    def make_test_loader(self) -> GPUCachedSudoku:
+    def make_test_loader(self) -> PuzzleDatasetIterator:
         assert self.device is not None
         bs = self.batch_size if self.eval_batch_size is None else self.eval_batch_size
-        return GPUCachedSudoku(
+        return PuzzleDatasetIterator(
             data_dir=self.data_dir,
             device=self.device,
-            dtype=self.dtype,
             batch_size=bs,
             train=False,
             shuffle=False,
@@ -396,7 +394,7 @@ class Experiment:
 
         # Forward all chains (active and inactive - padding for compile)
         assert self.device is not None
-        with torch.amp.autocast(device_type=self.device.type, dtype=self.dtype):
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             embeddings = self.model.embed_scale * self.model.embed_tokens(
                 tokens,
                 self.config.dtype,
@@ -477,12 +475,12 @@ class Experiment:
         if self._train_loader is None:
             self._train_loader = self.make_train_loader()
         if self._data_iter is None:
-            self._data_iter = iter(self._train_loader)  # pyright: ignore[reportAttributeAccessIssue]
+            self._data_iter = iter(self._train_loader)
         try:
-            batch = next(self._data_iter)  # pyright: ignore[reportArgumentType]
+            batch = next(self._data_iter)
         except StopIteration:
-            self._data_iter = iter(self._train_loader)  # pyright: ignore[reportAttributeAccessIssue]
-            batch = next(self._data_iter)  # pyright: ignore[reportArgumentType]
+            self._data_iter = iter(self._train_loader)
+            batch = next(self._data_iter)
         return batch[0].to(self.device), batch[1].to(self.device)
 
     # --- Evaluation ---

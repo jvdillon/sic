@@ -129,7 +129,7 @@ class AutocastWrapper:
         object.__setattr__(self, "_dtype", dtype)
 
     def __call__(self, x: Tensor) -> Tensor:
-        with torch.amp.autocast(
+        with torch.autocast(
             device_type=object.__getattribute__(self, "_device_type"),
             dtype=object.__getattribute__(self, "_dtype"),
             cache_enabled=False,

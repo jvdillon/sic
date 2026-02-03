@@ -1,2 +1,3 @@
-# noqa: A005
+# ruff: noqa: A005
+# pyright: basic
 """Speed is Confidence."""

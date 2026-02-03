@@ -317,7 +317,7 @@ def test_fast_eval_streaming_replacement():
 
     def fake_loader():
         for inp, lab in zip(all_inputs, all_labels, strict=False):
-            yield (inp, lab, 2)
+            yield (inp, lab, torch.zeros(2, dtype=torch.int32), 2)
 
     _, _ = exp.evaluate_act_haltfast(fake_loader())
 
@@ -385,7 +385,7 @@ def test_fast_eval_metrics_at_halt_time():
     labels = torch.full((B, 81), 5, dtype=torch.long)
 
     def fake_loader():
-        yield (inputs, labels, B)
+        yield (inputs, labels, torch.zeros(B, dtype=torch.int32), B)
 
     cell_acc, puzzle_acc = exp.evaluate_act_haltfast(fake_loader())
 
@@ -487,7 +487,12 @@ def test_eval_methods_consistent_k1():
 
     def make_loader():
         for i in range(0, n_puzzles, 2):
-            yield (inputs[i : i + 2], labels[i : i + 2], 2)
+            yield (
+                inputs[i : i + 2],
+                labels[i : i + 2],
+                torch.zeros(2, dtype=torch.int32),
+                2,
+            )
 
     # Test full eval
     exp_full = EvalTestExp()
