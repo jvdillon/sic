@@ -7,7 +7,7 @@ from unittest import mock
 import numpy as np
 import torch
 
-from data import augment_sudoku, GPUCachedSudoku
+from data import GPUCachedSudoku, augment_sudoku
 
 
 def test_augment_sudoku_shapes():
@@ -137,8 +137,10 @@ class TestGPUCachedSudokuIter:
         mock_data = _make_mock_dataset(n_samples)
         mock_group_idx = _make_mock_group_indices(n_groups, augs_per_group)
 
-        with mock.patch("data.load_sudoku_dataset", return_value=mock_data), \
-             mock.patch("numpy.load", return_value=mock_group_idx):
+        with (
+            mock.patch("data.load_sudoku_dataset", return_value=mock_data),
+            mock.patch("numpy.load", return_value=mock_group_idx),
+        ):
             loader = GPUCachedSudoku(
                 data_dir="/fake",
                 device=torch.device("cpu"),
@@ -167,8 +169,10 @@ class TestGPUCachedSudokuIter:
         mock_data = _make_mock_dataset(n_samples)
         mock_group_idx = _make_mock_group_indices(n_groups, augs_per_group)
 
-        with mock.patch("data.load_sudoku_dataset", return_value=mock_data), \
-             mock.patch("numpy.load", return_value=mock_group_idx):
+        with (
+            mock.patch("data.load_sudoku_dataset", return_value=mock_data),
+            mock.patch("numpy.load", return_value=mock_group_idx),
+        ):
             loader = GPUCachedSudoku(
                 data_dir="/fake",
                 device=torch.device("cpu"),

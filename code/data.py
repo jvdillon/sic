@@ -141,6 +141,10 @@ class GPUCachedSudoku:
             inputs, labels = self.inputs[idx], self.labels[idx]
             if valid_count < self.batch_size:
                 pad_size = self.batch_size - valid_count
-                inputs = torch.cat([inputs, inputs.new_zeros(pad_size, *inputs.shape[1:])])
-                labels = torch.cat([labels, labels.new_zeros(pad_size, *labels.shape[1:])])
+                inputs = torch.cat(
+                    [inputs, inputs.new_zeros(pad_size, *inputs.shape[1:])]
+                )
+                labels = torch.cat(
+                    [labels, labels.new_zeros(pad_size, *labels.shape[1:])]
+                )
             yield inputs, labels, valid_count
