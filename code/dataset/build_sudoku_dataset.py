@@ -4,13 +4,12 @@ import csv
 import json
 
 from argdantic import ArgParser
+from dataset.common import PuzzleDatasetMetadata
 from huggingface_hub import hf_hub_download
 from pydantic import BaseModel
 from tqdm import tqdm
 
 import numpy as np
-
-from .common import PuzzleDatasetMetadata
 
 
 cli = ArgParser()
@@ -92,7 +91,9 @@ def convert_subset(set_name: str, config: DataProcessConfig):
         total_samples = len(inputs)
         if config.subsample_size < total_samples:
             indices = rng.choice(
-                total_samples, size=config.subsample_size, replace=False
+                total_samples,
+                size=config.subsample_size,
+                replace=False,
             )
             inputs = [inputs[i] for i in indices]
             labels = [labels[i] for i in indices]
@@ -116,7 +117,7 @@ def convert_subset(set_name: str, config: DataProcessConfig):
     results["puzzle_indices"].append(0)
     results["group_indices"].append(0)
 
-    for orig_inp, orig_out in zip(tqdm(inputs), labels, strict=False):
+    for orig_inp, orig_out in zip(tqdm(inputs), labels, strict=True):
         for aug_idx in range(1 + num_augments):
             # First index is not augmented
             if aug_idx == 0:

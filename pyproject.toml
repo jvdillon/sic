@@ -26,7 +26,7 @@ dependencies = [
     "einshape",
     "jaxtyping",
     "numpy>=2.1",
-    # dataset/build_sudoku_dataset.py deps
+    # dataset/build_*_dataset.py deps
     "argdantic",
     "pydantic",
     "tqdm",
@@ -38,6 +38,7 @@ dev = [
     "codespell>=2.2.4",
     "gnureadline",
     "ipython",
+    "pre-commit>=3.5",
     "pytest>=7.0",
     "ruff>=0.8",
 ]
