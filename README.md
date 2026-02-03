@@ -25,9 +25,11 @@ uv sync
 uv run code/sudoku/x182.py  # Train K=4, for example.
 ```
 
-Much the code here builds on the excellent work of [Alexia
-Jolicoeur-Martineau](https://github.com/AlexiaJM) available from
-[TinyRecursiveModels](https://github.com/SamsungSAILMontreal/TinyRecursiveModels).
+Much of my code builds on the work of [Alexia
+Jolicoeur-Martineau](https://github.com/AlexiaJM) in the
+[TinyRecursiveModels](https://github.com/SamsungSAILMontreal/TinyRecursiveModels)
+repo which in turn built on the work of the [Sapient Inc](https://sapient.inc/)
+team in the [HRM](https://github.com/sapientinc/HRM) repo.
 
 ## Reference
 
@@ -45,7 +47,7 @@ If you find our work useful, please consider citing:
 }
 ```
 
-and the Tiny Recursive Models paper:
+and the Tiny Recursive Models (TRM) paper:
 
 ```bibtex
 @misc{jolicoeurmartineau2025morerecursivereasoningtiny,
@@ -56,6 +58,20 @@ and the Tiny Recursive Models paper:
       archivePrefix={arXiv},
       primaryClass={cs.LG},
       url={https://arxiv.org/abs/2510.04871},
+}
+```
+
+and the Hierarchical Reasoning Model (HRM) paper:
+
+```bibtex
+@misc{wang2025hierarchicalreasoningmodel,
+      title={Hierarchical Reasoning Model}, 
+      author={Guan Wang and Jin Li and Yuhao Sun and Xing Chen and Changling Liu and Yue Wu and Meng Lu and Sen Song and Yasin Abbasi Yadkori},
+      year={2025},
+      eprint={2506.21734},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2506.21734}, 
 }
 ```
 

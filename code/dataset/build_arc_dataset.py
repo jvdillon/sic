@@ -7,7 +7,7 @@ import hashlib
 import json
 
 from argdantic import ArgParser
-from dataset.common import (
+from code.dataset.common import (
     PuzzleDatasetMetadata,
     dihedral_transform,
     inverse_dihedral_transform,

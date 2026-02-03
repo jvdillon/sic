@@ -6,7 +6,7 @@ import json
 import math
 
 from argdantic import ArgParser
-from dataset.common import PuzzleDatasetMetadata, dihedral_transform
+from code.dataset.common import PuzzleDatasetMetadata, dihedral_transform
 from huggingface_hub import hf_hub_download
 from pydantic import BaseModel
 from tqdm import tqdm
@@ -37,7 +37,11 @@ def convert_subset(set_name: str, config: DataProcessConfig) -> None:
     labels: list[np.ndarray] = []
 
     with Path(
-        hf_hub_download(config.source_repo, f"{set_name}.csv", repo_type="dataset"),
+        hf_hub_download(
+            config.source_repo,
+            f"{set_name}.csv",
+            repo_type="dataset",
+        ),
     ).open(newline="") as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header

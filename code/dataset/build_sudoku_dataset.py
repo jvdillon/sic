@@ -4,7 +4,7 @@ import csv
 import json
 
 from argdantic import ArgParser
-from dataset.common import PuzzleDatasetMetadata
+from code.dataset.common import PuzzleDatasetMetadata
 from huggingface_hub import hf_hub_download
 from pydantic import BaseModel
 from tqdm import tqdm
@@ -64,7 +64,11 @@ def convert_subset(set_name: str, config: DataProcessConfig):
     labels = []
 
     with Path(
-        hf_hub_download(config.source_repo, f"{set_name}.csv", repo_type="dataset"),
+        hf_hub_download(
+            config.source_repo,
+            f"{set_name}.csv",
+            repo_type="dataset",
+        ),
     ).open(newline="") as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header
@@ -76,13 +80,18 @@ def convert_subset(set_name: str, config: DataProcessConfig):
                 assert len(a) == 81
 
                 inputs.append(
-                    np.frombuffer(q.replace(".", "0").encode(), dtype=np.uint8).reshape(
-                        9, 9
-                    )
+                    np.frombuffer(
+                        q.replace(".", "0").encode(),
+                        dtype=np.uint8,
+                    ).reshape(9, 9)
                     - ord("0")
                 )
                 labels.append(
-                    np.frombuffer(a.encode(), dtype=np.uint8).reshape(9, 9) - ord("0")
+                    np.frombuffer(
+                        a.encode(),
+                        dtype=np.uint8,
+                    ).reshape(9, 9)
+                    - ord("0")
                 )
 
     # If subsample_size is specified for the training set,
