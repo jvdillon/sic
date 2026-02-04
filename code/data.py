@@ -280,6 +280,8 @@ class PuzzleDatasetIterator:
                 f"puzzle_indices must be 1D with at least 2 elements, "
                 f"got shape {puzzle_indices.shape}"
             )
+        if not torch.all(puzzle_indices[1:] >= puzzle_indices[:-1]):
+            raise ValueError("puzzle_indices must be monotonically increasing")
 
         # Detect multi-example datasets by checking if any puzzle has >1 example.
         # Single-example: puzzle_indices = [0, 1, 2, ..., n] (consecutive)
@@ -335,6 +337,8 @@ class PuzzleDatasetIterator:
                 f"group_indices must be 1D with at least 2 elements, "
                 f"got shape {group_indices.shape}"
             )
+        if not torch.all(group_indices[1:] >= group_indices[:-1]):
+            raise ValueError("group_indices must be monotonically increasing")
         self._n_puzzle_id_groups = len(group_indices) - 1
 
         # For single-example datasets, all groups have same size (precompute once).
