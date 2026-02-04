@@ -317,6 +317,43 @@ class TestARCDataset:
                         f"got {puzzle_id}"
                     )
 
+    def test_non_stratified_iterates_all_examples_sequentially(self):
+        """With stratified=False, iterates through all examples in order."""
+        n_groups, puzzles_per_group, examples_per_puzzle = 3, 2, 4
+        batch_size = 5
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_arc_dataset(
+                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+            )
+
+            n_examples = n_groups * puzzles_per_group * examples_per_puzzle
+
+            loader = PuzzleDatasetIterator(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=False,
+                shuffle=False,
+                stratified=False,
+            )
+
+            all_example_indices = []
+            all_puzzle_ids = []
+            for inputs, _, puzzle_ids, vc in loader:
+                all_example_indices.extend(inputs[:vc, 0].tolist())
+                all_puzzle_ids.extend(puzzle_ids[:vc].tolist())
+
+            # Should iterate through all examples in order
+            assert all_example_indices == list(range(n_examples))
+
+            # Puzzle IDs should correctly map each example to its puzzle
+            for example_idx, puzzle_id in zip(
+                all_example_indices, all_puzzle_ids, strict=True
+            ):
+                expected_puzzle = example_idx // examples_per_puzzle
+                assert puzzle_id == expected_puzzle
+
 
 class TestPuzzleDatasetIterator:
     """General tests for PuzzleDatasetIterator."""
