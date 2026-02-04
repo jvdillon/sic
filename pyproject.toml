@@ -21,6 +21,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "setuptools",
     "torch==2.9.0",
     "einops",
     "einshape",
