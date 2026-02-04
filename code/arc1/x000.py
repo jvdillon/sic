@@ -27,8 +27,8 @@ class Experiment(Experiment182):
     max_puzzle_ids_per_batch: int = 256  # Embedding table size for puzzle_ids
     total_train_steps: int = 8_000
     eval_every_steps: int = 500
-    batch_size: int = 32  # Reduced further for ARC memory requirements
-    eval_batch_size: int | None = 128
+    batch_size: int = 8  # Reduced further for ARC memory requirements
+    eval_batch_size: int | None = 32
     K: int = 1
 
     config: TRM3ConfigProtocol = TRM3.Config(
