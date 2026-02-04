@@ -97,8 +97,6 @@ class Experiment:
         # ACT tracking
         self.act_steps_history: list[float] = []
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
-        self._data_iter = None
-        self._train_loader = None
         self.act_carry: dict[str, Tensor] | None = None
 
     def setup_model(self) -> None:
@@ -370,19 +368,6 @@ class Experiment:
             dtype=inputs.dtype,
         )
         return torch.cat([halt_tokens, inputs], dim=1)
-
-    def _get_next_batch(self) -> tuple[Tensor, Tensor]:
-        """Get next batch for ACT mode (streaming samples)."""
-        if self._train_loader is None:
-            self._train_loader = self.make_train_loader()
-        if self._data_iter is None:
-            self._data_iter = iter(self._train_loader)
-        try:
-            batch = next(self._data_iter)
-        except StopIteration:
-            self._data_iter = iter(self._train_loader)
-            batch = next(self._data_iter)
-        return batch[0].to(self.device), batch[1].to(self.device)
 
     # --- Evaluation Functions ---
 

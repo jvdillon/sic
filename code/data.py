@@ -134,6 +134,11 @@ def load_puzzle_dataset(data_dir: str, split: str = "train") -> PuzzleDataset:
     with metadata_path.open() as f:
         metadata = json.load(f)
 
+    required_keys = {"seq_len", "vocab_size"}
+    missing_keys = required_keys - set(metadata.keys())
+    if missing_keys:
+        raise ValueError(f"dataset.json missing required fields: {missing_keys}")
+
     inputs_path = data_path / "all__inputs.npy"
     labels_path = data_path / "all__labels.npy"
     if not inputs_path.exists():
@@ -270,6 +275,11 @@ class PuzzleDatasetIterator:
             return
 
         puzzle_indices = torch.from_numpy(np.load(puzzle_indices_path))
+        if puzzle_indices.ndim != 1 or len(puzzle_indices) < 2:
+            raise ValueError(
+                f"puzzle_indices must be 1D with at least 2 elements, "
+                f"got shape {puzzle_indices.shape}"
+            )
 
         # Detect multi-example datasets by checking if any puzzle has >1 example.
         # Single-example: puzzle_indices = [0, 1, 2, ..., n] (consecutive)
@@ -320,6 +330,11 @@ class PuzzleDatasetIterator:
             )
 
         group_indices = torch.from_numpy(np.load(group_indices_path))
+        if group_indices.ndim != 1 or len(group_indices) < 2:
+            raise ValueError(
+                f"group_indices must be 1D with at least 2 elements, "
+                f"got shape {group_indices.shape}"
+            )
         self._n_puzzle_id_groups = len(group_indices) - 1
 
         # For single-example datasets, all groups have same size (precompute once).
@@ -428,6 +443,8 @@ class PuzzleDatasetIterator:
         # Step 2: Sample one puzzle_id per group (vectorized)
         group_starts = group_indices[group_order]
         group_sizes = group_indices[group_order + 1] - group_starts
+        if (group_sizes <= 0).any():
+            raise ValueError("All groups must have at least one puzzle_id")
         # Floating point safety: torch.rand() produces values in [0, 1), so
         # rand() * N produces values in [0, N). After .long() truncation,
         # results are in [0, N-1] - exactly what we need for valid indices.
@@ -522,6 +539,8 @@ class PuzzleDatasetIterator:
             assert self._puzzle_indices is not None
 
             group_sizes = self._puzzle_id_group_indices[1:] - group_starts
+            if (group_sizes <= 0).any():
+                raise ValueError("All groups must have at least one puzzle_id")
             puzzle_id_offsets = (
                 torch.rand(n_groups, device=device) * group_sizes
             ).long()

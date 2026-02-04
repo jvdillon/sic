@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import field
 from typing import Literal, TypedDict, cast
 
@@ -103,8 +102,6 @@ class Experiment:
         self.halt_steps_histogram = [0] * max(
             v[0] for v in self.max_steps_schedule.values()
         )
-        self._train_loader: PuzzleDatasetIterator | None = None
-        self._data_iter: Iterator[tuple[Tensor, Tensor, Tensor, int]] | None = None
 
         self._state = TrainingState(
             num_chains=self.num_chains,
@@ -470,18 +467,6 @@ class Experiment:
                     if p.requires_grad:
                         self.ema.shadow[n].copy_(p.data)
             self.ema.update(self.model)
-
-    def _get_next_batch(self) -> tuple[Tensor, Tensor]:
-        if self._train_loader is None:
-            self._train_loader = self.make_train_loader()
-        if self._data_iter is None:
-            self._data_iter = iter(self._train_loader)
-        try:
-            batch = next(self._data_iter)
-        except StopIteration:
-            self._data_iter = iter(self._train_loader)
-            batch = next(self._data_iter)
-        return batch[0].to(self.device), batch[1].to(self.device)
 
     # --- Evaluation ---
     # Monkey-patch eval methods from ExperimentBase (intentionally not inheriting

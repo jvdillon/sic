@@ -197,8 +197,6 @@ class ExperimentBase:
         # ACT tracking (only used when max_reasoning_steps > 1)
         self.act_steps_history: list[float] = []
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
-        self._data_iter = None
-        self._train_loader = None
         self.act_carry: dict[str, Tensor] | None = None
 
     def _register_k_heads(self) -> None:
@@ -265,19 +263,6 @@ class ExperimentBase:
         z_H = self.model.H_init.expand(batch_size, seq_len, -1).contiguous()
         z_L = self.model.L_init.expand(batch_size, seq_len, -1).contiguous()
         return z_H, z_L
-
-    def _get_next_batch(self) -> tuple[Tensor, Tensor]:
-        """Get next batch for ACT mode (streaming samples)."""
-        if self._train_loader is None:
-            self._train_loader = self.make_train_loader()
-        if self._data_iter is None:
-            self._data_iter = iter(self._train_loader)
-        try:
-            batch = next(self._data_iter)
-        except StopIteration:
-            self._data_iter = iter(self._train_loader)
-            batch = next(self._data_iter)
-        return batch[0].to(self.device), batch[1].to(self.device)
 
     def make_train_loader(self):
         return PuzzleDatasetIterator(
