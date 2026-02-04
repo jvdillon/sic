@@ -1,4 +1,4 @@
-"""x000: Maze experiment based on x182 sparse chain pooling."""
+"""x000: Maze experiment baseline."""
 
 import functools
 
