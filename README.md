@@ -22,7 +22,7 @@ As in nature, this work was also resource constrained: all experiments used a si
 sudo apt install curl -y
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run code/sudoku/x182.py  # Train K=4, for example.
+CUDA_VISIBLE_DEVICES=0 uv run python -m code.sudoku.x182  # Train K=4, for example.
 ```
 
 Much of my code builds on the work of [Alexia

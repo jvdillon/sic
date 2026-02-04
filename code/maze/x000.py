@@ -22,6 +22,8 @@ class Experiment(Experiment182):
     augment_sudoku: bool = False
     total_train_steps: int = 8_000
     eval_every_steps: int = 500
+    batch_size: int = 16  # Reduced due to 11x longer seq_len (901 vs 82)
+    eval_batch_size: int | None = 64
     K: int = 1
 
     config: TRM3ConfigProtocol = TRM3.Config(

@@ -37,8 +37,8 @@ class PuzzleConfig:
 
 
 _PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
-    "sudoku": PuzzleConfig(grid_size=9, vocab_size=11, mask_token=10),
-    "maze": PuzzleConfig(grid_size=30, vocab_size=6),
+    "sudoku": PuzzleConfig(grid_size=9, vocab_size=12, mask_token=10),  # +halt token
+    "maze": PuzzleConfig(grid_size=30, vocab_size=12),  # tokens 1-5, +halt token 11
 }
 
 
