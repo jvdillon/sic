@@ -1,3 +1,61 @@
 Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias')
 Muon 2D params: ('reasoning.0.attn.up_proj.weight', 'reasoning.0.attn.down_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.up_proj.weight', 'reasoning.1.attn.down_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
 Muon 3D params (ensemble_dims=1): ()
+Traceback (most recent call last):
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 1569, in main
+    return train(experiment)  # pyright: ignore[reportArgumentType]
+           ^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 1542, in train
+    loss = experiment.step(samples, targets, puzzle_ids)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/sudoku/x182.py", line 207, in step
+    forward_result = self._forward(state)
+                     ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/sudoku/x182.py", line 471, in _forward
+    logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, None)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 832, in compile_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/model.py", line 2209, in core_compiled
+    @torch.compile(mode="default", fullgraph=True)
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/aot_autograd.py", line 1130, in forward
+    return compiled_fn(full_args)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 339, in runtime_wrapper
+    all_outs = call_func_at_runtime_with_args(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+                            ^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/utils.py", line 103, in g
+    return f(*args)
+           ^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/autograd/function.py", line 581, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 2118, in forward
+    fw_outs = call_func_at_runtime_with_args(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+                            ^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 526, in wrapper
+    return compiled_fn(runtime_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 724, in inner_fn
+    outs = compiled_fn(args)
+           ^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_inductor/output_code.py", line 613, in __call__
+    return self.current_callable(inputs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_inductor/utils.py", line 2962, in run
+    out = model(new_inputs)
+          ^^^^^^^^^^^^^^^^^
+  File "/tmp/torchinductor_jvdillon/yx/cyxhtkhocawwicfski77z6piwffi5i345vpzgjo7zksgb6tpfo4d.py", line 1465, in call
+    buf107 = empty_strided_cuda((32, 901, 1536), (1383936, 1536, 1), torch.bfloat16)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 86.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 46.25 MiB is free. Including non-PyTorch memory, this process has 31.30 GiB memory in use. Of the allocated memory 30.68 GiB is allocated by PyTorch, and 31.85 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
