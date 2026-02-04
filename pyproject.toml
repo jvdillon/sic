@@ -55,7 +55,7 @@ packages = ["code"]
 exclude = ["*_test.py", "*.log"]
 
 [tool.hatch.build.targets.wheel.sources]
-"code" = "sic"
+"code" = ""
 
 [tool.pytest.ini_options]
 python_files = ["*_test.py"]
@@ -234,7 +234,7 @@ skip = "htmlcov,.doctrees,*.pyc,*.ico,*.png,*.jpg,*.PNG,*.inv,*.dot,*.css,.git,.
 formats = "ipynb,py:percent"
 
 [tool.uv]
-package = false
+package = true
 
 [tool.uv.pip]
 compile-bytecode = true

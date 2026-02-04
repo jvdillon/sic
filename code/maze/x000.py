@@ -2,7 +2,10 @@
 
 import functools
 
-from experiment import main
+from experiment import (
+    main,
+    setup_muon_optimizers,
+)
 from model import (
     TRM3,
     MLPMixerBlock,
@@ -40,6 +43,12 @@ class Experiment(Experiment182):
             init_weight_fn=trunc_normal_init_,
         ),
     )
+
+    def setup_optimizers(self) -> None:
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
+            self.model,
+            muon_lr=0.02 / 4,
+        )
 
 
 if __name__ == "__main__":
