@@ -521,11 +521,16 @@ class PuzzleDatasetIterator:
 
         # Step 6: Yield batches
         yield from self._yield_batches(
-            sample_indices, expanded_puzzle_ids, total_samples
+            sample_indices,
+            expanded_puzzle_ids,
+            total_samples,
         )
 
     def _yield_batches(
-        self, indices: Tensor, puzzle_ids_indices: Tensor, n_samples: int
+        self,
+        indices: Tensor,
+        puzzle_ids_indices: Tensor,
+        n_samples: int,
     ) -> Iterator[tuple[Tensor, Tensor, Tensor, int]]:
         """Yield batches from pre-computed indices."""
         for i in range(0, n_samples, self.batch_size):

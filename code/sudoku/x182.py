@@ -58,9 +58,8 @@ class Experiment:
 
     augment_sudoku: bool = True
     use_puzzle_identifier: bool = False  # If True, embed puzzle_id and add to z_H
-    max_puzzle_ids_per_batch: int = (
-        1  # Size of puzzle_id embedding table (set to 256 for ARC)
-    )
+    # Size of puzzle_id embedding table (set to 256 for ARC)
+    max_puzzle_ids_per_batch: int = 1
 
     # Eval
     eval_method: Literal["standard", "fast", "wta"] = "standard"
@@ -190,7 +189,10 @@ class Experiment:
         return max(v[0] for v in self.max_steps_schedule.values())
 
     def step(
-        self, inputs: Tensor, labels: Tensor, puzzle_ids: Tensor | None = None
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> dict[str, Tensor] | None:
         if self.current_step >= self.total_train_steps:
             return None
@@ -339,7 +341,10 @@ class Experiment:
     # --- Private methods (training) ---
 
     def _enqueue(
-        self, inputs: Tensor, labels: Tensor, puzzle_ids: Tensor | None = None
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> None:
         space = self.max_pending_samples - len(self._pending_inputs)
         if space <= 0:
@@ -714,10 +719,7 @@ class TrainingState:
             self.puzzle_ids[inactive] = 0
         return num_to_fill
 
-    def select_winners(
-        self,
-        losses: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+    def select_winners(self, losses: Tensor) -> tuple[Tensor, Tensor]:
         """Returns (active_batch_indices, winner_chain_indices)."""
         if not self.active.any():
             empty: Tensor = torch.empty(0, device=self.device, dtype=torch.long)
@@ -736,12 +738,7 @@ class TrainingState:
         winner_chain = chains[torch.arange(len(active), device=self.device), winner_k]
         return active, winner_chain
 
-    def expunge(
-        self,
-        losses: Tensor,
-        threshold: float,
-        min_h_step: int,
-    ) -> int:
+    def expunge(self, losses: Tensor, threshold: float, min_h_step: int) -> int:
         """Remove converged chains (cosine sim > threshold). Returns count removed."""
         eligible = self.active & (self.h_step >= min_h_step)
         if not eligible.any():
@@ -806,10 +803,7 @@ class TrainingState:
         self.chain_indices[eligible_indices[mask], expunge_k[mask]] = -1
         return int(mask.sum().item())
 
-    def release(
-        self,
-        batch_indices: Tensor,
-    ) -> None:
+    def release(self, batch_indices: Tensor) -> None:
         """Release chains for given batch indices."""
         chains = self.chain_indices[batch_indices]
         self.batch_index[chains[chains >= 0]] = -1

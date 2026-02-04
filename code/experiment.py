@@ -1533,8 +1533,8 @@ def train(experiment: ExperimentBase):
             break
 
         try:
-            batch = next(loader)
-            samples, targets, puzzle_ids = batch[0], batch[1], batch[2]
+            samples, targets, puzzle_ids, valid_count = next(loader)
+            del valid_count  # TODO(josh): We need to be normalizing using this.
         except StopIteration:
             loader = iter(trainloader)
             continue

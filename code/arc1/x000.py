@@ -1,5 +1,8 @@
 """x000: ARC experiment baseline."""
 
+# Slow compile?
+# Try: rm -rf /tmp/torchinductor_* ~/.triton/cache
+
 import functools
 
 from experiment import (
@@ -25,6 +28,7 @@ class Experiment(Experiment182):
     augment_sudoku: bool = False
     use_puzzle_identifier: bool = True  # Enable puzzle_id conditioning for ARC
     max_puzzle_ids_per_batch: int = 256  # Embedding table size for puzzle_ids
+    max_eval_samples: int = 100  # 38_400
     total_train_steps: int = 8_000
     eval_every_steps: int = 500
     batch_size: int = 8  # Reduced further for ARC memory requirements
@@ -49,7 +53,7 @@ class Experiment(Experiment182):
     def setup_optimizers(self) -> None:
         self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
             self.model,
-            muon_lr=0.02 / 4,
+            muon_lr=0.02,
         )
 
 
