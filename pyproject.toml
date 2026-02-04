@@ -34,14 +34,23 @@ dependencies = [
     "huggingface_hub",
 ]
 [dependency-groups]
-dev = [
+debug = [
+    "gnureadline",
+    "ipdb",
+    "ipython",
+    "matplotlib",
+    "scipy",
+]
+lint = [
     "basedpyright>=1.10",
     "codespell>=2.2.4",
-    "gnureadline",
-    "ipython",
     "pre-commit>=3.5",
     "pytest>=7.0",
     "ruff>=0.8",
+]
+dev = [
+    {include-group = "debug"},
+    {include-group = "lint"},
 ]
 
 [project.urls]
