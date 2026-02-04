@@ -36,7 +36,7 @@ class Experiment(Experiment182):
         K_L=1,
         carry_H="all",
         carry_L="all",
-        z_L_init_svd=True,
+        z_L_init_svd=False,
         block_fn=functools.partial(
             MLPMixerBlock,
             seq_len=_CFG.seq_len,
