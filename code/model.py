@@ -206,7 +206,7 @@ def trace_compile(
     return len(traces)
 
 
-def _normal_init_(tensor: Tensor, std: float | None = None) -> Tensor:
+def normal_init_(tensor: Tensor, std: float | None = None) -> Tensor:
     """Default init: normal."""
     if std is None:
         c_in = tensor.shape[-1]
@@ -299,7 +299,7 @@ class Linear(nn.Module):
         c_out: int,
         *,
         bias: bool = True,
-        init_weight_fn: InitFn = _normal_init_,
+        init_weight_fn: InitFn = normal_init_,
         init_bias_fn: InitFn = _kaiming_uniform_init_,
         dtype: torch.dtype | None = None,
     ):
@@ -347,7 +347,7 @@ class EnsembleLinear(nn.Module):
         *,
         num_ensemble: int,
         bias: bool = False,
-        init_weight_fn: InitFn = _normal_init_,
+        init_weight_fn: InitFn = normal_init_,
     ):
         super().__init__()
         self.weight = nn.Parameter(
@@ -439,7 +439,7 @@ class Attention(nn.Module):
 
         # Fused QKV: one kernel, each head orthogonalized independently by Muon
         # Ensemble dim = num_heads + 2 * num_key_value_heads (Q heads + K heads + V heads)
-        _init_fn = functools.partial(_normal_init_, std=0.02)
+        _init_fn = functools.partial(normal_init_, std=0.02)
         self.qkv_proj = EnsembleLinear(
             c_in,
             self.head_dim,
@@ -502,7 +502,7 @@ class AttentionSplitQKV(nn.Module):
         self.causal = causal
 
         # Separate QK from V for different weight decay
-        _init_fn = functools.partial(_normal_init_, std=0.02)
+        _init_fn = functools.partial(normal_init_, std=0.02)
         self.qk_proj = EnsembleLinear(
             c_in,
             self.head_dim,
@@ -568,7 +568,7 @@ class AttentionWithEntropy(nn.Module):
         self.causal = causal
         self.scale = self.head_dim**-0.5
 
-        _init_fn = functools.partial(_normal_init_, std=0.02)
+        _init_fn = functools.partial(normal_init_, std=0.02)
         self.qkv_proj = EnsembleLinear(
             c_in,
             self.head_dim,
@@ -636,7 +636,7 @@ class SwiGLU(nn.Module):
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         weird: bool = True,
-        init_weight_fn: InitFn = _normal_init_,
+        init_weight_fn: InitFn = normal_init_,
     ):
         super().__init__()
         self.gate = gate
@@ -995,7 +995,7 @@ class MLPMixerBlock(nn.Module):
         # MLPMixer specific kwargs.
         seq_len: int = 0,
         token_multiple_of: int | None = None,
-        init_weight_fn: InitFn = _normal_init_,
+        init_weight_fn: InitFn = normal_init_,
     ):
         assert seq_len > 0
         super().__init__()
@@ -1137,7 +1137,7 @@ class TRM(nn.Module):
         use_rope: bool = False
         causal: bool = False
         no_grad_inner: bool = True  # False = BPTT through all H_cycles
-        head_init_weight_fn: InitFn = _normal_init_
+        head_init_weight_fn: InitFn = normal_init_
 
         compile_core: bool = True
         compile_reasoning: bool = False
@@ -1198,7 +1198,7 @@ class TRM(nn.Module):
                 ),
             )
             # NOTE: Must consume RNG for backwards compat.
-            _ = _normal_init_(torch.empty_like(self.q_head.weight))
+            _ = normal_init_(torch.empty_like(self.q_head.weight))
         else:
             self.q_head = None
 
@@ -1546,7 +1546,7 @@ class TRM3(nn.Module):
             init_bias_fn=functools.partial(nn.init.constant_, val=-5.0),
         )
         # PRNG_EQUIVALENCE: Must consume RNG for backwards compat.
-        _ = _normal_init_(torch.empty_like(self.q_head.weight))
+        _ = normal_init_(torch.empty_like(self.q_head.weight))
         self.reasoning = Sequential(
             *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)]
         )
