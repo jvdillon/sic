@@ -17,6 +17,7 @@ def _config() -> TRM3.Config:
 
 
 class Experiment(Experiment000):
+    batch_size: int = 64 // 4  # Reduced due to 11x longer seq_len (901 vs 82)
     K: int = 4
     config: TRM3ConfigProtocol = _config()
 
