@@ -1278,7 +1278,7 @@ class ExperimentBase:
                 has_halted = torch.zeros(B, device=self.device, dtype=torch.bool)
                 halt_logits = torch.zeros(
                     B,
-                    81,
+                    self.config.seq_len - 1,
                     self.model.config.vocab_size,
                     device=self.device,
                     dtype=self.dtype,
