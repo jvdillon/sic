@@ -1,3 +1,18 @@
 Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias')
 Muon 2D params: ('reasoning.0.attn.up_proj.weight', 'reasoning.0.attn.down_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.up_proj.weight', 'reasoning.1.attn.down_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
 Muon 3D params (ensemble_dims=1): ()
+  cell_acc=82.59%, puzzle_acc=0.00%
+  eval_avg_halt_step: 16.00
+  per_H_acc: ['H0=85.1%', 'H1=85.0%', 'H2=84.8%', 'H3=84.3%', 'H4=83.9%', 'H5=83.5%']
+  H_cos: ['0.945', '0.984', '0.992', '0.996', '0.996']
+  z_H_delta: ['12.062', '6.688', '4.625', '3.484', '2.750']
+  cells: fixed=[2742, 2295, 2145, 1909, 1597] broken=[2947, 2837, 3029, 2813, 2395]
+  per_ACT_cell_acc: ['H1=85.1%', 'H2=85.0%', 'H3=84.8%', 'H4=84.3%', 'H5=83.9%', 'H6=83.5%', 'H7=83.3%', 'H8=83.2%', 'H9=83.1%', 'H10=83.0%', 'H11=82.9%', 'H12=82.8%', 'H13=82.8%', 'H14=82.8%', 'H15=82.7%', 'H16=82.7%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
+  mean_sigmoid_q_halt: ['0.014', '0.110', '0.195', '0.218', '0.223', '0.224', '0.224', '0.224', '0.224', '0.224', '0.223', '0.223', '0.223', '0.223', '0.223', '0.223']
+  halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
+  halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+  Avg ACT steps (last 100): 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x001/step00500.pt acc=82.59% (0.179s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x001/best.pt acc=82.59% (0.347s)
+Step   500  Test 82.59% /  0.00%  Train lm=1.0859±0.2363ϵ[0.9219,3.0000] n_active=64.0000±0.0000ϵ[64.0000,64.0000] n_expunged=2.9760±6.1939ϵ[0.0000,16.0000] n_halted=0.9920±3.8624ϵ[0.0000,16.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (157.458s / 428.120s)
