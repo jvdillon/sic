@@ -1,6 +1,6 @@
-This dir's code is from the
+This dir's code is modified from the
 [TRM repo](https://github.com/SamsungSAILMontreal/TinyRecursiveModels)
-which itself is from the
+which itself is modified from the
 [HRM repo](https://github.com/sapientinc/HRM).
 
 From the project root (`~/projects/sic`):
