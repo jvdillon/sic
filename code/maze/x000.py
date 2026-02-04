@@ -20,13 +20,16 @@ _CFG = get_puzzle_config("maze")
 class Experiment(Experiment182):
     data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
     augment_sudoku: bool = False
+    total_train_steps: int = 8_000
+    eval_every_steps: int = 500
+    K: int = 1
 
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
         seq_len=_CFG.seq_len,
         K_H=1,
-        K_L=4,
-        carry_H="copy_top1",
+        K_L=1,
+        carry_H="all",
         carry_L="all",
         z_L_init_svd=True,
         block_fn=functools.partial(
