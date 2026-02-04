@@ -57,6 +57,10 @@ class Experiment:
     max_train_sec: float = 60 * 60 * 9  # 9 hours
 
     augment_sudoku: bool = True
+    use_puzzle_identifier: bool = False  # If True, embed puzzle_id and add to z_H
+    max_puzzle_ids_per_batch: int = (
+        1  # Size of puzzle_id embedding table (set to 256 for ARC)
+    )
 
     # Eval
     eval_method: Literal["standard", "fast", "wta"] = "standard"
@@ -123,6 +127,11 @@ class Experiment:
             device=self.device,
             dtype=torch.long,
         )
+        self._pending_puzzle_ids = torch.empty(
+            0,
+            device=self.device,
+            dtype=torch.long,
+        )
 
     def setup_model(self) -> None:
         set_seed(self.seed, deterministic=True)
@@ -137,6 +146,13 @@ class Experiment:
             ),
         )
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
+
+        # Puzzle identifier embedding (for ARC multi-example conditioning)
+        self.puzzle_id_embed: nn.Embedding | None = None
+        if self.use_puzzle_identifier:
+            self.puzzle_id_embed = nn.Embedding(
+                self.max_puzzle_ids_per_batch, self.config.hidden_size
+            ).to(device=self.device, dtype=self.dtype)
 
     def setup_optimizers(self) -> None:
         """Must be called before step(). Called by main() before train()."""
@@ -173,7 +189,9 @@ class Experiment:
     def max_reasoning_steps(self) -> int:
         return max(v[0] for v in self.max_steps_schedule.values())
 
-    def step(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor] | None:
+    def step(
+        self, inputs: Tensor, labels: Tensor, puzzle_ids: Tensor | None = None
+    ) -> dict[str, Tensor] | None:
         if self.current_step >= self.total_train_steps:
             return None
         if self.augment_sudoku:
@@ -183,7 +201,7 @@ class Experiment:
         max_h_steps, train_q_halt = self.max_steps_schedule[max(valid_keys)]
         state = self._state
 
-        self._enqueue(inputs, labels)
+        self._enqueue(inputs, labels, puzzle_ids)
         self._fill_pending()
 
         forward_result = self._forward(state)
@@ -312,15 +330,36 @@ class Experiment:
             dtype=torch.long,
         )
         self._pending_labels = torch.empty_like(self._pending_inputs)
+        self._pending_puzzle_ids = torch.empty(
+            0,
+            device=self.device,
+            dtype=torch.long,
+        )
 
     # --- Private methods (training) ---
 
-    def _enqueue(self, inputs: Tensor, labels: Tensor) -> None:
+    def _enqueue(
+        self, inputs: Tensor, labels: Tensor, puzzle_ids: Tensor | None = None
+    ) -> None:
         space = self.max_pending_samples - len(self._pending_inputs)
         if space <= 0:
             return
         self._pending_inputs = torch.cat([self._pending_inputs, inputs[:space]])
         self._pending_labels = torch.cat([self._pending_labels, labels[:space]])
+        if puzzle_ids is not None:
+            self._pending_puzzle_ids = torch.cat(
+                [self._pending_puzzle_ids, puzzle_ids[:space]]
+            )
+        else:
+            # Fill with zeros if no puzzle_ids provided
+            self._pending_puzzle_ids = torch.cat(
+                [
+                    self._pending_puzzle_ids,
+                    torch.zeros(
+                        min(space, len(inputs)), device=self.device, dtype=torch.long
+                    ),
+                ]
+            )
 
     def _fill_pending(self) -> int:
         if len(self._pending_inputs) == 0:
@@ -334,15 +373,23 @@ class Experiment:
         z_H = carry["z_H"].detach()
         z_L = carry["z_L"].detach()
 
+        puzzle_ids = (
+            self._pending_puzzle_ids[:num_to_fill]
+            if len(self._pending_puzzle_ids) > 0
+            else None
+        )
         num_filled = self._state.fill(
             self._pending_inputs[:num_to_fill],
             self._pending_labels[:num_to_fill],
             z_H,
             z_L,
+            puzzle_ids,
         )
         if num_filled > 0:
             self._pending_inputs = self._pending_inputs[num_filled:]
             self._pending_labels = self._pending_labels[num_filled:]
+            if len(self._pending_puzzle_ids) > 0:
+                self._pending_puzzle_ids = self._pending_puzzle_ids[num_filled:]
         return num_filled
 
     def _forward(self, state: TrainingState) -> ForwardResult:
@@ -396,12 +443,22 @@ class Experiment:
                 tokens,
                 self.config.dtype,
             )
+
+            # Add puzzle_id embedding to z_H if enabled
+            z_H = state.z_H
+            if self.use_puzzle_identifier and self.puzzle_id_embed is not None:
+                chain_puzzle_ids = state.puzzle_ids[batch_indices]
+                # Remap to batch-local indices (modulo embedding table size)
+                local_ids = chain_puzzle_ids % self.max_puzzle_ids_per_batch
+                puzzle_emb = self.puzzle_id_embed(local_ids)  # [num_chains, hidden]
+                # Add to z_H (broadcast across sequence dimension)
+                z_H = z_H + puzzle_emb.unsqueeze(1)
+
             core = (
                 self.model.core_compiled
                 if self.model.config.compile_core
                 else self.model.core
             )
-            z_H = state.z_H
             z_L = state.z_L
             for _ in range(self.model.config.H_cycles - 1):
                 with torch.no_grad():
@@ -538,6 +595,7 @@ class TrainingState:
     h_step: Tensor = field(init=False)
     inputs: Tensor = field(init=False)
     labels: Tensor = field(init=False)
+    puzzle_ids: Tensor = field(init=False)  # [N] puzzle identifier per batch element
     # [N, K] which chains belong to this batch element
     chain_indices: Tensor = field(init=False)
     active: Tensor = field(init=False)
@@ -574,6 +632,11 @@ class TrainingState:
             dtype=torch.long,
         )
         self.labels = torch.zeros_like(self.inputs)
+        self.puzzle_ids = torch.zeros(
+            num_batch_elements,
+            device=self.device,
+            dtype=torch.long,
+        )
         self.chain_indices = torch.full(
             [num_batch_elements, self.K],
             fill_value=-1,
@@ -605,6 +668,7 @@ class TrainingState:
         labels: Tensor,
         z_H: Tensor,
         z_L: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> int:
         """Fill free chains with new batch elements. Returns number filled.
 
@@ -644,6 +708,10 @@ class TrainingState:
         self.h_step[inactive] = 0
         self.inputs[inactive] = inputs[:num_to_fill].long()
         self.labels[inactive] = labels[:num_to_fill].long()
+        if puzzle_ids is not None:
+            self.puzzle_ids[inactive] = puzzle_ids[:num_to_fill].long()
+        else:
+            self.puzzle_ids[inactive] = 0
         return num_to_fill
 
     def select_winners(

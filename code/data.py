@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 
-PuzzleType = Literal["sudoku", "maze"]
+PuzzleType = Literal["sudoku", "maze", "arc"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +39,9 @@ class PuzzleConfig:
 _PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
     "sudoku": PuzzleConfig(grid_size=9, vocab_size=12, mask_token=10),  # +halt token
     "maze": PuzzleConfig(grid_size=30, vocab_size=12),  # tokens 1-5, +halt token 11
+    "arc": PuzzleConfig(
+        grid_size=30, vocab_size=12
+    ),  # PAD=0, EOS=1, colors 2-11, halt=11
 }
 
 
@@ -46,7 +49,7 @@ def get_puzzle_config(puzzle_type: PuzzleType) -> PuzzleConfig:
     """Get configuration for a puzzle type.
 
     Args:
-      puzzle_type: One of "sudoku", "maze".
+      puzzle_type: One of "sudoku", "maze", "arc".
 
     Returns:
       PuzzleConfig with grid_size, vocab_size, seq_len, and mask_token.

@@ -286,7 +286,10 @@ class ExperimentBase:
             shuffle=False,
         )
 
-    def step(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor] | None:
+    def step(
+        self, inputs: Tensor, labels: Tensor, puzzle_ids: Tensor | None = None
+    ) -> dict[str, Tensor] | None:
+        del puzzle_ids  # Not used in base class (no puzzle_identifier conditioning)
         if self.current_step >= self.total_train_steps:
             return None
 
@@ -1531,12 +1534,12 @@ def train(experiment: ExperimentBase):
 
         try:
             batch = next(loader)
-            samples, targets = batch[0], batch[1]
+            samples, targets, puzzle_ids = batch[0], batch[1], batch[2]
         except StopIteration:
             loader = iter(trainloader)
             continue
 
-        loss = experiment.step(samples, targets)
+        loss = experiment.step(samples, targets, puzzle_ids)
         step_count += 1
         if loss is None:
             done = True
