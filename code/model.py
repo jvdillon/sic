@@ -219,7 +219,7 @@ def _normal_init_(tensor: Tensor, std: float | None = None) -> Tensor:
     return tensor
 
 
-def _trunc_normal_init_(
+def trunc_normal_init_(
     tensor: Tensor,
     *,
     std: float | None = None,
@@ -380,7 +380,7 @@ class Embedding(nn.Module):
         num_embeddings: int,
         embedding_dim: int,
         *,
-        init_weight_fn: InitFn = _trunc_normal_init_,  # std = rsqrt(c_in)
+        init_weight_fn: InitFn = trunc_normal_init_,  # std = rsqrt(c_in)
         dtype: torch.dtype | None = None,
     ):
         super().__init__()
@@ -1164,7 +1164,7 @@ class TRM(nn.Module):
             config.vocab_size,
             config.hidden_size,
             init_weight_fn=functools.partial(
-                _trunc_normal_init_,
+                trunc_normal_init_,
                 std=1 / self.embed_scale,
             ),
         )
@@ -1212,14 +1212,14 @@ class TRM(nn.Module):
             self.reasoning.compile(mode="default", fullgraph=True)
 
         self.H_init: Tensor = nn.Buffer(
-            _trunc_normal_init_(
+            trunc_normal_init_(
                 torch.empty(config.hidden_size, dtype=config.dtype),
                 std=1,
             ),
             persistent=True,
         )
         self.L_init: Tensor = nn.Buffer(
-            _trunc_normal_init_(
+            trunc_normal_init_(
                 torch.empty(config.hidden_size, dtype=config.dtype),
                 std=1,
             ),
@@ -1397,9 +1397,9 @@ class TRM2(TRM):
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
             seq_len=9 * 9 + 1,  # 82
-            init_weight_fn=_trunc_normal_init_,
+            init_weight_fn=trunc_normal_init_,
         )
-        head_init_weight_fn: InitFn = _trunc_normal_init_
+        head_init_weight_fn: InitFn = trunc_normal_init_
 
         def setup(self, *args: Any, **kwargs: Any) -> TRM2:
             return TRM2(self, *args, **kwargs)
@@ -1425,7 +1425,7 @@ class TRM3(nn.Module):
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
             seq_len=seq_len,
-            init_weight_fn=_trunc_normal_init_,
+            init_weight_fn=trunc_normal_init_,
         )
         compile_core: bool = True
         compile_reasoning: bool = False
@@ -1527,7 +1527,7 @@ class TRM3(nn.Module):
             config.vocab_size,
             config.hidden_size,
             init_weight_fn=functools.partial(
-                _trunc_normal_init_,
+                trunc_normal_init_,
                 std=1.0 / self.embed_scale,
             ),
         )
@@ -1535,7 +1535,7 @@ class TRM3(nn.Module):
             config.hidden_size,
             config.vocab_size,
             bias=config.head_bias,
-            init_weight_fn=_trunc_normal_init_,  # std = rsqrt(hidden_size)
+            init_weight_fn=trunc_normal_init_,  # std = rsqrt(hidden_size)
             init_bias_fn=nn.init.zeros_,
         )
         self.q_head = Linear(
@@ -1557,7 +1557,7 @@ class TRM3(nn.Module):
         # TRM3 creates [1, hidden] here; x179 expands to [K_L, hidden] in setup_model.
         # PRNG_EQUIVALENCE: Must use dtype=config.dtype because uniform_() produces
         # different values for bfloat16 vs float32 tensors with the same RNG seed.
-        init_fn = functools.partial(_trunc_normal_init_, std=1)
+        init_fn = functools.partial(trunc_normal_init_, std=1)
         self.H_init: Tensor = nn.Buffer(
             init_fn(torch.empty([1, config.hidden_size], dtype=config.dtype)),
             persistent=True,
@@ -1629,7 +1629,7 @@ class TRM3(nn.Module):
         # Get h_indices, l_indices to know how to pair init vectors
         h_indices, l_indices = self._sample_head_indices()
 
-        init_fn = functools.partial(_trunc_normal_init_, std=1)
+        init_fn = functools.partial(trunc_normal_init_, std=1)
 
         # Initialize z_H for each chain
         if self.config.z_H_random_init:

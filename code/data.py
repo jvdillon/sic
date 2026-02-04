@@ -7,7 +7,8 @@ sampling. Works with Sudoku, Maze, and ARC datasets.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Literal, TypedDict
+from dataclasses import dataclass
+from typing import Literal, TypedDict, get_args
 
 import json
 import pathlib
@@ -16,6 +17,48 @@ from torch import Tensor
 
 import numpy as np
 import torch
+
+
+PuzzleType = Literal["sudoku", "maze"]
+
+
+@dataclass(frozen=True, slots=True)
+class PuzzleConfig:
+    """Configuration for a puzzle type."""
+
+    grid_size: int
+    vocab_size: int
+    mask_token: int | None = None  # None if puzzle type doesn't use masking
+
+    @property
+    def seq_len(self) -> int:
+        """Sequence length including halt token."""
+        return self.grid_size * self.grid_size + 1
+
+
+_PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
+    "sudoku": PuzzleConfig(grid_size=9, vocab_size=11, mask_token=10),
+    "maze": PuzzleConfig(grid_size=30, vocab_size=6),
+}
+
+
+def get_puzzle_config(puzzle_type: PuzzleType) -> PuzzleConfig:
+    """Get configuration for a puzzle type.
+
+    Args:
+      puzzle_type: One of "sudoku", "maze".
+
+    Returns:
+      PuzzleConfig with grid_size, vocab_size, seq_len, and mask_token.
+
+    Raises:
+      ValueError: If puzzle_type is not recognized.
+
+    """
+    if puzzle_type not in _PUZZLE_CONFIGS:
+        valid = ", ".join(get_args(PuzzleType))
+        raise ValueError(f"Unknown puzzle type: {puzzle_type}. Valid types: {valid}")
+    return _PUZZLE_CONFIGS[puzzle_type]
 
 
 class PuzzleDataset(TypedDict):
@@ -36,11 +79,6 @@ class PuzzleDataset(TypedDict):
     vocab_size: int
     seq_len: int
     puzzle_identifiers: Tensor | None
-
-
-_SUDOKU_GRID_SIZE = 9
-_SUDOKU_MASK_TOKEN = 10
-_SUDOKU_VOCAB_SIZE = 11  # 0=empty, 1-9=digits, 10=mask
 
 
 def _build_dihedral_indices(n: int, device: torch.device) -> Tensor:
@@ -76,17 +114,19 @@ def augment_sudoku(inputs: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
       Tuple of (augmented_inputs, augmented_labels) with same shapes.
 
     """
+    cfg = get_puzzle_config("sudoku")
     B = inputs.shape[0]
     device = inputs.device
 
     # --- Vectorized digit permutation ---
     # Create batch of permutation tables [B, 11]. Token 0 and 10 stay fixed.
     # For tokens 1-9, apply independent random permutation per sample.
-    perms = torch.zeros(B, _SUDOKU_VOCAB_SIZE, device=device, dtype=torch.long)
+    perms = torch.zeros(B, cfg.vocab_size, device=device, dtype=torch.long)
     perms[:, 0] = 0
-    perms[:, _SUDOKU_MASK_TOKEN] = _SUDOKU_MASK_TOKEN
+    assert cfg.mask_token is not None
+    perms[:, cfg.mask_token] = cfg.mask_token
     # Generate B independent permutations of 1-9 using argsort of random values
-    rand_vals = torch.rand(B, _SUDOKU_GRID_SIZE, device=device)
+    rand_vals = torch.rand(B, cfg.grid_size, device=device)
     perms[:, 1:10] = rand_vals.argsort(dim=1) + 1
 
     # Apply permutation: gather from perms using input values as indices.
@@ -96,7 +136,7 @@ def augment_sudoku(inputs: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
 
     # --- Vectorized dihedral transformation ---
     # Sample one of 8 symmetries per sample
-    dihedral_indices = _build_dihedral_indices(_SUDOKU_GRID_SIZE, device)  # [8, 81]
+    dihedral_indices = _build_dihedral_indices(cfg.grid_size, device)  # [8, 81]
     sym_choice = torch.randint(0, 8, (B,), device=device)  # [B]
     selected_indices = dihedral_indices[sym_choice]  # [B, 81]
 

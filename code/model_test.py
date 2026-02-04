@@ -20,7 +20,7 @@ from model import (
     SwiGLU,
     TransformerBlock,
     _find_multiple,  # pyright: ignore[reportPrivateUsage]
-    _trunc_normal_init_,  # pyright: ignore[reportPrivateUsage]
+    trunc_normal_init_,
 )
 from util import set_seed
 
@@ -31,13 +31,13 @@ import torch
 class TestModelUtils:
     def test_trunc_normal_init(self):
         t = torch.empty(100, 100)
-        _trunc_normal_init_(t, std=0.5)
+        trunc_normal_init_(t, std=0.5)
         assert t.mean().abs() < 0.1
         assert t.std() < 1.0
 
-    def test_trunc_normal_init_zero_std(self):
+    def testtrunc_normal_init_zero_std(self):
         t = torch.empty(10, 10)
-        _trunc_normal_init_(t, std=0.0)
+        trunc_normal_init_(t, std=0.0)
         assert (t == 0).all()
 
     def test_find_multiple(self):
