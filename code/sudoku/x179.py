@@ -153,13 +153,13 @@ class Experiment:
             "halted": torch.ones(B, device=self.device, dtype=torch.bool),
             "inputs": torch.zeros(
                 B,
-                cfg.seq_len - 1,
+                cfg.num_puzzle_grid_tokens,
                 device=self.device,
                 dtype=torch.long,
             ),
             "labels": torch.zeros(
                 B,
-                cfg.seq_len - 1,
+                cfg.num_puzzle_grid_tokens,
                 device=self.device,
                 dtype=torch.long,
             ),
@@ -264,7 +264,9 @@ class Experiment:
 
         n_reset = min(len(halted_indices), len(inputs))
         carry["model_carry"] = self.model.reset_carry_at_indices(  # pyright: ignore[reportCallIssue]
-            carry["model_carry"], halted_indices, n_reset
+            carry["model_carry"],
+            halted_indices,
+            n_reset,
         )
         for i in range(n_reset):
             idx = halted_indices[i]
@@ -378,7 +380,7 @@ class Experiment:
 
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
         """For ExperimentBase: Create initial z_H and z_L states for eval (single head)."""
-        seq_len = self.config.seq_len
+        seq_len = self.config.total_seq_len
         z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
         z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
         return z_H, z_L
@@ -386,11 +388,11 @@ class Experiment:
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
         """For ExperimentBase: Create z_L for all K heads for a single puzzle (WTA eval).
 
-        Returns: [K, seq_len, hidden]
+        Returns: [K, total_seq_len, hidden]
         """
         del puzzle_idx
-        # L_init is [K, hidden], expand to [K, seq_len, hidden]
-        return self.model.L_init.unsqueeze(1).expand(-1, self.config.seq_len, -1)  # pyright: ignore[reportCallIssue]
+        # L_init is [K, hidden], expand to [K, total_seq_len, hidden]
+        return self.model.L_init.unsqueeze(1).expand(-1, self.config.total_seq_len, -1)  # pyright: ignore[reportCallIssue]
 
     # Monkey patch in eval stuff from ExperimentBase.
     evaluate = ExperimentBase.evaluate

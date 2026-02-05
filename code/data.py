@@ -37,11 +37,12 @@ class PuzzleConfig:
 
 
 _PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
-    "sudoku": PuzzleConfig(grid_size=9, vocab_size=12, mask_token=10),  # +halt token
-    "maze": PuzzleConfig(grid_size=30, vocab_size=12),  # tokens 1-5, +halt token 11
-    "arc": PuzzleConfig(
-        grid_size=30, vocab_size=12
-    ),  # PAD=0, EOS=1, colors 2-11, halt=11
+    # Sudoku: 0-9 digits (10) + mask (1) + halt (1) = 12 tokens
+    "sudoku": PuzzleConfig(grid_size=9, vocab_size=12, mask_token=10),
+    # Maze: tokens 0-5 (6 values) + reserved (5) + halt (1) = 12 tokens
+    "maze": PuzzleConfig(grid_size=30, vocab_size=12),
+    # ARC: PAD=0, EOS=1, colors 2-11 (10 colors for 0-9) = 12 tokens
+    "arc": PuzzleConfig(grid_size=30, vocab_size=12),
 }
 
 
@@ -195,12 +196,12 @@ def load_puzzle_dataset(data_dir: str, split: str = "train") -> PuzzleDataset:
     # Validate shapes
     if inputs.shape != labels.shape:
         raise ValueError(
-            f"inputs and labels shape mismatch: {inputs.shape} vs {labels.shape}"
+            f"inputs and labels shape mismatch: {inputs.shape} vs {labels.shape}",
         )
     expected_seq_len = metadata["seq_len"]
     if inputs.shape[1] != expected_seq_len:
         raise ValueError(
-            f"inputs seq_len mismatch: expected {expected_seq_len}, got {inputs.shape[1]}"
+            f"inputs seq_len mismatch: expected {expected_seq_len}, got {inputs.shape[1]}",
         )
 
     puzzle_ids_path = data_path / "all__puzzle_identifiers.npy"
@@ -208,7 +209,7 @@ def load_puzzle_dataset(data_dir: str, split: str = "train") -> PuzzleDataset:
         puzzle_identifiers = torch.from_numpy(np.load(puzzle_ids_path)).to(torch.int32)
         if puzzle_identifiers.ndim != 1:
             raise ValueError(
-                f"puzzle_identifiers must be 1D, got shape {puzzle_identifiers.shape}"
+                f"puzzle_identifiers must be 1D, got shape {puzzle_identifiers.shape}",
             )
     else:
         puzzle_identifiers = None
@@ -321,7 +322,7 @@ class PuzzleDatasetIterator:
         if puzzle_indices.ndim != 1 or len(puzzle_indices) < 2:
             raise ValueError(
                 f"puzzle_indices must be 1D with at least 2 elements, "
-                f"got shape {puzzle_indices.shape}"
+                f"got shape {puzzle_indices.shape}",
             )
         if not torch.all(puzzle_indices[1:] >= puzzle_indices[:-1]):
             raise ValueError("puzzle_indices must be monotonically increasing")
@@ -340,7 +341,7 @@ class PuzzleDatasetIterator:
         if expected_n_examples != self.n:
             raise ValueError(
                 f"puzzle_indices implies {expected_n_examples} examples, "
-                f"but dataset has {self.n} examples"
+                f"but dataset has {self.n} examples",
             )
 
         # Now transfer to storage device
@@ -371,14 +372,14 @@ class PuzzleDatasetIterator:
         if not group_indices_path.exists():
             raise FileNotFoundError(
                 f"Stratified sampling requires {group_indices_path}, but file not found. "
-                f"Set stratified=False or provide the file."
+                f"Set stratified=False or provide the file.",
             )
 
         group_indices = torch.from_numpy(np.load(group_indices_path))
         if group_indices.ndim != 1 or len(group_indices) < 2:
             raise ValueError(
                 f"group_indices must be 1D with at least 2 elements, "
-                f"got shape {group_indices.shape}"
+                f"got shape {group_indices.shape}",
             )
         if not torch.all(group_indices[1:] >= group_indices[:-1]):
             raise ValueError("group_indices must be monotonically increasing")
@@ -454,7 +455,10 @@ class PuzzleDatasetIterator:
 
         # RNG call 1: sample one puzzle_id per group (vectorized, no .item() calls)
         puzzle_id_offsets = torch.randint(
-            0, self._puzzle_ids_per_group, (n_groups,), device=device
+            0,
+            self._puzzle_ids_per_group,
+            (n_groups,),
+            device=device,
         )
         indices = group_starts + puzzle_id_offsets
 
@@ -514,7 +518,7 @@ class PuzzleDatasetIterator:
             [
                 torch.zeros(1, device=device, dtype=sample_counts.dtype),
                 sample_counts.cumsum(0)[:-1],
-            ]
+            ],
         )
         puzzle_start_offsets = torch.repeat_interleave(cumulative_counts, sample_counts)
         sample_indices = expanded_starts + (global_offsets - puzzle_start_offsets)
@@ -608,7 +612,10 @@ class PuzzleDatasetIterator:
         # Sudoku/Maze: single-level sampling (group -> sample)
         # All groups have same size, puzzle_id == sample index.
         puzzle_id_offsets = torch.randint(
-            0, self._puzzle_ids_per_group, (n_groups,), device=device
+            0,
+            self._puzzle_ids_per_group,
+            (n_groups,),
+            device=device,
         )
         sample_indices = group_starts + puzzle_id_offsets
         return sample_indices, sample_indices

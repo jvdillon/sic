@@ -543,7 +543,8 @@ def test_wta_batched_vs_sequential():
     # Register extra L_init params
     for k in range(1, K):
         model.register_parameter(
-            f"L_init_{k}", torch.nn.Parameter(torch.randn(seq_len, hidden) * 0.1)
+            f"L_init_{k}",
+            torch.nn.Parameter(torch.randn(seq_len, hidden) * 0.1),
         )
 
     # Create inputs

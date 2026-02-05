@@ -25,10 +25,10 @@ from data import PuzzleDatasetIterator, augment_sudoku
 
 class ForwardResult(TypedDict):
     losses: Tensor  # [P] per-chain losses (inf for inactive)
-    logits: Tensor  # [P, S-1, V]
+    logits: Tensor  # [P, num_puzzle_grid_tokens, V]
     q_halt: Tensor  # [P]
-    z_H: Tensor  # [P, S, C]
-    z_L: Tensor  # [P, S, C]
+    z_H: Tensor  # [P, total_seq_len, C]
+    z_L: Tensor  # [P, total_seq_len, C]
 
 
 class Experiment:
@@ -139,19 +139,36 @@ class Experiment:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype: torch.dtype = self.config.dtype or torch.bfloat16
         self.model: TRM3 = cast(
-            TRM3,
+            "TRM3",
             self.config.setup().to(
                 device=self.device,
                 dtype=self.dtype if self.cast_model_to_dtype else None,
             ),
         )
+        # Validate K matches model's num_effective_heads
+        if self.config.num_effective_heads != self.K:
+            raise ValueError(
+                f"K ({self.K}) must match config.num_effective_heads "
+                f"({self.config.num_effective_heads} = K_H * K_L)",
+            )
+
+        # Validate that both puzzle embedding modes aren't enabled simultaneously
+        if self.use_additive_puzzle_emb and self.config.num_puzzle_id_tokens > 0:
+            raise ValueError(
+                "Cannot enable both use_additive_puzzle_emb and num_puzzle_id_tokens. "
+                "These are mutually exclusive puzzle conditioning approaches.",
+            )
+
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
 
         # Puzzle identifier embedding (for ARC multi-example conditioning)
+        # NOTE: This is the OLD additive approach. Prefer TRM-style prefix tokens
+        # (num_puzzle_id_tokens > 0) for new experiments.
         self.puzzle_id_embed: nn.Embedding | None = None
         if self.use_additive_puzzle_emb:
             self.puzzle_id_embed = nn.Embedding(
-                self.max_puzzle_ids_per_batch, self.config.hidden_size
+                self.max_puzzle_ids_per_batch,
+                self.config.hidden_size,
             ).to(device=self.device, dtype=self.dtype)
 
     def setup_optimizers(self) -> None:
@@ -160,6 +177,11 @@ class Experiment:
             self.model,
             muon_lr=0.02,
         )
+        # Add experiment-level puzzle_id_embed to optimizer if enabled
+        if self.puzzle_id_embed is not None:
+            self.optimizer1.add_param_group(  # pyright: ignore[reportOptionalMemberAccess]
+                {"params": self.puzzle_id_embed.parameters()}
+            )
 
     def make_train_loader(self) -> PuzzleDatasetIterator:
         assert self.device is not None
@@ -355,7 +377,7 @@ class Experiment:
         self._pending_labels = torch.cat([self._pending_labels, labels[:space]])
         if puzzle_ids is not None:
             self._pending_puzzle_ids = torch.cat(
-                [self._pending_puzzle_ids, puzzle_ids[:space]]
+                [self._pending_puzzle_ids, puzzle_ids[:space]],
             )
         else:
             # Fill with zeros if no puzzle_ids provided
@@ -363,9 +385,11 @@ class Experiment:
                 [
                     self._pending_puzzle_ids,
                     torch.zeros(
-                        min(space, len(inputs)), device=self.device, dtype=torch.long
+                        min(space, len(inputs)),
+                        device=self.device,
+                        dtype=torch.long,
                     ),
-                ]
+                ],
             )
 
     def _fill_pending(self) -> int:
@@ -465,7 +489,9 @@ class Experiment:
                     local_ids = chain_puzzle_ids % cfg.num_puzzle_ids
                     puzzle_emb = self.model.puzzle_id_embed(local_ids, cfg.dtype)
                     puzzle_emb = puzzle_emb.view(
-                        B, cfg.num_puzzle_id_tokens, cfg.hidden_size
+                        B,
+                        cfg.num_puzzle_id_tokens,
+                        cfg.hidden_size,
                     )
                     puzzle_emb = self.model.embed_scale * puzzle_emb
                     prefix_parts.append(puzzle_emb)
@@ -475,19 +501,23 @@ class Experiment:
                     and self.model.register_tokens is not None
                 ):
                     reg_emb = self.model.register_tokens.unsqueeze(0).expand(B, -1, -1)
-                    reg_emb = reg_emb.to(dtype=cfg.dtype)
+                    reg_emb = self.model.embed_scale * reg_emb.to(dtype=cfg.dtype)
                     prefix_parts.append(reg_emb)
                 if prefix_parts:
                     prefix = torch.cat(prefix_parts, dim=1)
                     embeddings = torch.cat([prefix, embeddings], dim=1)
 
-            # Add puzzle_id embedding to z_H if enabled (old additive approach)
+            # Add puzzle_id embedding to z_H if enabled (old additive approach).
+            # NOTE: This is a separate feature from TRM-style prefix tokens above.
+            # They use different embedding tables and shouldn't both be enabled.
             z_H = state.z_H
             if self.use_additive_puzzle_emb and self.puzzle_id_embed is not None:
-                chain_puzzle_ids = state.puzzle_ids[batch_indices]
+                additive_puzzle_ids = state.puzzle_ids[batch_indices]
                 # Remap to batch-local indices (modulo embedding table size)
-                local_ids = chain_puzzle_ids % self.max_puzzle_ids_per_batch
-                puzzle_emb = self.puzzle_id_embed(local_ids)  # [num_chains, hidden]
+                additive_local_ids = additive_puzzle_ids % self.max_puzzle_ids_per_batch
+                puzzle_emb = self.puzzle_id_embed(
+                    additive_local_ids
+                )  # [num_chains, hidden]
                 # Add to z_H (broadcast across sequence dimension)
                 z_H = z_H + puzzle_emb.unsqueeze(1)
 
@@ -577,6 +607,8 @@ class Experiment:
     # --- Evaluation ---
     # Monkey-patch eval methods from ExperimentBase (intentionally not inheriting
     # to avoid pulling in ExperimentBase's full __init__ and training logic).
+    # NOTE: These eval methods don't pass puzzle_ids, so they're incompatible with
+    # num_puzzle_id_tokens > 0. The model will raise a clear error in that case.
 
     evaluate = ExperimentBase.evaluate
     evaluate_act = ExperimentBase.evaluate_act
@@ -584,8 +616,12 @@ class Experiment:
     evaluate_act_haltfast = ExperimentBase.evaluate_act_haltfast
     evaluate_act_haltfast_wta = ExperimentBase.evaluate_act_haltfast_wta
 
+    def _get_seq_len(self) -> int:
+        """Override for TRM3: use total_seq_len instead of seq_len."""
+        return self.config.total_seq_len
+
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
-        """For ExperimentBase: Create initial z_H and z_L states for eval (single head)."""
+        """For ExperimentBase eval: single-head init using H_init[0]/L_init[0]."""
         total_seq_len = self.config.total_seq_len
         z_H = self.model.H_init[0].expand(batch_size, total_seq_len, -1).contiguous()
         z_L = self.model.L_init[0].expand(batch_size, total_seq_len, -1).contiguous()
@@ -594,13 +630,17 @@ class Experiment:
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
         """For ExperimentBase: Create z_L for all K heads for a single puzzle (WTA eval).
 
-        Returns: [K, total_seq_len, hidden]
+        Returns: [N, total_seq_len, hidden] where N = num_effective_heads (K_H * K_L for outer).
         """
         del puzzle_idx
-        return self.model.L_init.unsqueeze(1).expand(-1, self.config.total_seq_len, -1)
+        # Use same pairing as init_carry: L_init[l_indices] for each chain
+        _, l_indices = self.model._sample_head_indices()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]  # [N]
+        S = self.config.total_seq_len
+        # L_init is [K_L, hidden], index and expand to [N, S, hidden]
+        return self.model.L_init[l_indices].unsqueeze(1).expand(-1, S, -1)
 
     def _prepend_halt_token(self, inputs: Tensor) -> Tensor:
-        """Prepend HALT token for ACT mode (required by ExperimentBase eval methods)."""
+        """Prepend HALT token only (no prefix tokens; eval methods incompatible with prefix)."""
         B = inputs.shape[0]
         halt_tokens = torch.full(
             (B, 1),
@@ -620,6 +660,8 @@ class Experiment:
         }
         if self.ema:
             checkpoint["ema"] = dict(self.ema.shadow)
+        if self.puzzle_id_embed is not None:
+            checkpoint["puzzle_id_embed"] = self.puzzle_id_embed.state_dict()
         return checkpoint
 
 
@@ -707,7 +749,7 @@ class TrainingState:
             [
                 (self.batch_index == -1).sum(),
                 (~self.active).sum(),
-            ]
+            ],
         ).tolist()
         num_free, num_inactive = int(counts[0]), int(counts[1])
         return min(num_free // self.K, num_inactive)

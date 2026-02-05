@@ -81,7 +81,12 @@ def _adjust_lr(
     lr: float,
     param: nn.Parameter,
     adjust_lr_fn: Literal[
-        "original", "match_rms_adamw", "conv_heuristic", "keller", "other1", "other2"
+        "original",
+        "match_rms_adamw",
+        "conv_heuristic",
+        "keller",
+        "other1",
+        "other2",
     ] = "original",
     ensemble_dims: int = 0,
 ) -> float:
@@ -102,7 +107,7 @@ def _adjust_lr(
         adjusted_ratio = c_out**0.5 / c_in**0.5
     else:
         raise ValueError(
-            f"Adjust learning rate function {adjust_lr_fn} is not supported"
+            f"Adjust learning rate function {adjust_lr_fn} is not supported",
         )
     return lr * adjusted_ratio
 
@@ -175,7 +180,7 @@ class Muon(torch.optim.Optimizer):
                     for p_ in group["params"]:
                         print(p_.shape, p_.dtype)
                     raise ValueError(
-                        f"Muon is only defined for linear operators {p.shape}."
+                        f"Muon is only defined for linear operators {p.shape}.",
                     )
 
                 state = self.state[p]
@@ -210,7 +215,7 @@ class Muon(torch.optim.Optimizer):
 
                 if adjust_lr_fn == "keller":
                     p.data.mul_(
-                        p.data.shape[0] ** 0.5 / p.data.norm()
+                        p.data.shape[0] ** 0.5 / p.data.norm(),
                     )  # RMS weight norm?
                     # Did well at calibrating the spectral norm to be approx 1.
                     # c_out, c_in, *r = msgn_g.shape

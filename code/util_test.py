@@ -149,7 +149,7 @@ class TestLog1mexp:
                 math.log(1 - math.exp(-0.1)),
                 math.log(1 - math.exp(-1.0)),
                 math.log(1 - math.exp(-5.0)),
-            ]
+            ],
         )
         assert torch.allclose(result, expected, atol=1e-5)
 

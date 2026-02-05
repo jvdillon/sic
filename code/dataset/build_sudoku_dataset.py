@@ -84,14 +84,14 @@ def convert_subset(set_name: str, config: DataProcessConfig):
                         q.replace(".", "0").encode(),
                         dtype=np.uint8,
                     ).reshape(9, 9)
-                    - ord("0")
+                    - ord("0"),
                 )
                 labels.append(
                     np.frombuffer(
                         a.encode(),
                         dtype=np.uint8,
                     ).reshape(9, 9)
-                    - ord("0")
+                    - ord("0"),
                 )
 
     # If subsample_size is specified for the training set,

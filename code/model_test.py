@@ -449,7 +449,8 @@ class TestTRMBitForBit:
             z_L = model1.L_init.expand(1, 82, -1).clone()
             out = model1(inputs, z_H, z_L)
             loss = torch.nn.functional.cross_entropy(
-                out["logits"].view(-1, 12), labels.view(-1)
+                out["logits"].view(-1, 12),
+                labels.view(-1),
             )
             loss.backward()
             opt1.step()
@@ -466,14 +467,17 @@ class TestTRMBitForBit:
             z_L = model2.L_init.expand(1, 82, -1).clone()
             out = model2(inputs, z_H, z_L)
             loss = torch.nn.functional.cross_entropy(
-                out["logits"].view(-1, 12), labels.view(-1)
+                out["logits"].view(-1, 12),
+                labels.view(-1),
             )
             loss.backward()
             opt2.step()
 
         # Compare all parameters
         for (n1, p1), (n2, p2) in zip(
-            model1.named_parameters(), model2.named_parameters(), strict=False
+            model1.named_parameters(),
+            model2.named_parameters(),
+            strict=False,
         ):
             assert n1 == n2
             assert torch.equal(p1, p2), (

@@ -109,7 +109,12 @@ def _reset_eval_slot(
 
 
 class ExperimentBase:
-    """TRM experiment with ACT training."""
+    """TRM/TRM2 experiment with ACT training.
+
+    NOTE: This class is Sudoku-specific (hardcoded 81 = 9x9 grid in several places).
+    For TRM3 with different puzzle sizes, use sudoku/x182.py:Experiment which properly
+    parameterizes num_puzzle_grid_tokens and total_seq_len.
+    """
 
     model: TRM1Protocol
     device: torch.device  # Set in __init__ if not provided by subclass
@@ -175,8 +180,10 @@ class ExperimentBase:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = self.config.dtype
         self.model = cast(
-            TRM1Protocol,
-            cast(object, self.config.setup().to(device=self.device, dtype=self.dtype)),
+            "TRM1Protocol",
+            cast(
+                "object", self.config.setup().to(device=self.device, dtype=self.dtype)
+            ),
         )
 
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
@@ -204,9 +211,11 @@ class ExperimentBase:
         for k in range(1, self.K):
             L_init_k = nn.Parameter(
                 torch.randn(
-                    self.model.L_init.shape, device=self.device, dtype=self.dtype
+                    self.model.L_init.shape,
+                    device=self.device,
+                    dtype=self.dtype,
                 )
-                * 0.1
+                * 0.1,
             )
             self.model.register_parameter(f"L_init_{k}", L_init_k)
             if self.ema is not None:
@@ -256,9 +265,13 @@ class ExperimentBase:
         )
         return torch.cat([halt_tokens, inputs], dim=1)
 
+    def _get_seq_len(self) -> int:
+        """Get sequence length for z_H/z_L. Override for TRM3 (which uses total_seq_len)."""
+        return self.model.config.seq_len
+
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
         """Create initial z_H and z_L states."""
-        seq_len = self.model.config.seq_len
+        seq_len = self._get_seq_len()
         # These contiguous calls prevent recompiles.
         z_H = self.model.H_init.expand(batch_size, seq_len, -1).contiguous()
         z_L = self.model.L_init.expand(batch_size, seq_len, -1).contiguous()
@@ -287,7 +300,10 @@ class ExperimentBase:
         )
 
     def step(
-        self, inputs: Tensor, labels: Tensor, puzzle_ids: Tensor | None = None
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> dict[str, Tensor] | None:
         del puzzle_ids  # Not used in base class (no puzzle_identifier conditioning)
         if self.current_step >= self.total_train_steps:
@@ -313,7 +329,7 @@ class ExperimentBase:
     def _step_act(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor]:
         """ACT step: one forward pass per call, persist carry across calls."""
         B = self.batch_size
-        seq_len = self.model.config.seq_len
+        seq_len = self._get_seq_len()
 
         if self.act_carry is None:
             self.act_carry = self._init_act_carry()
@@ -328,7 +344,7 @@ class ExperimentBase:
                 steps_taken = int(carry["steps"][idx].item())
                 if steps_taken > 0:
                     self.act_steps_history.append(steps_taken)
-                    if 1 <= steps_taken <= 16:
+                    if 1 <= steps_taken <= self.max_reasoning_steps:
                         self.halt_steps_histogram[steps_taken - 1] += 1
 
             n_reset = min(len(halted_indices), len(inputs))
@@ -451,7 +467,7 @@ class ExperimentBase:
         Current model uses RMSNorm which is per-sample, so this is safe.
         """
         B = self.batch_size
-        seq_len = self.model.config.seq_len
+        seq_len = self._get_seq_len()
 
         if self.act_carry is None:
             self.act_carry = self._init_act_carry()
@@ -466,7 +482,7 @@ class ExperimentBase:
                 steps_taken = int(carry["steps"][idx].item())
                 if steps_taken > 0:
                     self.act_steps_history.append(steps_taken)
-                    if 1 <= steps_taken <= 16:
+                    if 1 <= steps_taken <= self.max_reasoning_steps:
                         self.halt_steps_histogram[steps_taken - 1] += 1
 
             n_reset = min(len(halted_indices), len(inputs))
@@ -560,10 +576,12 @@ class ExperimentBase:
 
         # q_halt loss on winner
         winner_q_halt = torch.stack(all_q_halt, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
         winner_logits = torch.stack(all_logits, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
 
         with torch.no_grad():
@@ -589,10 +607,12 @@ class ExperimentBase:
 
         # Update carry state using winner's z_H/z_L
         new_z_H = torch.stack(all_z_H, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
         new_z_L = torch.stack(all_z_L, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
 
         carry["z_H"] = new_z_H.detach()
@@ -631,7 +651,7 @@ class ExperimentBase:
         avg_prob = torch.stack(probs, dim=0).mean(dim=0)
         H_avg = -(avg_prob * (avg_prob + 1e-8).log()).sum(dim=-1).mean()
         avg_H = torch.stack(
-            [-(p * (p + 1e-8).log()).sum(dim=-1).mean() for p in probs]
+            [-(p * (p + 1e-8).log()).sum(dim=-1).mean() for p in probs],
         ).mean()
         return H_avg - avg_H
 
@@ -642,7 +662,7 @@ class ExperimentBase:
         Current model uses RMSNorm which is per-sample, so this is safe.
         """
         B = self.batch_size
-        seq_len = self.model.config.seq_len
+        seq_len = self._get_seq_len()
 
         if self.act_carry is None:
             self.act_carry = self._init_act_carry()
@@ -657,7 +677,7 @@ class ExperimentBase:
                 steps_taken = int(carry["steps"][idx].item())
                 if steps_taken > 0:
                     self.act_steps_history.append(steps_taken)
-                    if 1 <= steps_taken <= 16:
+                    if 1 <= steps_taken <= self.max_reasoning_steps:
                         self.halt_steps_histogram[steps_taken - 1] += 1
 
             n_reset = min(len(halted_indices), len(inputs))
@@ -753,10 +773,12 @@ class ExperimentBase:
         jsd_loss = -jsd * jsd_weight
 
         winner_q_halt = torch.stack(all_q_halt, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
         winner_logits = torch.stack(all_logits, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
 
         with torch.no_grad():
@@ -781,10 +803,12 @@ class ExperimentBase:
         self._update_weights()
 
         new_z_H = torch.stack(all_z_H, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
         new_z_L = torch.stack(all_z_L, dim=1)[
-            torch.arange(B, device=self.device), winner_idx
+            torch.arange(B, device=self.device),
+            winner_idx,
         ]
 
         carry["z_H"] = new_z_H.detach()
@@ -902,7 +926,6 @@ class ExperimentBase:
 
         Mirrors qhalt_eval.py: uses model() not step(), halted samples replaced with new puzzles.
         """
-        seq_len = self.model.config.seq_len
         bs = (
             self.eval_batch_size
             if self.eval_batch_size is not None
@@ -921,15 +944,13 @@ class ExperimentBase:
         # Batch state
         inputs = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
         labels = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
-        z_H = self.model.H_init.expand(B, seq_len, -1).clone()
-        L_init = getattr(self.model, "L_init_0", self.model.L_init)
-        z_L = L_init.expand(B, seq_len, -1).clone()
+        z_H, z_L = self._init_z(B)
         steps = torch.zeros(B, device=self.device, dtype=torch.int32)
         valid = torch.zeros(B, device=self.device, dtype=torch.bool)
 
-        # Cache init states for resets
+        # Cache init states for resets (squeeze(0) to get [seq_len, hidden])
         H_init_single = self.model.H_init.squeeze(0)
-        L_init_single = L_init.squeeze(0)
+        L_init_single = self.model.L_init.squeeze(0)
 
         # Puzzle iterator
         puzzle_iter = iter(loader)
@@ -994,7 +1015,10 @@ class ExperimentBase:
             return 0.0, 0.0
 
         halt_token = torch.full(
-            (B, 1), HALT_TOKEN_ID, device=self.device, dtype=torch.int32
+            (B, 1),
+            HALT_TOKEN_ID,
+            device=self.device,
+            dtype=torch.int32,
         )
 
         with torch.no_grad():
@@ -1069,7 +1093,7 @@ class ExperimentBase:
     ) -> tuple[float, float]:
         """WTA eval: run K heads, first to halt wins. Streaming replacement."""
         start_time = time.perf_counter()
-        seq_len = self.model.config.seq_len
+        seq_len = self._get_seq_len()
         hidden = self.model.config.hidden_size
         bs = (
             self.eval_batch_size
@@ -1087,16 +1111,30 @@ class ExperimentBase:
         inputs = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
         labels = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
         z_H = torch.zeros(
-            B, self.K, seq_len, hidden, device=self.device, dtype=self.dtype
+            B,
+            self.K,
+            seq_len,
+            hidden,
+            device=self.device,
+            dtype=self.dtype,
         )
         z_L = torch.zeros(
-            B, self.K, seq_len, hidden, device=self.device, dtype=self.dtype
+            B,
+            self.K,
+            seq_len,
+            hidden,
+            device=self.device,
+            dtype=self.dtype,
         )
         steps = torch.zeros(B, device=self.device, dtype=torch.int32)
         valid = torch.zeros(B, device=self.device, dtype=torch.bool)
         has_winner = torch.zeros(B, device=self.device, dtype=torch.bool)
         winner_logits = torch.zeros(
-            B, 81, self.model.config.vocab_size, device=self.device, dtype=self.dtype
+            B,
+            81,
+            self.model.config.vocab_size,
+            device=self.device,
+            dtype=self.dtype,
         )
 
         # Cache init states
@@ -1140,7 +1178,10 @@ class ExperimentBase:
             return 0.0, 0.0
 
         halt_token = torch.full(
-            (B, 1), HALT_TOKEN_ID, device=self.device, dtype=torch.int32
+            (B, 1),
+            HALT_TOKEN_ID,
+            device=self.device,
+            dtype=torch.int32,
         )
 
         with torch.no_grad():
@@ -1164,7 +1205,10 @@ class ExperimentBase:
                 z_L = out["z_L"].reshape(B, self.K, seq_len, -1)
                 q_halt_stack = out["q_halt"].reshape(B, self.K)  # [B, K]
                 logits_stack = out["logits"][:, 1:].reshape(
-                    B, self.K, 81, -1
+                    B,
+                    self.K,
+                    81,
+                    -1,
                 )  # [B, K, 81, vocab]
 
                 steps += valid.int()
@@ -1183,7 +1227,8 @@ class ExperimentBase:
                     # Gather winner logits
                     batch_idx = torch.arange(B, device=self.device)
                     selected_logits = logits_stack[
-                        batch_idx, winner_head
+                        batch_idx,
+                        winner_head,
                     ]  # [B, 81, vocab]
 
                     winner_logits[any_halted] = selected_logits[any_halted]
@@ -1281,7 +1326,7 @@ class ExperimentBase:
                 has_halted = torch.zeros(B, device=self.device, dtype=torch.bool)
                 halt_logits = torch.zeros(
                     B,
-                    self.config.seq_len - 1,
+                    inputs.shape[1],  # num_puzzle_grid_tokens
                     self.model.config.vocab_size,
                     device=self.device,
                     dtype=self.dtype,
@@ -1323,7 +1368,7 @@ class ExperimentBase:
                 # However, if we use the following then we base the prediction on
                 # on the final last step.
                 preds = out["logits"][:, 1:].argmax(
-                    dim=-1
+                    dim=-1,
                 )  # Use final logits, not halt
 
                 # Reset-retry for stuck puzzles (#22)
@@ -1348,10 +1393,13 @@ class ExperimentBase:
                         out_retry: dict[str, Tensor] = {}
                         for _ in range(self.max_reasoning_steps):
                             with torch.autocast(
-                                device_type=self.device.type, dtype=self.dtype
+                                device_type=self.device.type,
+                                dtype=self.dtype,
                             ):
                                 out_retry = self.model(
-                                    inputs_stuck, z_H_retry, z_L_retry
+                                    inputs_stuck,
+                                    z_H_retry,
+                                    z_L_retry,
                                 )
                             z_H_retry = out_retry["z_H"]
                             z_L_retry = out_retry["z_L"]
@@ -1388,7 +1436,7 @@ class ExperimentBase:
             help_rate = 100 * total_helped / total_stuck
             print(
                 f"  reset_retry: n_stuck={total_stuck} ({retry_rate:.1f}%), "
-                f"n_helped={total_helped} ({help_rate:.1f}% of stuck)"
+                f"n_helped={total_helped} ({help_rate:.1f}% of stuck)",
             )
 
         if last_batch is not None:
@@ -1434,17 +1482,17 @@ class ExperimentBase:
                     labels_v = sample_labels[:diag_valid]
                     cell_accs.append((preds == labels_v).float().mean().item() * 100)
                     puzzle_accs.append(
-                        (preds == labels_v).all(dim=-1).float().mean().item() * 100
+                        (preds == labels_v).all(dim=-1).float().mean().item() * 100,
                     )
                 q_stack = torch.stack(step_q_halts)[:, :diag_valid]
                 mean_sigmoids = torch.sigmoid(q_stack).mean(dim=1).tolist()
                 halt_rates = (q_stack > 0).float().mean(dim=1).tolist()
 
                 print(
-                    f"  per_ACT_cell_acc: {[f'H{i + 1}={a:.1f}%' for i, a in enumerate(cell_accs)]}"
+                    f"  per_ACT_cell_acc: {[f'H{i + 1}={a:.1f}%' for i, a in enumerate(cell_accs)]}",
                 )
                 print(
-                    f"  per_ACT_puzzle_acc: {[f'H{i + 1}={a:.1f}%' for i, a in enumerate(puzzle_accs)]}"
+                    f"  per_ACT_puzzle_acc: {[f'H{i + 1}={a:.1f}%' for i, a in enumerate(puzzle_accs)]}",
                 )
                 print(f"  mean_sigmoid_q_halt: {[f'{s:.3f}' for s in mean_sigmoids]}")
                 print(f"  halt_rates: {[f'{h:.2f}' for h in halt_rates]}")
@@ -1460,7 +1508,7 @@ class ExperimentBase:
                 if self.act_steps_history:
                     recent = self.act_steps_history[-100:]
                     print(
-                        f"  Avg ACT steps (last 100): {sum(recent) / len(recent):.2f}"
+                        f"  Avg ACT steps (last 100): {sum(recent) / len(recent):.2f}",
                     )
 
         return cell_acc, puzzle_acc
@@ -1510,7 +1558,7 @@ def train(experiment: ExperimentBase):
                 for k in keys:
                     vals = torch.stack([d[k] for d in dicts])
                     parts.append(
-                        f"{k}={vals.mean():.4f}±{vals.std():.4f}ϵ[{vals.min():.4f},{vals.max():.4f}]"
+                        f"{k}={vals.mean():.4f}±{vals.std():.4f}ϵ[{vals.min():.4f},{vals.max():.4f}]",
                     )
                 train_loss = "  Train " + " ".join(parts)
             else:
@@ -1703,14 +1751,14 @@ def setup_muon_optimizers(
             {
                 "params": list(muon_2d_params.values()),
                 "ensemble_dims": 0,
-            }
+            },
         )
     if muon_3d_params:
         muon_param_groups.append(
             {
                 "params": list(muon_3d_params.values()),
                 "ensemble_dims": 1,  # Per-head orthogonalization
-            }
+            },
         )
     if muon_3d_qk_params:
         muon_param_groups.append(
@@ -1718,7 +1766,7 @@ def setup_muon_optimizers(
                 "params": list(muon_3d_qk_params.values()),
                 "ensemble_dims": 1,
                 "weight_decay": qk_wd,
-            }
+            },
         )
 
     if muon_param_groups:

@@ -79,7 +79,7 @@ class TRM1ConfigProtocol(Protocol):
 
 
 class TRM3ConfigProtocol(Protocol):
-    """Config protocol for TRM3 models with K_H/K_L heads."""
+    """Minimal config protocol for TRM3 models (duck typing for callers)."""
 
     num_puzzle_grid_tokens: int
     hidden_size: int
@@ -98,6 +98,9 @@ class TRM3ConfigProtocol(Protocol):
     num_puzzle_id_tokens: int
     num_register_tokens: int
     num_puzzle_ids: int
+    use_rope: bool
+    rope_theta: float
+    num_heads: int
 
     @property
     def total_seq_len(self) -> int: ...
@@ -123,7 +126,7 @@ class CarryState(TypedDict):
 class WTAForwardOutput(TypedDict):
     """Output of wta_forward."""
 
-    logits: Tensor  # [B, N, S-1, V] per-head logits (without HALT position)
+    logits: Tensor  # [B, N, num_puzzle_grid_tokens, V] per-head logits (without HALT)
     q_halt: Tensor  # [B, N] per-head halt logits
     losses: Tensor  # [B, N] per-head losses
     winner_idx: Tensor  # [B] index of winning head
@@ -316,8 +319,8 @@ class Linear(nn.Module):
                 torch.empty(
                     [c_out, c_in],
                     dtype=dtype,
-                )
-            )
+                ),
+            ),
         )
         if bias:
             # TODO(josh): Consider adding to this "if": "or has kwarg 'c_in'".
@@ -328,8 +331,8 @@ class Linear(nn.Module):
                     torch.empty(
                         c_out,
                         dtype=dtype,
-                    )
-                )
+                    ),
+                ),
             )
         else:
             self.bias = None
@@ -358,14 +361,14 @@ class EnsembleLinear(nn.Module):
     ):
         super().__init__()
         self.weight = nn.Parameter(
-            init_weight_fn(torch.empty([num_ensemble, c_out, c_in]))
+            init_weight_fn(torch.empty([num_ensemble, c_out, c_in])),
         )
         if bias:
             self.bias = nn.Parameter(
                 torch.zeros(
                     num_ensemble,
                     c_out,
-                )
+                ),
             )
         else:
             self.bias = None
@@ -396,8 +399,8 @@ class Embedding(nn.Module):
                 torch.empty(
                     [num_embeddings, embedding_dim],
                     dtype=dtype,
-                )
-            )
+                ),
+            ),
         )
 
     def forward(self, x: Tensor, dtype: torch.dtype | None = None) -> Tensor:
@@ -1212,7 +1215,7 @@ class TRM(nn.Module):
         if config.block_fn is None:
             raise ValueError("block_fn is required")
         self.reasoning = Sequential(
-            *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)]
+            *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)],
         )
         if config.compile_reasoning:
             # Doing as a side-effect means checkpoints are unaffected.
@@ -1412,6 +1415,17 @@ class TRM2(TRM):
             return TRM2(self, *args, **kwargs)
 
 
+def _block_fn_creates_mlp_mixer(block_fn: Callable[[int], nn.Module]) -> bool:
+    """Check if block_fn creates MLPMixerBlock without instantiating.
+
+    Uses `is` identity check intentionally - subclasses would need their own
+    validation logic since they may handle seq_len/RoPE differently.
+    """
+    if isinstance(block_fn, functools.partial):
+        return block_fn.func is MLPMixerBlock
+    return block_fn is MLPMixerBlock
+
+
 class TRM3(nn.Module):
     """Tiny Recursive Model."""
 
@@ -1429,6 +1443,8 @@ class TRM3(nn.Module):
         device: torch.device | str | None = "cuda"
 
         head_bias: bool = True
+        # NOTE: Default uses class-level num_puzzle_grid_tokens (81) at definition time.
+        # If you change num_puzzle_grid_tokens, you must also provide a compatible block_fn.
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
             seq_len=num_puzzle_grid_tokens + 1,  # puzzle_grid + halt
@@ -1497,7 +1513,7 @@ class TRM3(nn.Module):
         # Sequence order: [puzzle_id_tokens..., register_tokens..., HALT, puzzle_grid...]
         # - puzzle_id_tokens: per-puzzle learned tokens (embedding table)
         # - register_tokens: shared learned tokens (puzzle-agnostic)
-        # q_head reads position 0 (first puzzle_id token if enabled, else HALT)
+        # q_head reads from HALT position (num_puzzle_id_tokens + num_register_tokens)
         num_puzzle_id_tokens: int = 0  # Per-puzzle learned tokens
         num_register_tokens: int = 0  # Shared learned tokens
         num_puzzle_ids: int = 0  # Size of puzzle ID embedding table
@@ -1542,6 +1558,35 @@ class TRM3(nn.Module):
         super().__init__()
         if config.device is not None:
             config.device = torch.device(config.device)
+
+        # Validate: MLPMixerBlock requires seq_len to match actual sequence length.
+        # With prefix tokens, total_seq_len > num_puzzle_grid_tokens + 1, so the
+        # default block_fn (MLPMixerBlock with seq_len=num_puzzle_grid_tokens+1)
+        # will have mismatched dimensions. User must provide a compatible block_fn.
+        if (
+            config.num_puzzle_id_tokens > 0 or config.num_register_tokens > 0
+        ) and _block_fn_creates_mlp_mixer(config.block_fn):
+            raise ValueError(
+                "MLPMixerBlock cannot be used with prefix tokens "
+                f"(num_puzzle_id_tokens={config.num_puzzle_id_tokens}, "
+                f"num_register_tokens={config.num_register_tokens}). "
+                "Use TransformerBlock or another block that doesn't require seq_len.",
+            )
+
+        # Validate: num_puzzle_ids must be set when using puzzle_id_tokens
+        if config.num_puzzle_id_tokens > 0 and config.num_puzzle_ids <= 0:
+            raise ValueError(
+                f"num_puzzle_ids must be > 0 when num_puzzle_id_tokens > 0 "
+                f"(got num_puzzle_ids={config.num_puzzle_ids})",
+            )
+
+        # Validate: MLPMixerBlock doesn't support RoPE (raises at runtime otherwise)
+        if config.use_rope and _block_fn_creates_mlp_mixer(config.block_fn):
+            raise ValueError(
+                "MLPMixerBlock does not support RoPE. "
+                "Use TransformerBlock or set use_rope=False.",
+            )
+
         self.config = config
 
         # Embedding rescale trick: init small, multiply at runtime (like TRM).
@@ -1579,7 +1624,7 @@ class TRM3(nn.Module):
         # PRNG_EQUIVALENCE: Must consume RNG for backwards compat.
         _ = normal_init_(torch.empty_like(self.q_head.weight))
         self.reasoning = Sequential(
-            *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)]
+            *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)],
         )
 
         # Puzzle ID embedding: per-puzzle learned tokens
@@ -1588,16 +1633,20 @@ class TRM3(nn.Module):
                 config.num_puzzle_ids,
                 config.num_puzzle_id_tokens * config.hidden_size,
                 init_weight_fn=functools.partial(
-                    trunc_normal_init_, std=0
+                    trunc_normal_init_,
+                    std=0,
                 ),  # Zero init
             )
         else:
             self.puzzle_id_embed = None
 
         # Register tokens: shared learned tokens (puzzle-agnostic)
+        # Init with std=1/embed_scale so after scaling they have unit variance.
+        # Created on CPU; moved to device by self.to() call later (standard nn.Parameter pattern).
         if config.num_register_tokens > 0:
             self.register_tokens: nn.Parameter | None = nn.Parameter(
-                torch.zeros(config.num_register_tokens, config.hidden_size)
+                torch.randn(config.num_register_tokens, config.hidden_size)
+                / self.embed_scale,
             )
         else:
             self.register_tokens = None
@@ -1684,45 +1733,49 @@ class TRM3(nn.Module):
     def init_carry(self, batch_size: int) -> CarryState:
         """Initialize model carry state with N = K_H * K_L chains."""
         # K_H * K_L for outer, max(K_H, K_L) for inner
-        N = self.config.num_effective_heads
-        S = self.config.total_seq_len  # Use total_seq_len (includes puzzle_id_tokens)
-
-        # Get h_indices, l_indices to know how to pair init vectors
-        h_indices, l_indices = self._sample_head_indices()
+        cfg = self.config
+        N = cfg.num_effective_heads
+        S = cfg.total_seq_len  # Use total_seq_len (includes puzzle_id_tokens)
 
         init_fn = functools.partial(trunc_normal_init_, std=1)
 
+        # Only sample indices if needed (avoid wasteful call when using random init)
+        h_indices: Tensor | None = None
+        l_indices: Tensor | None = None
+        if not cfg.z_H_random_init or not cfg.z_L_random_init:
+            h_indices, l_indices = self._sample_head_indices()
+
         # Initialize z_H for each chain
-        if self.config.z_H_random_init:
-            del h_indices
+        if cfg.z_H_random_init:
             z_H = init_fn(
                 torch.empty(
-                    [batch_size, N, S, self.config.hidden_size],
+                    [batch_size, N, S, cfg.hidden_size],
                     device=self.device,
                     dtype=self.dtype,
                 ),
             )
-            if self.config.z_H_init_svd:
+            if cfg.z_H_init_svd:
                 self._apply_svd_alignment_batched(z_H)
         else:
             # Each chain gets H_init[h_indices[chain_idx]]
+            assert h_indices is not None
             z_H_pool = self.H_init.unsqueeze(-2).expand(-1, S, -1)  # [K_H, S, C]
             z_H = z_H_pool[h_indices].unsqueeze(0).expand(batch_size, -1, -1, -1)
 
         # Initialize z_L for each chain
-        if self.config.z_L_random_init:
-            del l_indices
+        if cfg.z_L_random_init:
             z_L = init_fn(
                 torch.empty(
-                    [batch_size, N, S, self.config.hidden_size],
+                    [batch_size, N, S, cfg.hidden_size],
                     device=self.device,
                     dtype=self.dtype,
                 ),
             )
-            if self.config.z_L_init_svd:
+            if cfg.z_L_init_svd:
                 self._apply_svd_alignment_batched(z_L)
         else:
             # Each chain gets L_init[l_indices[chain_idx]]
+            assert l_indices is not None
             z_L_pool = self.L_init.unsqueeze(-2).expand(-1, S, -1)  # [K_L, S, C]
             z_L = z_L_pool[l_indices].unsqueeze(0).expand(batch_size, -1, -1, -1)
 
@@ -1906,7 +1959,7 @@ class TRM3(nn.Module):
             if self.register_tokens is None:
                 raise RuntimeError("register_tokens not initialized")
             reg_emb = self.register_tokens.unsqueeze(0).expand(B, -1, -1)
-            reg_emb = reg_emb.to(dtype=cfg.dtype)
+            reg_emb = self.embed_scale * reg_emb.to(dtype=cfg.dtype)
             prefix_parts.append(reg_emb)
 
         # Prefix: [puzzle_id_tokens..., register_tokens...]
@@ -1934,19 +1987,20 @@ class TRM3(nn.Module):
     ) -> dict[str, Any]:
         """Single H-cycle step.
 
-        Shapes: B = batch, S = total_seq_len, C = hidden_size, V = vocab_size.
+        Shapes: B = batch, C = hidden_size, V = vocab_size.
+        num_input_tokens = num_puzzle_grid_tokens + 1 (HALT + puzzle grid).
         With prefix tokens, z_H/z_L have shape [B, total_seq_len, C].
 
         Sequence order: [puzzle_id_tokens..., register_tokens..., HALT, input...]
 
         Args:
-            input_ids: [B, S]
+            input_ids: [B, num_input_tokens] - HALT token followed by puzzle grid
             z_H: [B, total_seq_len, C]
             z_L: [B, total_seq_len, C]
             puzzle_ids: [B] optional puzzle identifiers (required if num_puzzle_id_tokens > 0)
 
         Returns:
-            dict: logits [B, S, V], q_halt [B], z_H [B, total_seq_len, C], z_L [B, total_seq_len, C]
+            dict: logits [B, num_input_tokens, V], q_halt [B], z_H [B, total_seq_len, C], z_L [B, total_seq_len, C]
 
         """
         cfg = self.config
@@ -2089,7 +2143,7 @@ class TRM3(nn.Module):
             else:
                 if k_l != k_h:
                     raise ValueError(
-                        "inner requires K_L_eff == K_H_eff or 1 in (K_L_eff, K_H_eff)"
+                        "inner requires K_L_eff == K_H_eff or 1 in (K_L_eff, K_H_eff)",
                     )
                 h_indices = h_pool
                 l_indices = l_pool
@@ -2229,7 +2283,7 @@ class TRM3(nn.Module):
             raise ValueError(f"Unsupported carry_L policy: {cfg.carry_L}")
 
         # Update carry_count: increment where chain was updated (H or L)
-        updated = (h_updated | l_updated).float()
+        updated = (h_updated | l_updated).long()
         carry_count_new = carry_count + updated
 
         return z_H_new, z_L_new, carry_count_new
@@ -2273,19 +2327,20 @@ class TRM3(nn.Module):
         all_logits.append(logits.detach())
         all_z_H.append(z_H.detach())
 
-        # Slice output to exclude prefix positions (puzzle_id + register tokens)
+        # Slice logits to exclude prefix positions (puzzle_id + register tokens).
+        # z_H/z_L/all_z_H remain full total_seq_len - they're state vectors, not outputs.
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         if n_prefix > 0:
             logits = logits[:, n_prefix:]
             all_logits = [lg[:, n_prefix:] for lg in all_logits]
 
         return {
-            "logits": logits,
-            "all_logits": all_logits,
-            "q_halt": q_halt,
-            "z_H": z_H.detach(),
-            "z_L": z_L.detach(),
-            "all_z_H": all_z_H,
+            "logits": logits,  # [B, num_input_tokens, V]
+            "all_logits": all_logits,  # List[[B, num_input_tokens, V]]
+            "q_halt": q_halt,  # [B]
+            "z_H": z_H.detach(),  # [B, total_seq_len, C]
+            "z_L": z_L.detach(),  # [B, total_seq_len, C]
+            "all_z_H": all_z_H,  # List[[B, total_seq_len, C]]
         }
 
     def _forward_delta_reparam(
@@ -2302,6 +2357,11 @@ class TRM3(nn.Module):
         _sample_head_indices(). We expand init vectors to match.
         """
         cfg = self.config
+        if cfg.z_H_random_init or cfg.z_L_random_init:
+            raise ValueError(
+                "z_delta_reparam is incompatible with z_H_random_init/z_L_random_init. "
+                "Delta reparam assumes z derives from H_init/L_init.",
+            )
         input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
         input_emb = self._prepend_prefix(input_emb, puzzle_ids)
 
@@ -2318,7 +2378,7 @@ class TRM3(nn.Module):
         N = len(h_indices)
         if BN % N != 0:
             raise ValueError(
-                f"Batch size {BN} not divisible by num_effective_heads {N}"
+                f"Batch size {BN} not divisible by num_effective_heads {N}",
             )
         B = BN // N
 
@@ -2363,19 +2423,20 @@ class TRM3(nn.Module):
         all_logits.append(logits.detach())
         all_z_H.append(z_H.detach())
 
-        # Slice output to exclude prefix positions (puzzle_id + register tokens)
+        # Slice logits to exclude prefix positions (puzzle_id + register tokens).
+        # z_H/z_L/all_z_H remain full total_seq_len - they're state vectors, not outputs.
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         if n_prefix > 0:
             logits = logits[:, n_prefix:]
             all_logits = [lg[:, n_prefix:] for lg in all_logits]
 
         return {
-            "logits": logits,
-            "all_logits": all_logits,
-            "q_halt": q_halt,
-            "z_H": z_H.detach(),
-            "z_L": z_L.detach(),
-            "all_z_H": all_z_H,
+            "logits": logits,  # [B, num_input_tokens, V]
+            "all_logits": all_logits,  # List[[B, num_input_tokens, V]]
+            "q_halt": q_halt,  # [B]
+            "z_H": z_H.detach(),  # [B, total_seq_len, C]
+            "z_L": z_L.detach(),  # [B, total_seq_len, C]
+            "all_z_H": all_z_H,  # List[[B, total_seq_len, C]]
         }
 
     @torch.compile(mode="default", fullgraph=True)
@@ -2384,7 +2445,7 @@ class TRM3(nn.Module):
         input_emb: Tensor,
         z_H: Tensor,
         z_L: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None,  # Unused; for TRM signature compat
+        cos_sin: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         if torch.compiler.is_compiling():
             _ = trace_compile(
@@ -2399,7 +2460,7 @@ class TRM3(nn.Module):
         input_emb: Tensor,
         z_H: Tensor,
         z_L: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None,  # Unused; for TRM signature compat
+        cos_sin: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """One H-cycle.
 
@@ -2410,11 +2471,11 @@ class TRM3(nn.Module):
             input_emb: [B, S, C]
             z_H: [B, S, C]
             z_L: [B, S, C]
-            cos_sin: Unused (for TRM signature compatibility)
+            cos_sin: RoPE embeddings (cos, sin) or None
 
         Returns:
             logits: [B, S, vocab_size]
-            q_halt: [B] (from z_H[:, 0] i.e. HALT token position)
+            q_halt: [B] (from z_H at HALT position)
             z_H: [B, S, C]
             z_L: [B, S, C]
 
@@ -2426,6 +2487,8 @@ class TRM3(nn.Module):
         z_H = self.reasoning(z_H + z_L, cos_sin)
 
         logits = self.head(z_H)
-        q_halt = self.q_head(z_H[:, 0]).squeeze(-1)
+        # HALT position: after prefix tokens (puzzle_id + register)
+        halt_pos = self.config.num_puzzle_id_tokens + self.config.num_register_tokens
+        q_halt = self.q_head(z_H[:, halt_pos]).squeeze(-1)
 
         return logits, q_halt, z_H, z_L

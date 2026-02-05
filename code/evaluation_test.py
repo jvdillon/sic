@@ -47,7 +47,13 @@ def test_run_act_steps():
 
     with torch.no_grad():
         preds, q_halt, z_H_out = run_act_steps(
-            model, inputs, z_H, z_L, max_steps=2, device=device, dtype=dtype
+            model,
+            inputs,
+            z_H,
+            z_L,
+            max_steps=2,
+            device=device,
+            dtype=dtype,
         )
 
     assert preds.shape == (2, 81)

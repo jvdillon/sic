@@ -236,7 +236,7 @@ class TestMuon:
         param2 = nn.Parameter(torch.randn(8, 3))
 
         opt = Muon(
-            [{"params": [param1], "lr": 0.01}, {"params": [param2], "lr": 0.001}]
+            [{"params": [param1], "lr": 0.01}, {"params": [param2], "lr": 0.001}],
         )
 
         param1.grad = torch.randn(10, 5)

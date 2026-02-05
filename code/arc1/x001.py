@@ -10,7 +10,7 @@ from model import TRM3, TRM3ConfigProtocol
 
 
 def _config() -> TRM3.Config:
-    c = cast(TRM3.Config, copy.copy(Experiment000.config))
+    c = cast("TRM3.Config", copy.copy(Experiment000.config))
     c.K_L = 4
     c.carry_H = "copy_top1"
     return c

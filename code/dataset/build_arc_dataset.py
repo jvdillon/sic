@@ -57,7 +57,9 @@ def arc_grid_to_np(grid: list[list[int]]) -> np.ndarray:
 
 
 def np_grid_to_seq_translational_augment(
-    inp: np.ndarray, out: np.ndarray, do_translation: bool
+    inp: np.ndarray,
+    out: np.ndarray,
+    do_translation: bool,
 ) -> list[np.ndarray]:
     # PAD: 0, <eos>: 1, digits: 2 ... 11
     # Compute random top-left pad
@@ -120,7 +122,7 @@ def aug(name: str) -> tuple[str, Callable[[np.ndarray], np.ndarray]]:
         [
             np.arange(0, 1, dtype=np.uint8),
             rng.permutation(np.arange(1, 10, dtype=np.uint8)),
-        ]
+        ],
     )  # Permute colors, Excluding "0" (black)
 
     name_with_aug_repr = (
@@ -168,7 +170,7 @@ def convert_single_arc_puzzle(
             [
                 (arc_grid_to_np(example["input"]), arc_grid_to_np(example["output"]))
                 for example in examples
-            ]
+            ],
         )
 
     group = [converted]
@@ -232,7 +234,7 @@ def load_puzzles_arcagi(
     for subset_name in config.subsets:
         # Load all puzzles in this subset
         with Path(
-            f"{config.input_file_prefix}_{subset_name}_challenges.json"
+            f"{config.input_file_prefix}_{subset_name}_challenges.json",
         ).open() as f:
             puzzles = json.load(f)
 
@@ -261,7 +263,8 @@ def load_puzzles_arcagi(
             fraction = idx / len(puzzles)
             test_examples_dest = None
             for f, dest in test_examples_map.get(
-                subset_name, test_examples_map["_default"]
+                subset_name,
+                test_examples_map["_default"],
             ):
                 if fraction < f:
                     test_examples_dest = dest

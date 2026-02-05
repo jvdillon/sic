@@ -129,7 +129,13 @@ def evaluate_multistart(
 
         with torch.no_grad():
             preds, q_halt, _ = run_act_steps(
-                model, inputs, z_H, z_L, max_steps, device, dtype
+                model,
+                inputs,
+                z_H,
+                z_L,
+                max_steps,
+                device,
+                dtype,
             )
 
         better = q_halt > best_q_halt

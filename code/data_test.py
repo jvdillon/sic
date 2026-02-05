@@ -114,7 +114,10 @@ class TestSudokuDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_sudoku_dataset(
-                Path(tmp), n_puzzles, augs_per_puzzle, seq_len
+                Path(tmp),
+                n_puzzles,
+                augs_per_puzzle,
+                seq_len,
             )
 
             data = load_puzzle_dataset(str(data_dir), "train")
@@ -159,7 +162,10 @@ class TestMazeDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_maze_dataset(
-                Path(tmp), n_puzzles, augs_per_puzzle, seq_len
+                Path(tmp),
+                n_puzzles,
+                augs_per_puzzle,
+                seq_len,
             )
 
             data = load_puzzle_dataset(str(data_dir), "train")
@@ -201,7 +207,11 @@ class TestARCDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_arc_dataset(
-                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle, seq_len
+                Path(tmp),
+                n_groups,
+                puzzles_per_group,
+                examples_per_puzzle,
+                seq_len,
             )
 
             data = load_puzzle_dataset(str(data_dir), "train")
@@ -220,7 +230,10 @@ class TestARCDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_arc_dataset(
-                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+                Path(tmp),
+                n_groups,
+                puzzles_per_group,
+                examples_per_puzzle,
             )
 
             loader = PuzzleDatasetIterator(
@@ -258,7 +271,10 @@ class TestARCDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_arc_dataset(
-                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+                Path(tmp),
+                n_groups,
+                puzzles_per_group,
+                examples_per_puzzle,
             )
 
             loader = PuzzleDatasetIterator(
@@ -292,7 +308,10 @@ class TestARCDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_arc_dataset(
-                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+                Path(tmp),
+                n_groups,
+                puzzles_per_group,
+                examples_per_puzzle,
             )
 
             # Test with pack mode (default) - puzzle_ids should still be correct
@@ -324,7 +343,10 @@ class TestARCDataset:
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_arc_dataset(
-                Path(tmp), n_groups, puzzles_per_group, examples_per_puzzle
+                Path(tmp),
+                n_groups,
+                puzzles_per_group,
+                examples_per_puzzle,
             )
 
             n_examples = n_groups * puzzles_per_group * examples_per_puzzle
@@ -349,7 +371,9 @@ class TestARCDataset:
 
             # Puzzle IDs should correctly map each example to its puzzle
             for example_idx, puzzle_id in zip(
-                all_example_indices, all_puzzle_ids, strict=True
+                all_example_indices,
+                all_puzzle_ids,
+                strict=True,
             ):
                 expected_puzzle = example_idx // examples_per_puzzle
                 assert puzzle_id == expected_puzzle
@@ -473,7 +497,11 @@ def _create_maze_dataset(
     Maze format is identical to Sudoku, just different seq_len/vocab_size.
     """
     return _create_sudoku_dataset(
-        tmp_path, n_puzzles, augs_per_puzzle, seq_len, vocab_size
+        tmp_path,
+        n_puzzles,
+        augs_per_puzzle,
+        seq_len,
+        vocab_size,
     )
 
 

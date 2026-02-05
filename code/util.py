@@ -104,8 +104,8 @@ class Tee:
                         exc_type,
                         exc_val,
                         exc_tb,
-                    )
-                )
+                    ),
+                ),
             )
         for k, v in self.stream.items():
             if k == "log":
@@ -174,8 +174,8 @@ def test_main(test_file: str) -> None:
                 *sys.argv[
                     1:
                 ],  # Pass through command-line arguments (e.g., -k for test filtering)
-            ]
-        )
+            ],
+        ),
     )
 
 
