@@ -24,6 +24,7 @@ class Experiment(Experiment182):
     batch_size: int = 64  # Reduced due to 11x longer seq_len (901 vs 82)
     eval_batch_size: int | None = 256
     K: int = 1
+    q_halt_weight: float = 0.05
 
     # TRM paper maze config: H_cycles=3, L_cycles=4, attention+RoPE
     config: TRM3ConfigProtocol = TRM3.Config(
