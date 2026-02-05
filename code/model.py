@@ -630,10 +630,10 @@ default_act_fn = nn.functional.silu
 
 
 class SwiGLU(nn.Module):
-    """SwiGLU with optional weird mode (norm before down_proj for Muon).
+    """SwiGLU with optional muon_modified mode (norm before down_proj for Muon).
 
-    weird=True: sigmoid(gate) * norm(gate * x)
-    weird=False: silu(gate) * x
+    muon_modified=True: sigmoid(gate) * norm(gate * x)
+    muon_modified=False: silu(gate) * x
     """
 
     def __init__(
@@ -645,7 +645,7 @@ class SwiGLU(nn.Module):
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         init_weight_fn: InitFn = normal_init_,
     ):
         super().__init__()
@@ -665,9 +665,12 @@ class SwiGLU(nn.Module):
             bias=False,
             init_weight_fn=init_weight_fn,
         )
-        if weird:
+        if muon_modified:
             if act_fn is not nn.functional.silu:
-                raise NotImplementedError
+                raise NotImplementedError(
+                    "Muon modified SwiGLU is only defined whent "
+                    f"act_fn is nn.functional.silu ({act_fn})."
+                )
             self.norm = norm_fn(c_hidden)
         else:
             self.norm = None
@@ -702,7 +705,7 @@ class TransformerBlock(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         # Attention specific kwargs.
         num_heads: int = 0,
@@ -724,7 +727,7 @@ class TransformerBlock(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
         )
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
@@ -752,7 +755,7 @@ class TransformerBlockScaled(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         num_heads: int = 0,
         num_key_value_heads: int | None = None,
@@ -774,7 +777,7 @@ class TransformerBlockScaled(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
         )
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
@@ -804,7 +807,7 @@ class TransformerBlockSeqNorm(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         num_heads: int = 0,
         num_key_value_heads: int | None = None,
@@ -826,7 +829,7 @@ class TransformerBlockSeqNorm(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
         )
         self.norm1 = norm_fn(seq_len)  # seq_len norm like MLPMixer
         self.norm2 = norm_fn(c_in)
@@ -854,7 +857,7 @@ class TransformerBlockPreNorm(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         num_heads: int = 0,
         num_key_value_heads: int | None = None,
@@ -875,7 +878,7 @@ class TransformerBlockPreNorm(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
         )
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
@@ -901,7 +904,7 @@ class TransformerBlockSplitQKV(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         num_heads: int = 0,
         num_key_value_heads: int | None = None,
@@ -922,7 +925,7 @@ class TransformerBlockSplitQKV(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
         )
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
@@ -950,7 +953,7 @@ class TransformerBlockWithEntropy(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         num_heads: int = 0,
         num_key_value_heads: int | None = None,
@@ -971,7 +974,7 @@ class TransformerBlockWithEntropy(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
         )
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
@@ -1000,7 +1003,7 @@ class MLPMixerBlock(nn.Module):
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        weird: bool = True,
+        muon_modified: bool = True,
         gate: bool = True,
         # MLPMixer specific kwargs.
         seq_len: int = 0,
@@ -1018,7 +1021,7 @@ class MLPMixerBlock(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
             init_weight_fn=init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -1028,7 +1031,7 @@ class MLPMixerBlock(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            weird=weird,
+            muon_modified=muon_modified,
             init_weight_fn=init_weight_fn,
         )
         self.norm1 = norm_fn(seq_len)

@@ -37,7 +37,7 @@ class Experiment(Experiment182):
         vocab_size=_CFG.vocab_size,
         num_puzzle_grid_tokens=_CFG.num_puzzle_grid_tokens,
         H_cycles=3,
-        L_cycles=4,
+        L_cycles=6,
         K_H=1,
         K_L=1,
         carry_H="all",

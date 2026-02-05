@@ -132,15 +132,15 @@ class TestSwiGLU:
         y = mlp(x)
         assert y.shape == (2, 10, 64)
 
-    def test_weird_mode(self):
-        mlp = SwiGLU(64, expansion=4.0, gate=True, weird=True)
+    def test_muon_modified_mode(self):
+        mlp = SwiGLU(64, expansion=4.0, gate=True, muon_modified=True)
         x = torch.randn(2, 10, 64)
         y = mlp(x)
         assert y.shape == (2, 10, 64)
         assert mlp.norm is not None
 
-    def test_non_weird_mode(self):
-        mlp = SwiGLU(64, expansion=4.0, gate=True, weird=False)
+    def test_non_muon_modified_mode(self):
+        mlp = SwiGLU(64, expansion=4.0, gate=True, muon_modified=False)
         x = torch.randn(2, 10, 64)
         y = mlp(x)
         assert y.shape == (2, 10, 64)
@@ -170,8 +170,8 @@ class TestMLPMixerBlock:
         y = block(x)
         assert y.shape == (2, 10, 64)
 
-    def test_weird_mode(self):
-        block = MLPMixerBlock(64, seq_len=10, weird=True)
+    def test_muon_modified_mode(self):
+        block = MLPMixerBlock(64, seq_len=10, muon_modified=True)
         x = torch.randn(2, 10, 64)
         y = block(x)
         assert y.shape == (2, 10, 64)
