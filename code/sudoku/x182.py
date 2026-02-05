@@ -57,7 +57,7 @@ class Experiment:
     max_train_sec: float = 60 * 60 * 9  # 9 hours
 
     augment_sudoku: bool = True
-    use_puzzle_identifier: bool = False  # If True, embed puzzle_id and add to z_H
+    use_additive_puzzle_emb: bool = False  # If True, embed puzzle_id and add to z_H
     # Size of puzzle_id embedding table (set to 256 for ARC)
     max_puzzle_ids_per_batch: int = 1
 
@@ -108,7 +108,8 @@ class Experiment:
 
         self._state = TrainingState(
             num_chains=self.num_chains,
-            seq_len=self.config.seq_len,
+            num_puzzle_grid_tokens=self.config.num_puzzle_grid_tokens,
+            total_seq_len=self.config.total_seq_len,
             hidden_size=self.config.hidden_size,
             K=self.K,
             device=self.device,  # pyright: ignore[reportArgumentType]
@@ -116,13 +117,13 @@ class Experiment:
         )
         self._pending_inputs = torch.empty(
             0,
-            self.config.seq_len - 1,
+            self.config.num_puzzle_grid_tokens,
             device=self.device,
             dtype=torch.long,
         )
         self._pending_labels = torch.empty(
             0,
-            self.config.seq_len - 1,
+            self.config.num_puzzle_grid_tokens,
             device=self.device,
             dtype=torch.long,
         )
@@ -148,7 +149,7 @@ class Experiment:
 
         # Puzzle identifier embedding (for ARC multi-example conditioning)
         self.puzzle_id_embed: nn.Embedding | None = None
-        if self.use_puzzle_identifier:
+        if self.use_additive_puzzle_emb:
             self.puzzle_id_embed = nn.Embedding(
                 self.max_puzzle_ids_per_batch, self.config.hidden_size
             ).to(device=self.device, dtype=self.dtype)
@@ -319,7 +320,8 @@ class Experiment:
                     self.ema.shadow[n].copy_(p.data)
         self._state = TrainingState(
             num_chains=self.num_chains,
-            seq_len=self.config.seq_len,
+            num_puzzle_grid_tokens=self.config.num_puzzle_grid_tokens,
+            total_seq_len=self.config.total_seq_len,
             hidden_size=self.config.hidden_size,
             K=self.K,
             device=self.device,  # pyright: ignore[reportArgumentType]
@@ -327,7 +329,7 @@ class Experiment:
         )
         self._pending_inputs = torch.empty(
             0,
-            self.config.seq_len - 1,
+            self.config.num_puzzle_grid_tokens,
             device=self.device,
             dtype=torch.long,
         )
@@ -400,6 +402,7 @@ class Experiment:
     def _forward(self, state: TrainingState) -> ForwardResult:
         num_chains = state.num_chains
         active = state.batch_index >= 0
+        cfg = self.config
 
         if not active.any():
             return ForwardResult(
@@ -410,8 +413,8 @@ class Experiment:
                 ),
                 logits=torch.zeros(
                     num_chains,
-                    self.config.seq_len - 1,
-                    self.config.vocab_size,
+                    cfg.num_puzzle_grid_tokens,
+                    cfg.vocab_size,
                     device=state.device,
                     dtype=self.dtype,
                 ),
@@ -446,12 +449,41 @@ class Experiment:
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             embeddings = self.model.embed_scale * self.model.embed_tokens(
                 tokens,
-                self.config.dtype,
+                cfg.dtype,
             )
 
-            # Add puzzle_id embedding to z_H if enabled
+            # TRM-style prefix tokens: [puzzle_id_tokens..., register_tokens..., HALT, puzzle_grid...]
+            if cfg.num_puzzle_id_tokens > 0 or cfg.num_register_tokens > 0:
+                prefix_parts: list[Tensor] = []
+                B = embeddings.shape[0]
+                # Puzzle ID tokens: per-puzzle learned embeddings
+                if (
+                    cfg.num_puzzle_id_tokens > 0
+                    and self.model.puzzle_id_embed is not None
+                ):
+                    chain_puzzle_ids = state.puzzle_ids[batch_indices]
+                    local_ids = chain_puzzle_ids % cfg.num_puzzle_ids
+                    puzzle_emb = self.model.puzzle_id_embed(local_ids, cfg.dtype)
+                    puzzle_emb = puzzle_emb.view(
+                        B, cfg.num_puzzle_id_tokens, cfg.hidden_size
+                    )
+                    puzzle_emb = self.model.embed_scale * puzzle_emb
+                    prefix_parts.append(puzzle_emb)
+                # Register tokens: shared learned tokens (expanded to batch)
+                if (
+                    cfg.num_register_tokens > 0
+                    and self.model.register_tokens is not None
+                ):
+                    reg_emb = self.model.register_tokens.unsqueeze(0).expand(B, -1, -1)
+                    reg_emb = reg_emb.to(dtype=cfg.dtype)
+                    prefix_parts.append(reg_emb)
+                if prefix_parts:
+                    prefix = torch.cat(prefix_parts, dim=1)
+                    embeddings = torch.cat([prefix, embeddings], dim=1)
+
+            # Add puzzle_id embedding to z_H if enabled (old additive approach)
             z_H = state.z_H
-            if self.use_puzzle_identifier and self.puzzle_id_embed is not None:
+            if self.use_additive_puzzle_emb and self.puzzle_id_embed is not None:
                 chain_puzzle_ids = state.puzzle_ids[batch_indices]
                 # Remap to batch-local indices (modulo embedding table size)
                 local_ids = chain_puzzle_ids % self.max_puzzle_ids_per_batch
@@ -465,17 +497,29 @@ class Experiment:
                 else self.model.core
             )
             z_L = state.z_L
+            # Get RoPE cos_sin if available
+            cos_sin = None if self.model.rope is None else self.model.rope()
+            cos_sin_detach = (
+                (cos_sin[0].detach(), cos_sin[1].detach())
+                if cos_sin is not None
+                else None
+            )
             for _ in range(self.model.config.H_cycles - 1):
                 with torch.no_grad():
                     logits, q_halt, z_H, z_L = core(
                         embeddings.detach(),
                         z_H.detach(),
                         z_L.detach(),
-                        None,
+                        cos_sin_detach,
                     )
-            logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, None)
+            logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
 
-        logits = logits[:, 1:, :]
+        # Slice output to exclude prefix positions and HALT token
+        # Sequence was: [puzzle_id_tokens..., register_tokens..., HALT, input...]
+        # So we skip (puzzle_id + register + 1) positions
+        n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
+        logits = logits[:, n_prefix + 1 :, :]
+
         loss = (
             nn.functional.cross_entropy(
                 logits.reshape(-1, logits.shape[-1]),
@@ -542,18 +586,18 @@ class Experiment:
 
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
         """For ExperimentBase: Create initial z_H and z_L states for eval (single head)."""
-        seq_len = self.config.seq_len
-        z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()
-        z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()
+        total_seq_len = self.config.total_seq_len
+        z_H = self.model.H_init[0].expand(batch_size, total_seq_len, -1).contiguous()
+        z_L = self.model.L_init[0].expand(batch_size, total_seq_len, -1).contiguous()
         return z_H, z_L
 
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
         """For ExperimentBase: Create z_L for all K heads for a single puzzle (WTA eval).
 
-        Returns: [K, seq_len, hidden]
+        Returns: [K, total_seq_len, hidden]
         """
         del puzzle_idx
-        return self.model.L_init.unsqueeze(1).expand(-1, self.config.seq_len, -1)
+        return self.model.L_init.unsqueeze(1).expand(-1, self.config.total_seq_len, -1)
 
     def _prepend_halt_token(self, inputs: Tensor) -> Tensor:
         """Prepend HALT token for ACT mode (required by ExperimentBase eval methods)."""
@@ -584,7 +628,8 @@ class TrainingState:
     """State for sparse chain pooling. Each batch element runs K chains; winner's z_H propagates to all."""
 
     num_chains: int
-    seq_len: int
+    num_puzzle_grid_tokens: int  # Puzzle grid tokens (no HALT)
+    total_seq_len: int  # z_H/z_L sequence length (with prefix tokens)
     hidden_size: int
     K: int
     device: torch.device
@@ -608,10 +653,10 @@ class TrainingState:
     def __post_init__(self) -> None:
         num_batch_elements = self.num_chains // self.K
 
-        # Per-chain tensors [num_chains, seq_len, hidden_size]
+        # Per-chain tensors [num_chains, total_seq_len, hidden_size]
         self.z_H = torch.zeros(
             self.num_chains,
-            self.seq_len,
+            self.total_seq_len,
             self.hidden_size,
             device=self.device,
             dtype=self.dtype,
@@ -632,7 +677,7 @@ class TrainingState:
         )
         self.inputs = torch.zeros(
             num_batch_elements,
-            self.seq_len - 1,
+            self.num_puzzle_grid_tokens,
             device=self.device,
             dtype=torch.long,
         )

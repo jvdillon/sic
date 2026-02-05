@@ -1,4 +1,8 @@
-"""x000: Maze experiment baseline."""
+"""x000: Maze experiment baseline.
+
+Uses TransformerBlock with RoPE (matching TRM paper config for maze).
+TRM maze config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
+"""
 
 import functools
 
@@ -8,9 +12,8 @@ from experiment import (
 )
 from model import (
     TRM3,
-    MLPMixerBlock,
+    TransformerBlock,
     TRM3ConfigProtocol,
-    trunc_normal_init_,
 )
 from sudoku.x182 import Experiment as Experiment182
 
@@ -29,18 +32,22 @@ class Experiment(Experiment182):
     eval_batch_size: int | None = 256
     K: int = 1
 
+    # TRM paper maze config: H_cycles=3, L_cycles=4, attention+RoPE
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
-        seq_len=_CFG.seq_len,
+        num_puzzle_grid_tokens=_CFG.num_puzzle_grid_tokens,
+        H_cycles=3,
+        L_cycles=4,
         K_H=1,
         K_L=1,
         carry_H="all",
         carry_L="all",
         z_L_init_svd=False,
+        use_rope=True,
+        num_heads=8,
         block_fn=functools.partial(
-            MLPMixerBlock,
-            seq_len=_CFG.seq_len,
-            init_weight_fn=trunc_normal_init_,
+            TransformerBlock,
+            num_heads=8,
         ),
     )
 

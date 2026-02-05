@@ -81,7 +81,7 @@ class TRM1ConfigProtocol(Protocol):
 class TRM3ConfigProtocol(Protocol):
     """Config protocol for TRM3 models with K_H/K_L heads."""
 
-    seq_len: int
+    num_puzzle_grid_tokens: int
     hidden_size: int
     vocab_size: int
     dtype: torch.dtype | None
@@ -95,6 +95,12 @@ class TRM3ConfigProtocol(Protocol):
     max_num_compile_core: int
     K_H: int
     K_L: int
+    num_puzzle_id_tokens: int
+    num_register_tokens: int
+    num_puzzle_ids: int
+
+    @property
+    def total_seq_len(self) -> int: ...
 
     @property
     def num_effective_heads(self) -> int: ...
@@ -170,6 +176,7 @@ class TRM3Protocol(ModuleProtocol, Protocol):
         carry: CarryState,
         labels: Tensor,
         *,
+        puzzle_ids: Tensor | None = None,
         label_smoothing: float = 0.0,
         z_L_noise: float = 0.0,
     ) -> WTAForwardOutput: ...
@@ -1411,7 +1418,7 @@ class TRM3(nn.Module):
     @dataclasses.dataclass(slots=True, kw_only=True)
     class Config:
         vocab_size: int = 10 + 1 + 1  # values + unknown + halt
-        seq_len: int = 9 * 9 + 1  # grid + halt
+        num_puzzle_grid_tokens: int = 9 * 9  # puzzle grid tokens (no HALT)
         hidden_size: int = 512
         num_layers: int = 2
         H_cycles: int = 6
@@ -1424,7 +1431,7 @@ class TRM3(nn.Module):
         head_bias: bool = True
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
-            seq_len=seq_len,
+            seq_len=num_puzzle_grid_tokens + 1,  # puzzle_grid + halt
             init_weight_fn=trunc_normal_init_,
         )
         compile_core: bool = True
@@ -1480,6 +1487,30 @@ class TRM3(nn.Module):
         # Random z init: sample from trunc_normal(0, 1) instead of learned H_init/L_init
         z_H_random_init: bool = False
         z_L_random_init: bool = False
+
+        # RoPE (Rotary Position Embedding) - use for attention blocks
+        use_rope: bool = False
+        rope_theta: float = 10000.0
+        num_heads: int = 8  # Only used for RoPE dim calculation
+
+        # Prefix tokens (TRM-style): prepend tokens before [HALT, puzzle_grid...]
+        # Sequence order: [puzzle_id_tokens..., register_tokens..., HALT, puzzle_grid...]
+        # - puzzle_id_tokens: per-puzzle learned tokens (embedding table)
+        # - register_tokens: shared learned tokens (puzzle-agnostic)
+        # q_head reads position 0 (first puzzle_id token if enabled, else HALT)
+        num_puzzle_id_tokens: int = 0  # Per-puzzle learned tokens
+        num_register_tokens: int = 0  # Shared learned tokens
+        num_puzzle_ids: int = 0  # Size of puzzle ID embedding table
+
+        @property
+        def total_seq_len(self) -> int:
+            """Total sequence length: puzzle_id + register + HALT + puzzle_grid."""
+            return (
+                self.num_puzzle_id_tokens
+                + self.num_register_tokens
+                + 1
+                + self.num_puzzle_grid_tokens
+            )
 
         @property
         def K_L_eff(self) -> int:
@@ -1550,6 +1581,36 @@ class TRM3(nn.Module):
         self.reasoning = Sequential(
             *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)]
         )
+
+        # Puzzle ID embedding: per-puzzle learned tokens
+        if config.num_puzzle_id_tokens > 0:
+            self.puzzle_id_embed: Embedding | None = Embedding(
+                config.num_puzzle_ids,
+                config.num_puzzle_id_tokens * config.hidden_size,
+                init_weight_fn=functools.partial(
+                    trunc_normal_init_, std=0
+                ),  # Zero init
+            )
+        else:
+            self.puzzle_id_embed = None
+
+        # Register tokens: shared learned tokens (puzzle-agnostic)
+        if config.num_register_tokens > 0:
+            self.register_tokens: nn.Parameter | None = nn.Parameter(
+                torch.zeros(config.num_register_tokens, config.hidden_size)
+            )
+        else:
+            self.register_tokens = None
+
+        # RoPE (only for attention blocks)
+        if config.use_rope:
+            self.rope: RotaryEmbedding | None = RotaryEmbedding(
+                dim=config.hidden_size // config.num_heads,
+                max_position_embeddings=config.total_seq_len,
+                base=config.rope_theta,
+            )
+        else:
+            self.rope = None
 
         # PRNG_EQUIVALENCE: H_init and L_init: Only create first row here.
         # x177 creates L_init_1..K-1 AFTER .to() using CUDA RNG (torch.empty_like on GPU).
@@ -1624,7 +1685,7 @@ class TRM3(nn.Module):
         """Initialize model carry state with N = K_H * K_L chains."""
         # K_H * K_L for outer, max(K_H, K_L) for inner
         N = self.config.num_effective_heads
-        S = self.config.seq_len
+        S = self.config.total_seq_len  # Use total_seq_len (includes puzzle_id_tokens)
 
         # Get h_indices, l_indices to know how to pair init vectors
         h_indices, l_indices = self._sample_head_indices()
@@ -1697,6 +1758,7 @@ class TRM3(nn.Module):
         carry: CarryState,
         labels: Tensor,
         *,
+        puzzle_ids: Tensor | None = None,
         label_smoothing: float = 0.0,
         z_L_noise: float = 0.0,
     ) -> WTAForwardOutput:
@@ -1707,10 +1769,11 @@ class TRM3(nn.Module):
         """
         cfg = self.config
         B = input_ids.shape[0]
-        seq_len = cfg.seq_len
+        num_input_tokens = cfg.num_puzzle_grid_tokens + 1  # puzzle_grid + halt
+        total_seq_len = cfg.total_seq_len
         hidden = cfg.hidden_size
 
-        # Unpack carry: [B, N, S, C] for each
+        # Unpack carry: [B, N, total_seq_len, C] for each
         z_H = carry["z_H"]
         z_L = carry["z_L"]
         carry_count = carry["carry_count"]
@@ -1726,13 +1789,20 @@ class TRM3(nn.Module):
 
         # Batch for model: [B*N, S, C]
         inputs_batched = (
-            input_ids.unsqueeze(1).expand(B, N, seq_len).reshape(B * N, seq_len)
+            input_ids.unsqueeze(1)
+            .expand(B, N, num_input_tokens)
+            .reshape(B * N, num_input_tokens)
         )
-        z_H_batched = z_H.reshape(B * N, seq_len, hidden)
-        z_L_batched = z_L_active.reshape(B * N, seq_len, hidden)
+        z_H_batched = z_H.reshape(B * N, total_seq_len, hidden)
+        z_L_batched = z_L_active.reshape(B * N, total_seq_len, hidden)
+
+        # Expand puzzle_ids if provided: [B] -> [B*N]
+        puzzle_ids_batched = None
+        if puzzle_ids is not None:
+            puzzle_ids_batched = puzzle_ids.unsqueeze(1).expand(B, N).reshape(B * N)
 
         # Forward pass
-        out = self.forward(inputs_batched, z_H_batched, z_L_batched)
+        out = self.forward(inputs_batched, z_H_batched, z_L_batched, puzzle_ids_batched)
 
         # Reshape back: [B*N, ...] -> [B, N, ...]
         logits_raw = out["logits"]
@@ -1744,21 +1814,28 @@ class TRM3(nn.Module):
         assert isinstance(z_H_out_raw, Tensor)
         assert isinstance(z_L_out_raw, Tensor)
 
-        logits_all = logits_raw[..., 1:, :].reshape(B, N, seq_len - 1, -1).float()
+        # logits_raw is [B*N, num_input_tokens, V] (already sliced for puzzle tokens)
+        logits_all = (
+            logits_raw[..., 1:, :].reshape(B, N, cfg.num_puzzle_grid_tokens, -1).float()
+        )
         q_halt_all = q_halt_raw.reshape(B, N).float()
-        z_H_out = z_H_out_raw.reshape(B, N, seq_len, hidden)
-        z_L_out = z_L_out_raw.reshape(B, N, seq_len, hidden)
+        z_H_out = z_H_out_raw.reshape(B, N, total_seq_len, hidden)
+        z_L_out = z_L_out_raw.reshape(B, N, total_seq_len, hidden)
 
         # Compute per-chain losses: [B, N]
         labels_flat = labels.reshape(B, -1)
-        logits_flat = logits_all.reshape(B * N * (seq_len - 1), -1)
-        labels_expanded = labels_flat.unsqueeze(1).expand(B, N, seq_len - 1).reshape(-1)
+        logits_flat = logits_all.reshape(B * N * cfg.num_puzzle_grid_tokens, -1)
+        labels_expanded = (
+            labels_flat.unsqueeze(1)
+            .expand(B, N, cfg.num_puzzle_grid_tokens)
+            .reshape(-1)
+        )
         per_cell_loss = nn.functional.cross_entropy(
             logits_flat,
             labels_expanded.long(),
             label_smoothing=label_smoothing,
             reduction="none",
-        ).reshape(B, N, seq_len - 1)
+        ).reshape(B, N, cfg.num_puzzle_grid_tokens)
         losses = per_cell_loss.mean(dim=-1)  # [B, N]
 
         # WTA winner
@@ -1788,39 +1865,103 @@ class TRM3(nn.Module):
             "l_indices": l_indices,
         }
 
+    def _prepend_prefix(
+        self,
+        input_emb: Tensor,
+        puzzle_ids: Tensor | None,
+    ) -> Tensor:
+        """Prepend prefix tokens to input embedding.
+
+        Sequence order: [puzzle_id_tokens..., register_tokens..., input_emb]
+        where input_emb already has HALT at position 0.
+
+        Args:
+            input_emb: [B, S, C] - input embeddings (includes HALT)
+            puzzle_ids: [B] - puzzle identifiers (required if num_puzzle_id_tokens > 0)
+
+        Returns:
+            [B, total_seq_len, C] - embeddings with prefix prepended
+
+        """
+        cfg = self.config
+        if cfg.num_puzzle_id_tokens == 0 and cfg.num_register_tokens == 0:
+            return input_emb
+
+        B = input_emb.shape[0]
+        prefix_parts: list[Tensor] = []
+
+        # Puzzle ID tokens: per-puzzle learned embeddings
+        if cfg.num_puzzle_id_tokens > 0:
+            if puzzle_ids is None:
+                raise ValueError("puzzle_ids required when num_puzzle_id_tokens > 0")
+            if self.puzzle_id_embed is None:
+                raise RuntimeError("puzzle_id_embed not initialized")
+            puzzle_emb = self.puzzle_id_embed(puzzle_ids, cfg.dtype)
+            puzzle_emb = puzzle_emb.view(B, cfg.num_puzzle_id_tokens, cfg.hidden_size)
+            puzzle_emb = self.embed_scale * puzzle_emb
+            prefix_parts.append(puzzle_emb)
+
+        # Register tokens: shared learned tokens (expanded to batch)
+        if cfg.num_register_tokens > 0:
+            if self.register_tokens is None:
+                raise RuntimeError("register_tokens not initialized")
+            reg_emb = self.register_tokens.unsqueeze(0).expand(B, -1, -1)
+            reg_emb = reg_emb.to(dtype=cfg.dtype)
+            prefix_parts.append(reg_emb)
+
+        # Prefix: [puzzle_id_tokens..., register_tokens...]
+        prefix = torch.cat(prefix_parts, dim=1)
+        return torch.cat([prefix, input_emb], dim=1)
+
     def forward(
         self,
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> dict[str, Tensor | list[Tensor]]:
         """Multi H-cycle forward. Same shapes as step()."""
         if self.config.z_delta_reparam:
-            return self._forward_delta_reparam(input_ids, z_H, z_L)
-        return self._forward_simple(input_ids, z_H, z_L)
+            return self._forward_delta_reparam(input_ids, z_H, z_L, puzzle_ids)
+        return self._forward_simple(input_ids, z_H, z_L, puzzle_ids)
 
     def step(
         self,
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> dict[str, Any]:
         """Single H-cycle step.
 
-        Shapes: B = batch, S = seq_len, C = hidden_size, V = vocab_size.
+        Shapes: B = batch, S = total_seq_len, C = hidden_size, V = vocab_size.
+        With prefix tokens, z_H/z_L have shape [B, total_seq_len, C].
+
+        Sequence order: [puzzle_id_tokens..., register_tokens..., HALT, input...]
 
         Args:
             input_ids: [B, S]
-            z_H: [B, S, C]
-            z_L: [B, S, C]
+            z_H: [B, total_seq_len, C]
+            z_L: [B, total_seq_len, C]
+            puzzle_ids: [B] optional puzzle identifiers (required if num_puzzle_id_tokens > 0)
 
         Returns:
-            dict: logits [B, S, V], q_halt [B], z_H [B, S, C], z_L [B, S, C]
+            dict: logits [B, S, V], q_halt [B], z_H [B, total_seq_len, C], z_L [B, total_seq_len, C]
 
         """
-        input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
-        core = self.core_compiled if self.config.compile_core else self.core
-        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, None)
+        cfg = self.config
+        input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
+        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
+
+        cos_sin = None if self.rope is None else self.rope()
+        core = self.core_compiled if cfg.compile_core else self.core
+        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
+
+        # Slice output to exclude prefix positions (puzzle_id + register tokens)
+        n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
+        if n_prefix > 0:
+            logits = logits[:, n_prefix:]
+
         return {
             "logits": logits,
             "q_halt": q_halt,
@@ -2098,14 +2239,24 @@ class TRM3(nn.Module):
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> dict[str, Tensor | list[Tensor]]:
         """Standard forward: H_cycles-1 under no_grad, final with grad."""
-        input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
-        core = self.core_compiled if self.config.compile_core else self.core
+        cfg = self.config
+        input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
+        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
 
-        H_cycles = self.config.H_cycles
+        cos_sin = None if self.rope is None else self.rope()
+        core = self.core_compiled if cfg.compile_core else self.core
+
+        H_cycles = cfg.H_cycles
         all_logits = []
         all_z_H = []
+
+        # Detach cos_sin for no_grad iterations to avoid graph issues
+        cos_sin_detach = (
+            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+        )
 
         with torch.no_grad():
             for _ in range(H_cycles - 1):
@@ -2113,14 +2264,20 @@ class TRM3(nn.Module):
                     input_emb.detach(),
                     z_H.detach(),
                     z_L.detach(),
-                    None,
+                    cos_sin_detach,
                 )
                 all_logits.append(logits)
                 all_z_H.append(z_H)
 
-        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, None)
+        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
         all_logits.append(logits.detach())
         all_z_H.append(z_H.detach())
+
+        # Slice output to exclude prefix positions (puzzle_id + register tokens)
+        n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
+        if n_prefix > 0:
+            logits = logits[:, n_prefix:]
+            all_logits = [lg[:, n_prefix:] for lg in all_logits]
 
         return {
             "logits": logits,
@@ -2136,6 +2293,7 @@ class TRM3(nn.Module):
         input_ids: Tensor,
         z_H: Tensor,
         z_L: Tensor,
+        puzzle_ids: Tensor | None = None,
     ) -> dict[str, Tensor | list[Tensor]]:
         """Delta reparameterization: z = z_init + delta, gradients flow to init.
 
@@ -2145,6 +2303,9 @@ class TRM3(nn.Module):
         """
         cfg = self.config
         input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
+        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
+
+        cos_sin = None if self.rope is None else self.rope()
         core = self.core_compiled if cfg.compile_core else self.core
 
         H_cycles = cfg.H_cycles
@@ -2152,7 +2313,7 @@ class TRM3(nn.Module):
         all_z_H = []
 
         # z_H/z_L are [B*N, S, C], need to build matching init tensors
-        BN, seq_len, C = z_H.shape
+        BN, S, C = z_H.shape
         h_indices, l_indices = self._sample_head_indices()
         N = len(h_indices)
         if BN % N != 0:
@@ -2163,17 +2324,22 @@ class TRM3(nn.Module):
 
         # Build init tensors: H_init[h_indices[n]] for each chain n, repeated B times
         # H_init is [K_H, C], expand to [N, S, C] then tile to [B*N, S, C]
-        z_H_init_per_chain = self.H_init[h_indices].unsqueeze(1).expand(N, seq_len, C)
-        z_H_init = z_H_init_per_chain.unsqueeze(0).expand(B, N, seq_len, C)
-        z_H_init = z_H_init.reshape(BN, seq_len, C)
+        z_H_init_per_chain = self.H_init[h_indices].unsqueeze(1).expand(N, S, C)
+        z_H_init = z_H_init_per_chain.unsqueeze(0).expand(B, N, S, C)
+        z_H_init = z_H_init.reshape(BN, S, C)
 
-        z_L_init_per_chain = self.L_init[l_indices].unsqueeze(1).expand(N, seq_len, C)
-        z_L_init = z_L_init_per_chain.unsqueeze(0).expand(B, N, seq_len, C)
-        z_L_init = z_L_init.reshape(BN, seq_len, C)
+        z_L_init_per_chain = self.L_init[l_indices].unsqueeze(1).expand(N, S, C)
+        z_L_init = z_L_init_per_chain.unsqueeze(0).expand(B, N, S, C)
+        z_L_init = z_L_init.reshape(BN, S, C)
 
         # Track delta = z - init throughout
         z_H_delta = z_H - z_H_init.detach()
         z_L_delta = z_L - z_L_init.detach()
+
+        # Detach cos_sin for no_grad iterations
+        cos_sin_detach = (
+            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+        )
 
         with torch.no_grad():
             for _ in range(H_cycles - 1):
@@ -2183,7 +2349,7 @@ class TRM3(nn.Module):
                     input_emb.detach(),
                     z_H_cur.detach(),
                     z_L_cur.detach(),
-                    None,
+                    cos_sin_detach,
                 )
                 z_H_delta = z_H_out - z_H_init.detach()
                 z_L_delta = z_L_out - z_L_init.detach()
@@ -2193,9 +2359,15 @@ class TRM3(nn.Module):
         # Final cycle: init has grad, delta detached
         z_H = z_H_init + z_H_delta
         z_L = z_L_init + z_L_delta
-        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, None)
+        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
         all_logits.append(logits.detach())
         all_z_H.append(z_H.detach())
+
+        # Slice output to exclude prefix positions (puzzle_id + register tokens)
+        n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
+        if n_prefix > 0:
+            logits = logits[:, n_prefix:]
+            all_logits = [lg[:, n_prefix:] for lg in all_logits]
 
         return {
             "logits": logits,
@@ -2231,7 +2403,7 @@ class TRM3(nn.Module):
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """One H-cycle.
 
-        Shapes: B = batch, S = seq_len (82), C = hidden_size (512).
+        Shapes: B = batch, S = total_seq_len, C = hidden_size.
         The K dimension is handled by caller (flatten to B*N before, unflatten after).
 
         Args:

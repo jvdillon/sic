@@ -31,9 +31,9 @@ class PuzzleConfig:
     mask_token: int | None = None  # None if puzzle type doesn't use masking
 
     @property
-    def seq_len(self) -> int:
-        """Sequence length including halt token."""
-        return self.grid_size * self.grid_size + 1
+    def num_puzzle_grid_tokens(self) -> int:
+        """Puzzle grid length (no HALT token)."""
+        return self.grid_size * self.grid_size
 
 
 _PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
@@ -52,7 +52,7 @@ def get_puzzle_config(puzzle_type: PuzzleType) -> PuzzleConfig:
       puzzle_type: One of "sudoku", "maze", "arc".
 
     Returns:
-      PuzzleConfig with grid_size, vocab_size, seq_len, and mask_token.
+      PuzzleConfig with grid_size, vocab_size, num_puzzle_grid_tokens, and mask_token.
 
     Raises:
       ValueError: If puzzle_type is not recognized.

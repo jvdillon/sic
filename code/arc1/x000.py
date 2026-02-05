@@ -1,4 +1,8 @@
-"""x000: ARC experiment baseline."""
+"""x000: ARC experiment baseline.
+
+Uses TransformerBlock with RoPE (matching TRM paper config for ARC).
+TRM ARC config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
+"""
 
 # Slow compile?
 # Try: rm -rf /tmp/torchinductor_* ~/.triton/cache
@@ -11,9 +15,8 @@ from experiment import (
 )
 from model import (
     TRM3,
-    MLPMixerBlock,
+    TransformerBlock,
     TRM3ConfigProtocol,
-    trunc_normal_init_,
 )
 from sudoku.x182 import Experiment as Experiment182
 
@@ -26,8 +29,10 @@ _CFG = get_puzzle_config("arc")
 class Experiment(Experiment182):
     data_dir: str = "/opt/scratch/datasets/arc1concept-aug-1000"
     augment_sudoku: bool = False
-    use_puzzle_identifier: bool = True  # Enable puzzle_id conditioning for ARC
-    max_puzzle_ids_per_batch: int = 256  # Embedding table size for puzzle_ids
+    use_additive_puzzle_emb: bool = (
+        False  # Disabled; using TRM-style puzzle_id_tokens instead
+    )
+    max_puzzle_ids_per_batch: int = 256  # Only used if use_additive_puzzle_emb=True
     max_eval_samples: int = 100  # 38_400
     total_train_steps: int = 8_000
     eval_every_steps: int = 500
@@ -35,18 +40,26 @@ class Experiment(Experiment182):
     eval_batch_size: int | None = 32
     K: int = 1
 
+    # TRM paper ARC config: H_cycles=3, L_cycles=4, attention+RoPE
+    # TRM-style prefix: 1 puzzle_id token + 15 register tokens (zeros)
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
-        seq_len=_CFG.seq_len,
+        num_puzzle_grid_tokens=_CFG.num_puzzle_grid_tokens,
+        H_cycles=3,
+        L_cycles=4,
         K_H=1,
         K_L=1,
         carry_H="all",
         carry_L="all",
         z_L_init_svd=False,
+        use_rope=True,
+        num_heads=8,  # Must match block_fn num_heads (for RoPE dim)
+        num_puzzle_id_tokens=1,  # TRM-style: 1 learned puzzle embedding
+        num_register_tokens=15,  # TRM-style: 15 zeros (register tokens)
+        num_puzzle_ids=256,  # Embedding table size
         block_fn=functools.partial(
-            MLPMixerBlock,
-            seq_len=_CFG.seq_len,
-            init_weight_fn=trunc_normal_init_,
+            TransformerBlock,
+            num_heads=8,
         ),
     )
 
