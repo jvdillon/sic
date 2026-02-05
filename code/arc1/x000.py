@@ -54,9 +54,10 @@ class Experiment(Experiment182):
         z_L_init_svd=False,
         use_rope=True,
         num_heads=8,  # Must match block_fn num_heads (for RoPE dim)
-        num_puzzle_id_tokens=1,  # TRM-style: 1 learned puzzle embedding
-        num_register_tokens=15,  # TRM-style: 15 zeros (register tokens)
-        num_puzzle_ids=256,  # Embedding table size
+        # NOTE: Prefix tokens disabled because ExperimentBase eval methods don't pass puzzle_ids.
+        num_puzzle_id_tokens=0,  # TRM-style: disabled until eval supports puzzle_ids
+        num_register_tokens=0,  # TRM-style: disabled until eval supports puzzle_ids
+        num_puzzle_ids=256,  # Embedding table size (unused when num_puzzle_id_tokens=0)
         block_fn=functools.partial(
             TransformerBlock,
             num_heads=8,
