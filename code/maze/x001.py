@@ -17,7 +17,7 @@ def _config() -> TRM3.Config:
 
 
 class Experiment(Experiment000):
-    batch_size: int = 64 // 2
+    batch_size: int = 28
     K: int = 4
     config: TRM3ConfigProtocol = _config()
 
