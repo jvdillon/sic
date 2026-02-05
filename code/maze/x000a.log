@@ -1,4 +1,3 @@
 Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias')
 Muon 2D params: ('reasoning.0.attn.o_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.o_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
 Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasoning.1.attn.qkv_proj.weight')
-Saved step 0 checkpoint with RNG: /home/jvdillon/projects/sic/code/maze/ckpts/x000a/step00000_rng.pt
