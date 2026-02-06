@@ -254,13 +254,37 @@ class PuzzleDataset:
         self.shuffle = shuffle
         self.stratified = stratified and train
 
+        # Check for uniform instance sizes.
+        # We don't really need this code stanza except to preserve the RNG
+        # access pattern of the existing implementation which was used for the
+        # Sudoku results.
+        if self.stratified:
+            instance_sizes = instance_bounds[1:] - instance_bounds[:-1]
+            if (instance_sizes == instance_sizes[0]).all():
+                self._uniform_instance_size: int | None = int(instance_sizes[0])
+            else:
+                self._uniform_instance_size = None
+
     def __iter__(self) -> Iterator[tuple[Tensor, Tensor, Tensor, int]]:
         device = self.instance_bounds.device
 
         if self.stratified:
             starts = self.instance_bounds[:-1]
-            sizes = self.instance_bounds[1:] - starts
-            offsets = (torch.rand(self.n_instances, device=device) * sizes).long()
+            if self._uniform_instance_size is None:
+                # Variable instances: use rand * sizes
+                sizes = self.instance_bounds[1:] - starts
+                offsets = (torch.rand(self.n_instances, device=device) * sizes).long()
+            else:
+                # Uniform num instances case.
+                # We don't really need this case but it preserves the RNG
+                # access pattern of the existing implementation which was used
+                # for the Sudoku results.
+                offsets = torch.randint(
+                    0,
+                    self._uniform_instance_size,
+                    (self.n_instances,),
+                    device=device,
+                )
             indices = starts + offsets
             n_samples = self.n_instances
         else:

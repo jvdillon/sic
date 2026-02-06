@@ -83,6 +83,47 @@ class TestBackwardCompatibility:
                 f"New: {new_indices}\nOld: {old_indices}"
             )
 
+    def test_puzzle_dataset_matches_legacy(self):
+        """PuzzleDataset produces exact same indices as PuzzleDatasetLegacy."""
+        n_puzzles, augs_per_puzzle, batch_size = 10, 100, 4
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
+
+            # Run new loader
+            set_seed(42)
+            new_loader = PuzzleDataset(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                batch_size=batch_size,
+                train=True,
+                shuffle=False,
+                stratified=True,
+            )
+            new_indices = []
+            for inputs, _, _, vc in new_loader:
+                new_indices.extend(inputs[:vc, 0].tolist())
+
+            # Run legacy loader
+            set_seed(42)
+            legacy_loader = PuzzleDatasetLegacy(
+                data_dir=str(data_dir),
+                device=torch.device("cpu"),
+                dtype=torch.float32,
+                batch_size=batch_size,
+                train=True,
+                shuffle=False,
+                stratified=True,
+            )
+            legacy_indices = []
+            for inputs, _, vc in legacy_loader:
+                legacy_indices.extend(inputs[:vc, 0].tolist())
+
+            assert new_indices == legacy_indices, (
+                f"PuzzleDataset doesn't match PuzzleDatasetLegacy!\n"
+                f"New: {new_indices}\nLegacy: {legacy_indices}"
+            )
+
     def test_non_stratified_matches_old_loader(self):
         """Non-stratified mode produces same sequential iteration."""
         n_puzzles, augs_per_puzzle, batch_size = 5, 4, 3
