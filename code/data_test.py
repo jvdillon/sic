@@ -12,7 +12,7 @@ from util import set_seed
 import numpy as np
 import torch
 
-from data import PuzzleDatasetIterator, augment_sudoku, load_puzzle_dataset
+from data import PuzzleDataset, PuzzleDatasetLegacy, augment_sudoku, load_puzzle_dataset
 
 
 def test_augment_sudoku_shapes():
@@ -51,24 +51,25 @@ class TestBackwardCompatibility:
     """Verify new loader matches old loader behavior exactly."""
 
     def test_stratified_sampling_matches_old_loader(self):
-        """New loader produces exact same indices as old loader for Sudoku."""
+        """PuzzleDatasetLegacy produces exact same indices as old loader for Sudoku."""
         n_puzzles, augs_per_puzzle, batch_size = 10, 100, 4
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-            # Run new loader (for Sudoku, both sampling modes are equivalent)
+            # Run legacy loader (preserves b4b compat with randint)
             set_seed(42)
-            new_loader = PuzzleDatasetIterator(
+            loader = PuzzleDatasetLegacy(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
+                dtype=torch.float32,
                 batch_size=batch_size,
                 train=True,
                 shuffle=False,  # No shuffle so we can compare indices directly
                 stratified=True,
             )
             new_indices = []
-            for inputs, _, _, vc in new_loader:
+            for inputs, _, vc in loader:
                 new_indices.extend(inputs[:vc, 0].tolist())
 
             # Run old loader logic manually (from origin/main)
@@ -78,7 +79,7 @@ class TestBackwardCompatibility:
             old_indices = (group_starts + aug_offsets).tolist()
 
             assert new_indices == old_indices, (
-                f"New loader indices don't match old loader!\n"
+                f"Legacy loader indices don't match old loader!\n"
                 f"New: {new_indices}\nOld: {old_indices}"
             )
 
@@ -90,7 +91,7 @@ class TestBackwardCompatibility:
             data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
             n_samples = n_puzzles * augs_per_puzzle
 
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
@@ -133,7 +134,7 @@ class TestSudokuDataset:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
@@ -180,7 +181,7 @@ class TestMazeDataset:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_maze_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
@@ -221,85 +222,7 @@ class TestARCDataset:
 
             assert data["inputs"].shape == (n_examples, seq_len)
             assert data["puzzle_identifiers"] is not None
-            assert data["puzzle_identifiers"].shape == (n_puzzles,)
-
-    def test_stratified_single_visits_each_group_once(self):
-        """With sampling='single', visits each group exactly once."""
-        n_groups, puzzles_per_group, examples_per_puzzle = 4, 3, 5
-        batch_size = 2
-
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = _create_arc_dataset(
-                Path(tmp),
-                n_groups,
-                puzzles_per_group,
-                examples_per_puzzle,
-            )
-
-            loader = PuzzleDatasetIterator(
-                data_dir=str(data_dir),
-                device=torch.device("cpu"),
-                batch_size=batch_size,
-                train=True,
-                shuffle=False,
-                stratified=True,
-                sampling="single",
-            )
-
-            all_example_indices = []
-            all_puzzle_ids = []
-            for inputs, _, puzzle_ids, vc in loader:
-                all_example_indices.extend(inputs[:vc, 0].tolist())
-                all_puzzle_ids.extend(puzzle_ids[:vc].tolist())
-
-            # Should have n_groups samples (one per group)
-            assert len(all_example_indices) == n_groups
-
-            # Each example index should be valid
-            n_examples = n_groups * puzzles_per_group * examples_per_puzzle
-            for idx in all_example_indices:
-                assert 0 <= idx < n_examples
-
-            # Puzzle IDs should map to different groups
-            groups = [pid // puzzles_per_group for pid in all_puzzle_ids]
-            assert sorted(groups) == list(range(n_groups))
-
-    def test_stratified_pack_packs_multiple_examples(self):
-        """With sampling='pack' (default), packs multiple examples from puzzle."""
-        n_groups, puzzles_per_group, examples_per_puzzle = 4, 3, 5
-        batch_size = 8  # Larger than examples_per_puzzle to test packing
-
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = _create_arc_dataset(
-                Path(tmp),
-                n_groups,
-                puzzles_per_group,
-                examples_per_puzzle,
-            )
-
-            loader = PuzzleDatasetIterator(
-                data_dir=str(data_dir),
-                device=torch.device("cpu"),
-                batch_size=batch_size,
-                train=True,
-                shuffle=False,
-                stratified=True,
-                sampling="pack",
-            )
-
-            all_example_indices = []
-            all_puzzle_ids = []
-            for inputs, _, puzzle_ids, vc in loader:
-                all_example_indices.extend(inputs[:vc, 0].tolist())
-                all_puzzle_ids.extend(puzzle_ids[:vc].tolist())
-
-            # With pack mode, we should have more samples than groups
-            # (up to examples_per_puzzle per group)
-            assert len(all_example_indices) >= n_groups
-
-            # Each group should be visited (check via puzzle_ids)
-            groups_visited = {pid // puzzles_per_group for pid in all_puzzle_ids}
-            assert groups_visited == set(range(n_groups))
+            assert data["puzzle_identifiers"].shape == (n_examples,)
 
     def test_puzzle_ids_correct_for_examples(self):
         """Verify puzzle_ids correctly identifies which puzzle each example belongs to."""
@@ -314,15 +237,13 @@ class TestARCDataset:
                 examples_per_puzzle,
             )
 
-            # Test with pack mode (default) - puzzle_ids should still be correct
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
                 train=True,
                 shuffle=False,
                 stratified=True,
-                sampling="pack",
             )
 
             for inputs, _, puzzle_ids, vc in loader:
@@ -351,7 +272,7 @@ class TestARCDataset:
 
             n_examples = n_groups * puzzles_per_group * examples_per_puzzle
 
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
@@ -379,8 +300,8 @@ class TestARCDataset:
                 assert puzzle_id == expected_puzzle
 
 
-class TestPuzzleDatasetIterator:
-    """General tests for PuzzleDatasetIterator."""
+class TestPuzzleDataset:
+    """General tests for PuzzleDataset."""
 
     def test_padding_last_batch(self):
         n_puzzles, augs_per_puzzle, batch_size = 3, 2, 4
@@ -388,7 +309,7 @@ class TestPuzzleDatasetIterator:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
@@ -417,7 +338,7 @@ class TestPuzzleDatasetIterator:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-            loader = PuzzleDatasetIterator(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
                 batch_size=batch_size,
@@ -523,7 +444,7 @@ def _create_arc_dataset(
     File structure:
       {split}/all__inputs.npy             - [n_examples, seq_len]
       {split}/all__labels.npy             - [n_examples, seq_len]
-      {split}/all__puzzle_identifiers.npy - [n_puzzles] puzzle IDs
+      {split}/all__puzzle_identifiers.npy - [n_examples] puzzle ID per sample
       {split}/all__group_indices.npy      - [n_groups + 1] group boundaries
       {split}/all__puzzle_indices.npy     - [n_puzzles + 1] example boundaries
       {split}/dataset.json                - {vocab_size, seq_len}
@@ -543,8 +464,10 @@ def _create_arc_dataset(
         np.save(split_path / "all__inputs.npy", inputs)
         np.save(split_path / "all__labels.npy", labels)
 
-        # Puzzle identifiers: one per puzzle (not per example)
-        puzzle_identifiers = np.arange(n_puzzles, dtype=np.int32)
+        # Puzzle identifiers: one per sample, maps sample -> puzzle ID
+        puzzle_identifiers = np.repeat(
+            np.arange(n_puzzles, dtype=np.int32), examples_per_puzzle
+        )
         np.save(split_path / "all__puzzle_identifiers.npy", puzzle_identifiers)
 
         # Group indices: maps group -> first puzzle index

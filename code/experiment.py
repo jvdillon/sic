@@ -22,7 +22,7 @@ from util import Tee, numpy_rng, set_seed
 import numpy as np
 import torch
 
-from data import PuzzleDatasetIterator, augment_sudoku
+from data import PuzzleDataset, augment_sudoku
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")
@@ -278,7 +278,7 @@ class ExperimentBase:
         return z_H, z_L
 
     def make_train_loader(self):
-        return PuzzleDatasetIterator(
+        return PuzzleDataset(
             data_dir=self.data_dir,
             device=self.device,
             batch_size=self.batch_size,
@@ -291,7 +291,7 @@ class ExperimentBase:
             if self.eval_batch_size is not None
             else self.batch_size
         )
-        return PuzzleDatasetIterator(
+        return PuzzleDataset(
             data_dir=self.data_dir,
             device=self.device,
             batch_size=bs,

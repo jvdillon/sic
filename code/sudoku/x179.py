@@ -21,7 +21,7 @@ from util import set_seed
 
 import torch
 
-from data import PuzzleDatasetIterator, augment_sudoku
+from data import PuzzleDataset, augment_sudoku
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")
@@ -121,7 +121,7 @@ class Experiment:
     def make_train_loader(self):
         assert self.device is not None
         assert self.dtype is not None
-        return PuzzleDatasetIterator(
+        return PuzzleDataset(
             data_dir=self.data_dir,
             device=self.device,
             batch_size=self.batch_size,
@@ -136,7 +136,7 @@ class Experiment:
             if self.eval_batch_size is not None
             else self.batch_size
         )
-        return PuzzleDatasetIterator(
+        return PuzzleDataset(
             data_dir=self.data_dir,
             device=self.device,
             batch_size=bs,

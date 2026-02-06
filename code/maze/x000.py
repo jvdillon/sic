@@ -29,7 +29,7 @@ class Experiment(Experiment182):
     # TRM paper maze config: H_cycles=3, L_cycles=4, attention+RoPE
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
-        num_puzzle_grid_tokens=_CFG.num_puzzle_grid_tokens,
+        num_puzzle_grid_tokens=_CFG.grid_len,
         H_cycles=3,
         L_cycles=6,  # Or should it be 4?
         K_H=1,

@@ -44,7 +44,7 @@ class Experiment(Experiment182):
     # TRM-style prefix: 1 puzzle_id token + 15 register tokens (zeros)
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
-        num_puzzle_grid_tokens=_CFG.num_puzzle_grid_tokens,
+        num_puzzle_grid_tokens=_CFG.grid_len,
         H_cycles=3,
         L_cycles=4,
         K_H=1,

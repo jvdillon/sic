@@ -20,7 +20,7 @@ from util import set_seed
 
 import torch
 
-from data import PuzzleDatasetIterator, augment_sudoku
+from data import PuzzleDataset, augment_sudoku
 
 
 class ForwardResult(TypedDict):
@@ -57,6 +57,10 @@ class Experiment:
     max_train_sec: float = 60 * 60 * 9  # 9 hours
 
     augment_sudoku: bool = True
+    num_instances: int | None = (
+        None  # Limit training to first N instances (for ablations)
+    )
+    stratified: bool = True  # Use stratified sampling (1 sample per group per epoch)
     use_additive_puzzle_emb: bool = False  # If True, embed puzzle_id and add to z_H
     # Size of puzzle_id embedding table (set to 256 for ARC)
     max_puzzle_ids_per_batch: int = 1
@@ -183,19 +187,21 @@ class Experiment:
                 {"params": self.puzzle_id_embed.parameters()}
             )
 
-    def make_train_loader(self) -> PuzzleDatasetIterator:
+    def make_train_loader(self) -> PuzzleDataset:
         assert self.device is not None
-        return PuzzleDatasetIterator(
+        return PuzzleDataset(
             data_dir=self.data_dir,
             device=self.device,
             batch_size=self.batch_size,
             train=True,
+            stratified=self.stratified,
+            num_instances=self.num_instances,
         )
 
-    def make_test_loader(self) -> PuzzleDatasetIterator:
+    def make_test_loader(self) -> PuzzleDataset:
         assert self.device is not None
         bs = self.batch_size if self.eval_batch_size is None else self.eval_batch_size
-        return PuzzleDatasetIterator(
+        return PuzzleDataset(
             data_dir=self.data_dir,
             device=self.device,
             batch_size=bs,
