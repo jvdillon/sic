@@ -286,13 +286,15 @@ class PuzzleDataset:
                     device=device,
                 )
             indices = starts + offsets
+            if self.shuffle:
+                indices = indices[torch.randperm(self.n_instances, device=device)]
             n_samples = self.n_instances
         else:
-            indices = torch.arange(self.n, device=device)
+            if self.shuffle:
+                indices = torch.randperm(self.n, device=device)
+            else:
+                indices = torch.arange(self.n, device=device)
             n_samples = self.n
-
-        if self.shuffle:
-            indices = indices[torch.randperm(n_samples, device=device)]
 
         for i in range(0, n_samples, self.batch_size):
             batch_idx = indices[i : i + self.batch_size]
