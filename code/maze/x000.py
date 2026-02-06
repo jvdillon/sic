@@ -17,7 +17,7 @@ _CFG = get_puzzle_config("maze")
 
 
 class Experiment(Experiment182):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
+    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k-aug"
     augment_sudoku: bool = False
     total_train_steps: int = 8_000
     eval_every_steps: int = 500
@@ -31,7 +31,7 @@ class Experiment(Experiment182):
         vocab_size=_CFG.vocab_size,
         num_puzzle_grid_tokens=_CFG.num_puzzle_grid_tokens,
         H_cycles=3,
-        L_cycles=6,
+        L_cycles=6,  # Or should it be 4?
         K_H=1,
         K_L=1,
         carry_H="all",
