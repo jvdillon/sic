@@ -12,7 +12,7 @@ from util import set_seed
 import numpy as np
 import torch
 
-from data import PuzzleDataset, PuzzleDatasetLegacy, augment_sudoku, load_puzzle_dataset
+from data import PuzzleDataset, augment_sudoku, load_puzzle_dataset
 
 
 def test_augment_sudoku_shapes():
@@ -51,25 +51,24 @@ class TestBackwardCompatibility:
     """Verify new loader matches old loader behavior exactly."""
 
     def test_stratified_sampling_matches_old_loader(self):
-        """PuzzleDatasetLegacy produces exact same indices as old loader for Sudoku."""
+        """PuzzleDataset produces exact same indices as old loader for Sudoku."""
         n_puzzles, augs_per_puzzle, batch_size = 10, 100, 4
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
 
-            # Run legacy loader (preserves b4b compat with randint)
+            # Run new loader
             set_seed(42)
-            loader = PuzzleDatasetLegacy(
+            loader = PuzzleDataset(
                 data_dir=str(data_dir),
                 device=torch.device("cpu"),
-                dtype=torch.float32,
                 batch_size=batch_size,
                 train=True,
                 shuffle=False,  # No shuffle so we can compare indices directly
                 stratified=True,
             )
             new_indices = []
-            for inputs, _, vc in loader:
+            for inputs, _, _, vc in loader:
                 new_indices.extend(inputs[:vc, 0].tolist())
 
             # Run old loader logic manually (from origin/main)
@@ -79,49 +78,8 @@ class TestBackwardCompatibility:
             old_indices = (group_starts + aug_offsets).tolist()
 
             assert new_indices == old_indices, (
-                f"Legacy loader indices don't match old loader!\n"
+                f"PuzzleDataset indices don't match old loader!\n"
                 f"New: {new_indices}\nOld: {old_indices}"
-            )
-
-    def test_puzzle_dataset_matches_legacy(self):
-        """PuzzleDataset produces exact same indices as PuzzleDatasetLegacy."""
-        n_puzzles, augs_per_puzzle, batch_size = 10, 100, 4
-
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = _create_sudoku_dataset(Path(tmp), n_puzzles, augs_per_puzzle)
-
-            # Run new loader
-            set_seed(42)
-            new_loader = PuzzleDataset(
-                data_dir=str(data_dir),
-                device=torch.device("cpu"),
-                batch_size=batch_size,
-                train=True,
-                shuffle=False,
-                stratified=True,
-            )
-            new_indices = []
-            for inputs, _, _, vc in new_loader:
-                new_indices.extend(inputs[:vc, 0].tolist())
-
-            # Run legacy loader
-            set_seed(42)
-            legacy_loader = PuzzleDatasetLegacy(
-                data_dir=str(data_dir),
-                device=torch.device("cpu"),
-                dtype=torch.float32,
-                batch_size=batch_size,
-                train=True,
-                shuffle=False,
-                stratified=True,
-            )
-            legacy_indices = []
-            for inputs, _, vc in legacy_loader:
-                legacy_indices.extend(inputs[:vc, 0].tolist())
-
-            assert new_indices == legacy_indices, (
-                f"PuzzleDataset doesn't match PuzzleDatasetLegacy!\n"
-                f"New: {new_indices}\nLegacy: {legacy_indices}"
             )
 
     def test_non_stratified_matches_old_loader(self):
