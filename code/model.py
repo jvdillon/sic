@@ -2442,6 +2442,7 @@ class TRM3(nn.Module):
             "all_z_H": all_z_H,  # List[[B, total_seq_len, C]]
         }
 
+    # @torch.compile(mode="max-autotune-no-cudagraphs", fullgraph=True)
     @torch.compile(mode="default", fullgraph=True)
     def core_compiled(
         self,

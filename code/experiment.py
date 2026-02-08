@@ -1537,7 +1537,7 @@ def train(experiment: ExperimentBase):
 
     train_start = epoch_start = time.perf_counter()
     epoch_losses: list[dict[str, Tensor] | Tensor] = []
-    step_count = 0
+    prev_step = experiment.current_step
     done = False
 
     def do_eval():
@@ -1567,7 +1567,7 @@ def train(experiment: ExperimentBase):
                 train_loss = f"  Train {losses.mean():.4f}±{losses.std():.4f} [{losses.min():.4f}, {losses.max():.4f}]"
             epoch_losses = []
 
-        step = f"Step{step_count:6d}"
+        step = f"Step{experiment.current_step:6d}"
         acc_str = f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%{train_loss}"
         timing = f"  ({eval_time:5.3f}s / {epoch_elapsed:6.3f}s)"
 
@@ -1587,14 +1587,19 @@ def train(experiment: ExperimentBase):
             loader = iter(trainloader)
             continue
 
+        prev_step = experiment.current_step
         loss = experiment.step(samples, targets, puzzle_ids)
-        step_count += 1
         if loss is None:
             done = True
         else:
             epoch_losses.append({k: v.detach() for k, v in loss.items()})
 
-        if eval_every_steps and step_count % eval_every_steps == 0:
+        step_changed = experiment.current_step > prev_step
+        if (
+            eval_every_steps
+            and step_changed
+            and experiment.current_step % eval_every_steps == 0
+        ):
             eval_start = do_eval()
             epoch_start = time.perf_counter()
             train_start += epoch_start - eval_start

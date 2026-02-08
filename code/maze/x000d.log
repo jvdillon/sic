@@ -1,0 +1,554 @@
+Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias')
+Muon 2D params: ('reasoning.0.attn.o_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.o_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
+Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasoning.1.attn.qkv_proj.weight')
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "mm", "best_time": 0.2027519941329956, "best_triton_pos": 1, "best_triton_time": 0.204352006316185, "best_triton_kernel": "triton_mm_3335", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4"}
+AUTOTUNE mm(27030x1536, 1536x512)
+strides: [1536, 1], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  mm 0.2028 ms 100.0%
+  triton_mm_3335 0.2044 ms 99.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3334 0.2085 ms 97.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_3336 0.2088 ms 97.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3331 0.2105 ms 96.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3329 0.2124 ms 95.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3332 0.2146 ms 94.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3330 0.2172 ms 93.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3333 0.2248 ms 90.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3328 0.2355 ms 86.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+SingleProcess AUTOTUNE benchmarking takes 0.7399 seconds and 0.0002 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "mm", "best_time": 0.21875199675559998, "best_triton_pos": 1, "best_triton_time": 0.3410240113735199, "best_triton_kernel": "triton_mm_3196", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4"}
+AUTOTUNE mm(512x27030, 27030x1536)
+strides: [1, 512], [1536, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  mm 0.2188 ms 100.0%
+  triton_mm_3196 0.3410 ms 64.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3198 0.3604 ms 60.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3195 0.3686 ms 59.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3193 0.3727 ms 58.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_3194 0.3764 ms 58.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3189 0.3768 ms 58.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_3190 0.3850 ms 56.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_3197 0.3947 ms 55.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3188 0.4157 ms 52.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.6274 seconds and 0.0002 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 15, "num_triton_choices": 14, "best_kernel": "triton_mm_1732", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=2", "best_time": 0.002047999994829297, "best_triton_pos": 0}
+AUTOTUNE mm(30x1, 1x512)
+strides: [1, 1], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_1732 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=2
+  triton_mm_1733 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_1734 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_1735 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=4
+  triton_mm_1736 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_1737 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_1738 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=4
+  triton_mm_1742 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1743 0.0020 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  mm 0.0021 ms 98.5%
+SingleProcess AUTOTUNE benchmarking takes 0.2360 seconds and 0.0001 seconds precompiling for 15 choices
+Autotune Choices Stats:
+{"num_choices": 17, "num_triton_choices": 16, "best_kernel": "triton_mm_1752", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8", "best_time": 0.013919999822974205, "best_triton_pos": 0}
+AUTOTUNE mm(27030x12, 12x512)
+strides: [12, 1], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_1752 0.0139 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_1748 0.0143 ms 97.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_1753 0.0143 ms 97.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=4
+  triton_mm_1755 0.0143 ms 97.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1758 0.0143 ms 97.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1751 0.0159 ms 87.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_1759 0.0159 ms 87.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=128, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_1756 0.0159 ms 87.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4
+  triton_mm_1757 0.0160 ms 87.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1760 0.0160 ms 87.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=128, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.2875 seconds and 0.0002 seconds precompiling for 17 choices
+Autotune Choices Stats:
+{"num_choices": 26, "num_triton_choices": 15, "best_kernel": "decompose_k_mm_34_split_8", "best_kernel_desc": "k_split=34", "best_time": 0.026528000831604004, "best_triton_pos": 9, "best_triton_time": 0.06348799914121628, "best_triton_kernel": "triton_mm_1766", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=16, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=2"}
+AUTOTUNE mm(12x27030, 27030x512)
+strides: [1, 12], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  decompose_k_mm_34_split_8 0.0265 ms 100.0% k_split=34
+  decompose_k_mm_51_split_9 0.0285 ms 92.9% k_split=51
+  decompose_k_mm_30_split_7 0.0287 ms 92.5% k_split=30
+  mm 0.0318 ms 83.3%
+  decompose_k_mm_17_split_6 0.0327 ms 81.0% k_split=17
+  decompose_k_mm_15_split_5 0.0346 ms 76.7% k_split=15
+  decompose_k_mm_10_split_4 0.0428 ms 61.9% k_split=10
+  decompose_k_mm_6_split_3 0.0531 ms 50.0% k_split=6
+  decompose_k_mm_5_split_2 0.0594 ms 44.7% k_split=5
+  triton_mm_1766 0.0635 ms 41.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=16, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=2
+SingleProcess AUTOTUNE benchmarking takes 5.8170 seconds and 0.0002 seconds precompiling for 26 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_1790", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 0.20479999482631683, "best_triton_pos": 0}
+AUTOTUNE mm(27030x512, 512x1536)
+strides: [512, 1], [1536, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_1790 0.2048 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1784 0.2106 ms 97.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1786 0.2130 ms 96.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1787 0.2140 ms 95.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1789 0.2144 ms 95.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_1785 0.2150 ms 95.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1788 0.2197 ms 93.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  mm 0.2212 ms 92.6%
+  triton_mm_1791 0.2263 ms 90.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1782 0.2352 ms 87.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.6142 seconds and 0.0002 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_1805", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 0.392192006111145, "best_triton_pos": 0}
+AUTOTUNE mm(27030x3072, 3072x512)
+strides: [3072, 1], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_1805 0.3922 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  mm 0.3953 ms 99.2%
+  triton_mm_1804 0.3973 ms 98.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_1801 0.3994 ms 98.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1806 0.3994 ms 98.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1799 0.4014 ms 97.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1802 0.4049 ms 96.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1800 0.4096 ms 95.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1803 0.4178 ms 93.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1798 0.4485 ms 87.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+SingleProcess AUTOTUNE benchmarking takes 0.6254 seconds and 0.0002 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_1820", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 0.0798719972372055, "best_triton_pos": 0}
+AUTOTUNE mm(27030x512, 512x512)
+strides: [512, 1], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_1820 0.0799 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1821 0.0819 ms 97.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1814 0.0840 ms 95.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1819 0.0859 ms 93.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_1816 0.0860 ms 92.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1817 0.0876 ms 91.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_1815 0.0880 ms 90.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1818 0.0881 ms 90.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_1813 0.0937 ms 85.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_1812 0.0942 ms 84.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.4019 seconds and 0.0002 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 11, "num_triton_choices": 10, "best_kernel": "_mm_plus_mm", "best_time": 0.42188799381256104, "best_triton_pos": 1, "best_triton_time": 0.6827200055122375, "best_triton_kernel": "triton_mm_plus_mm_1946", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8"}
+AUTOTUNE mm_plus_mm(512x27030, 27030x1536, 512x27030, 27030x1536)
+strides: [1, 512], [1536, 1], [1, 512], [1536, 1]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16, torch.bfloat16
+  _mm_plus_mm 0.4219 ms 100.0%
+  triton_mm_plus_mm_1946 0.6827 ms 61.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_plus_mm_1945 0.7393 ms 57.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_plus_mm_1943 0.7564 ms 55.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_plus_mm_1948 0.8056 ms 52.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=8
+  triton_mm_plus_mm_1944 0.8985 ms 47.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=16
+  triton_mm_plus_mm_1949 0.9014 ms 46.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=4
+  triton_mm_plus_mm_1942 0.9646 ms 43.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_plus_mm_1950 1.5954 ms 26.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_plus_mm_1951 1.6036 ms 26.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=2
+SingleProcess AUTOTUNE benchmarking takes 0.4482 seconds and 0.0001 seconds precompiling for 11 choices
+Autotune Choices Stats:
+{"num_choices": 11, "num_triton_choices": 10, "best_kernel": "_mm_plus_mm", "best_time": 0.8039039969444275, "best_triton_pos": 1, "best_triton_time": 1.0922880172729492, "best_triton_kernel": "triton_mm_plus_mm_1967", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4"}
+AUTOTUNE mm_plus_mm(3072x27030, 27030x512, 3072x27030, 27030x512)
+strides: [1, 3072], [512, 1], [1, 3072], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16, torch.bfloat16
+  _mm_plus_mm 0.8039 ms 100.0%
+  triton_mm_plus_mm_1967 1.0923 ms 73.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_plus_mm_1968 1.1356 ms 70.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_plus_mm_1970 1.3189 ms 61.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_plus_mm_1973 1.3210 ms 60.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=8
+  triton_mm_plus_mm_1969 1.4111 ms 57.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=16
+  triton_mm_plus_mm_1971 1.4275 ms 56.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_plus_mm_1975 1.6261 ms 49.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_plus_mm_1976 1.7376 ms 46.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=2
+  triton_mm_plus_mm_1974 1.7456 ms 46.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.4695 seconds and 0.0001 seconds precompiling for 11 choices
+Autotune Choices Stats:
+{"num_choices": 11, "num_triton_choices": 10, "best_kernel": "_mm_plus_mm", "best_time": 0.16793599724769592, "best_triton_pos": 1, "best_triton_time": 0.33456000685691833, "best_triton_kernel": "triton_mm_plus_mm_1995", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8"}
+AUTOTUNE mm_plus_mm(512x27030, 27030x512, 512x27030, 27030x512)
+strides: [1, 512], [512, 1], [1, 512], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16, torch.bfloat16
+  _mm_plus_mm 0.1679 ms 100.0%
+  triton_mm_plus_mm_1995 0.3346 ms 50.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_plus_mm_1996 0.3354 ms 50.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_plus_mm_1999 0.4850 ms 34.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=4
+  triton_mm_plus_mm_1994 0.5058 ms 33.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=16
+  triton_mm_plus_mm_1993 0.5445 ms 30.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_plus_mm_1998 0.7827 ms 21.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=8
+  triton_mm_plus_mm_1992 0.9390 ms 17.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_plus_mm_2001 1.5800 ms 10.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=1, num_warps=2
+  triton_mm_plus_mm_2000 1.5985 ms 10.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.4348 seconds and 0.0001 seconds precompiling for 11 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "addmm", "best_time": 0.22323200106620789, "best_triton_pos": 1, "best_triton_time": 0.3405439853668213, "best_triton_kernel": "triton_mm_2161", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4"}
+AUTOTUNE addmm(512x1536, 512x27030, 27030x1536)
+strides: [1536, 1], [1, 512], [1536, 1]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16
+  addmm 0.2232 ms 100.0%
+  triton_mm_2161 0.3405 ms 65.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2163 0.3625 ms 61.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_2160 0.3676 ms 60.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_2154 0.3768 ms 59.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_2158 0.3768 ms 59.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_2159 0.3789 ms 58.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2155 0.3871 ms 57.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_2162 0.3973 ms 56.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2153 0.4178 ms 53.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.6203 seconds and 0.0001 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "addmm", "best_time": 0.4116480052471161, "best_triton_pos": 1, "best_triton_time": 0.5693439841270447, "best_triton_kernel": "triton_mm_2188", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8"}
+AUTOTUNE addmm(3072x512, 3072x27030, 27030x512)
+strides: [512, 1], [1, 3072], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16
+  addmm 0.4116 ms 100.0%
+  triton_mm_2188 0.5693 ms 72.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_2187 0.6001 ms 68.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_2191 0.6758 ms 60.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2189 0.6848 ms 60.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2184 0.6861 ms 60.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_2185 0.6943 ms 59.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_2196 0.6943 ms 59.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2195 0.6973 ms 59.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2193 0.6984 ms 58.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+SingleProcess AUTOTUNE benchmarking takes 0.6297 seconds and 0.0001 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "addmm", "best_time": 0.09216000139713287, "best_triton_pos": 1, "best_triton_time": 0.1430719941854477, "best_triton_kernel": "triton_mm_2214", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8"}
+AUTOTUNE addmm(512x512, 512x27030, 27030x512)
+strides: [512, 1], [1, 512], [512, 1]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16
+  addmm 0.0922 ms 100.0%
+  triton_mm_2214 0.1431 ms 64.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_2215 0.1434 ms 64.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_2213 0.1736 ms 53.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_2218 0.2068 ms 44.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+  triton_mm_2221 0.3451 ms 26.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2223 0.3620 ms 25.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_2220 0.3622 ms 25.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_2219 0.3643 ms 25.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_2222 0.3786 ms 24.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=False, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.5843 seconds and 0.0001 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_3350", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 1.6414400339126587, "best_triton_pos": 0}
+AUTOTUNE mm(230656x512, 512x1536)
+strides: [512, 1], [1, 512]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_3350 1.6414 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3344 1.6944 ms 96.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3346 1.7080 ms 96.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3349 1.7087 ms 96.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_3347 1.7197 ms 95.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  mm 1.7439 ms 94.1%
+  triton_mm_3345 1.7627 ms 93.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3348 1.7705 ms 92.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3342 1.8726 ms 87.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_3351 1.8995 ms 86.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.7679 seconds and 0.0003 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_3365", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 0.5734400153160095, "best_triton_pos": 0}
+AUTOTUNE mm(230656x512, 512x512)
+strides: [512, 1], [1, 512]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_3365 0.5734 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3361 0.6021 ms 95.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3359 0.6052 ms 94.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3364 0.6103 ms 94.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_3362 0.6138 ms 93.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3360 0.6308 ms 90.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3363 0.6318 ms 90.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  mm 0.6318 ms 90.8%
+  triton_mm_3366 0.6384 ms 89.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3357 0.6656 ms 86.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.6456 seconds and 0.0003 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_3380", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 3.2921600341796875, "best_triton_pos": 0}
+AUTOTUNE mm(230656x512, 512x3072)
+strides: [512, 1], [1, 512]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_3380 3.2922 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3374 3.3608 ms 98.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3379 3.3976 ms 96.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_3376 3.4099 ms 96.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3377 3.4222 ms 96.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  mm 3.4673 ms 94.9%
+  triton_mm_3375 3.5031 ms 94.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3378 3.5727 ms 92.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3372 3.7007 ms 89.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=4
+  triton_mm_3381 3.7847 ms 87.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.9682 seconds and 0.0003 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_3395", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 1.6291840076446533, "best_triton_pos": 0}
+AUTOTUNE mm(230656x1536, 1536x512)
+strides: [1536, 1], [1, 1536]
+dtypes: torch.bfloat16, torch.bfloat16
+  triton_mm_3395 1.6292 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3394 1.6620 ms 98.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=8
+  triton_mm_3391 1.6944 ms 96.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3389 1.6944 ms 96.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  mm 1.6998 ms 95.8%
+  triton_mm_3392 1.7156 ms 95.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3390 1.7479 ms 93.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3393 1.7607 ms 92.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_3396 1.7633 ms 92.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_3388 1.8665 ms 87.3% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=8
+SingleProcess AUTOTUNE benchmarking takes 0.7621 seconds and 0.0003 seconds precompiling for 16 choices
+Autotune Choices Stats:
+{"num_choices": 17, "num_triton_choices": 15, "best_kernel": "triton_mm_4186", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4", "best_time": 0.1658560037612915, "best_triton_pos": 0}
+AUTOTUNE addmm(230656x12, 230656x512, 512x12)
+strides: [0, 1], [512, 1], [1, 512]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16
+  triton_mm_4186 0.1659 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4
+  triton_mm_4178 0.1669 ms 99.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=2
+  triton_mm_4183 0.1669 ms 99.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_4190 0.1678 ms 98.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_4191 0.1679 ms 98.8% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  addmm 0.1700 ms 97.6%
+  bias_addmm 0.1758 ms 94.4%
+  triton_mm_4180 0.1761 ms 94.2% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=4
+  triton_mm_4179 0.1840 ms 90.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=2
+  triton_mm_4185 0.1983 ms 83.6% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4
+SingleProcess AUTOTUNE benchmarking takes 0.5795 seconds and 0.0002 seconds precompiling for 17 choices
+Autotune Choices Stats:
+{"num_choices": 16, "num_triton_choices": 15, "best_kernel": "triton_mm_4201", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4", "best_time": 0.004095999989658594, "best_triton_pos": 0}
+AUTOTUNE addmm(256x1, 256x512, 512x1)
+strides: [1, 1], [461312, 1], [1, 512]
+dtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16
+  triton_mm_4201 0.0041 ms 100.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4
+  triton_mm_4195 0.0057 ms 71.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=4
+  triton_mm_4205 0.0057 ms 71.9% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_4198 0.0057 ms 71.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=3, num_warps=4
+  triton_mm_4206 0.0057 ms 71.5% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=128, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=8
+  triton_mm_4203 0.0058 ms 70.7% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=8
+  triton_mm_4193 0.0060 ms 68.1% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=2, num_warps=2
+  triton_mm_4200 0.0061 ms 67.4% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=4, num_warps=4
+  triton_mm_4194 0.0061 ms 67.0% ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=32, BLOCK_N=16, EVEN_K=True, GROUP_M=8, USE_FAST_ACCUM=False, num_stages=5, num_warps=2
+  addmm 0.0061 ms 66.7%
+SingleProcess AUTOTUNE benchmarking takes 0.2768 seconds and 0.0003 seconds precompiling for 16 choices
+  cell_acc=91.34%, puzzle_acc=0.00%
+  eval_avg_halt_step: 16.00
+  per_H_acc: ['H0=67.6%', 'H1=87.2%', 'H2=88.5%']
+  H_cos: ['0.895', '0.953']
+  z_H_delta: ['15.375', '10.875']
+  cells: fixed=[54896, 7455] broken=[13973, 4847]
+  per_ACT_cell_acc: ['H1=67.6%', 'H2=87.2%', 'H3=88.5%', 'H4=89.2%', 'H5=89.9%', 'H6=90.3%', 'H7=90.6%', 'H8=90.8%', 'H9=91.0%', 'H10=91.1%', 'H11=91.2%', 'H12=91.2%', 'H13=91.2%', 'H14=91.2%', 'H15=91.2%', 'H16=91.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
+  mean_sigmoid_q_halt: ['0.001', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000']
+  halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
+  halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+  Avg ACT steps (last 100): 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step00500.pt acc=91.34% (0.070s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=91.34% (0.135s)
+Step   500  Test 91.34% /  0.00%  Train lm=1.1250±0.1426ϵ[1.0312,3.4062] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=1.8750±7.2637ϵ[0.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (66.602s / 292.722s)
+  cell_acc=94.79%, puzzle_acc=0.00%
+  eval_avg_halt_step: 16.00
+  per_H_acc: ['H0=87.2%', 'H1=87.4%', 'H2=91.3%']
+  H_cos: ['0.797', '0.930']
+  z_H_delta: ['17.375', '12.125']
+  cells: fixed=[622, 11971] broken=[132, 3848]
+  per_ACT_cell_acc: ['H1=87.2%', 'H2=87.4%', 'H3=91.3%', 'H4=92.6%', 'H5=93.2%', 'H6=93.7%', 'H7=94.0%', 'H8=94.2%', 'H9=94.3%', 'H10=94.3%', 'H11=94.4%', 'H12=94.4%', 'H13=94.5%', 'H14=94.5%', 'H15=94.4%', 'H16=94.4%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
+  mean_sigmoid_q_halt: ['0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000']
+  halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
+  halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+  Avg ACT steps (last 100): 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step01000.pt acc=94.79% (0.067s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=94.79% (0.133s)
+Step  1000  Test 94.79% /  0.00%  Train lm=1.0078±0.0262ϵ[0.9531,1.1016] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=1.8750±7.2637ϵ[0.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.544s / 225.076s)
+  cell_acc=98.18%, puzzle_acc=36.40%
+  eval_avg_halt_step: 8.84
+  per_H_acc: ['H0=87.4%', 'H1=89.9%', 'H2=95.9%']
+  H_cos: ['0.812', '0.914']
+  z_H_delta: ['19.000', '13.188']
+  cells: fixed=[12005, 16315] broken=[6736, 3699]
+  per_ACT_cell_acc: ['H1=87.4%', 'H2=89.9%', 'H3=95.9%', 'H4=97.2%', 'H5=97.7%', 'H6=98.0%', 'H7=98.1%', 'H8=98.1%', 'H9=98.1%', 'H10=98.2%', 'H11=98.2%', 'H12=98.2%', 'H13=98.2%', 'H14=98.2%', 'H15=98.2%', 'H16=98.2%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=1.3%', 'H4=6.0%', 'H5=15.9%', 'H6=25.9%', 'H7=31.5%', 'H8=33.2%', 'H9=34.5%', 'H10=35.3%', 'H11=39.2%', 'H12=38.8%', 'H13=38.8%', 'H14=39.7%', 'H15=40.5%', 'H16=40.1%']
+  mean_sigmoid_q_halt: ['0.001', '0.000', '0.002', '0.073', '0.156', '0.207', '0.273', '0.320', '0.342', '0.357', '0.371', '0.385', '0.398', '0.404', '0.408', '0.408']
+  halt_rates: ['0.00', '0.00', '0.00', '0.01', '0.11', '0.17', '0.27', '0.32', '0.35', '0.41', '0.40', '0.42', '0.44', '0.44', '0.44', '0.46']
+  halt_histogram %: [0.0, 5.3, 7.5, 4.0, 2.7, 2.2, 2.0, 1.9, 1.2, 0.8, 0.8, 0.8, 0.6, 0.4, 0.4, 69.2]
+  Avg ACT steps (last 100): 5.16
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step01500.pt acc=98.18% (0.067s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=98.18% (0.133s)
+Step  1500  Test 98.18% / 36.40%  Train lm=0.9609±0.0205ϵ[0.9219,1.0547] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=3.3305±5.4645ϵ[0.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.580s / 225.614s)
+  cell_acc=98.66%, puzzle_acc=53.70%
+  eval_avg_halt_step: 4.84
+  per_H_acc: ['H0=86.9%', 'H1=92.3%', 'H2=97.2%']
+  H_cos: ['0.789', '0.922']
+  z_H_delta: ['20.125', '12.625']
+  cells: fixed=[15147, 12526] broken=[3831, 2381]
+  per_ACT_cell_acc: ['H1=86.9%', 'H2=92.3%', 'H3=97.2%', 'H4=97.9%', 'H5=98.2%', 'H6=98.3%', 'H7=98.4%', 'H8=98.5%', 'H9=98.6%', 'H10=98.6%', 'H11=98.6%', 'H12=98.7%', 'H13=98.7%', 'H14=98.6%', 'H15=98.6%', 'H16=98.6%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=5.2%', 'H4=22.8%', 'H5=33.6%', 'H6=39.2%', 'H7=42.7%', 'H8=45.3%', 'H9=47.4%', 'H10=51.7%', 'H11=52.2%', 'H12=53.9%', 'H13=52.6%', 'H14=54.3%', 'H15=51.7%', 'H16=51.7%']
+  mean_sigmoid_q_halt: ['0.000', '0.000', '0.073', '0.307', '0.426', '0.504', '0.562', '0.582', '0.605', '0.625', '0.645', '0.648', '0.656', '0.672', '0.676', '0.680']
+  halt_rates: ['0.00', '0.00', '0.04', '0.28', '0.44', '0.52', '0.60', '0.60', '0.64', '0.65', '0.68', '0.68', '0.68', '0.73', '0.72', '0.72']
+  halt_histogram %: [2.0, 34.0, 13.7, 5.4, 2.9, 2.3, 1.7, 1.6, 1.1, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 32.1]
+  Avg ACT steps (last 100): 2.74
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step02000.pt acc=98.66% (0.068s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=98.66% (0.135s)
+Step  2000  Test 98.66% / 53.70%  Train lm=0.9414±0.0082ϵ[0.9180,1.0156] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=8.9425±3.6848ϵ[0.0000,21.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.601s / 225.934s)
+  cell_acc=98.89%, puzzle_acc=58.20%
+  eval_avg_halt_step: 3.88
+  per_H_acc: ['H0=80.9%', 'H1=88.1%', 'H2=97.3%']
+  H_cos: ['0.555', '0.871']
+  z_H_delta: ['21.875', '15.875']
+  cells: fixed=[15534, 21557] broken=[477, 2273]
+  per_ACT_cell_acc: ['H1=80.9%', 'H2=88.1%', 'H3=97.3%', 'H4=98.2%', 'H5=98.6%', 'H6=98.8%', 'H7=98.9%', 'H8=98.9%', 'H9=98.9%', 'H10=99.0%', 'H11=99.0%', 'H12=99.0%', 'H13=99.0%', 'H14=99.0%', 'H15=99.0%', 'H16=99.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=7.3%', 'H4=29.3%', 'H5=45.3%', 'H6=53.4%', 'H7=59.5%', 'H8=60.3%', 'H9=62.9%', 'H10=62.1%', 'H11=63.4%', 'H12=63.8%', 'H13=64.2%', 'H14=63.4%', 'H15=63.8%', 'H16=62.5%']
+  mean_sigmoid_q_halt: ['0.001', '0.000', '0.065', '0.338', '0.516', '0.605', '0.688', '0.719', '0.727', '0.738', '0.754', '0.770', '0.770', '0.766', '0.777', '0.762']
+  halt_rates: ['0.00', '0.00', '0.06', '0.33', '0.54', '0.62', '0.72', '0.75', '0.75', '0.78', '0.79', '0.81', '0.81', '0.80', '0.82', '0.78']
+  halt_histogram %: [8.7, 47.4, 12.9, 4.2, 2.2, 1.5, 1.1, 1.0, 0.7, 0.5, 0.4, 0.4, 0.3, 0.3, 0.2, 18.2]
+  Avg ACT steps (last 100): 1.94
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step02500.pt acc=98.89% (0.046s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=98.89% (0.113s)
+Step  2500  Test 98.89% / 58.20%  Train lm=0.9297±0.0059ϵ[0.9180,0.9570] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=12.9485±3.4818ϵ[1.0000,23.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.596s / 225.959s)
+  cell_acc=98.84%, puzzle_acc=61.20%
+  eval_avg_halt_step: 2.47
+  per_H_acc: ['H0=73.1%', 'H1=82.7%', 'H2=98.0%']
+  H_cos: ['0.559', '0.766']
+  z_H_delta: ['22.250', '18.000']
+  cells: fixed=[40988, 33763] broken=[20872, 1780]
+  per_ACT_cell_acc: ['H1=73.1%', 'H2=82.7%', 'H3=98.0%', 'H4=98.4%', 'H5=98.6%', 'H6=98.6%', 'H7=98.7%', 'H8=98.7%', 'H9=98.7%', 'H10=98.7%', 'H11=98.7%', 'H12=98.7%', 'H13=98.7%', 'H14=98.7%', 'H15=98.7%', 'H16=98.7%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=20.3%', 'H4=44.0%', 'H5=52.2%', 'H6=57.3%', 'H7=58.2%', 'H8=59.9%', 'H9=59.5%', 'H10=60.3%', 'H11=59.9%', 'H12=61.2%', 'H13=60.8%', 'H14=60.8%', 'H15=60.8%', 'H16=60.3%']
+  mean_sigmoid_q_halt: ['0.003', '0.013', '0.334', '0.637', '0.758', '0.832', '0.859', '0.879', '0.895', '0.895', '0.898', '0.898', '0.906', '0.906', '0.910', '0.914']
+  halt_rates: ['0.00', '0.00', '0.29', '0.65', '0.77', '0.85', '0.87', '0.89', '0.90', '0.90', '0.91', '0.91', '0.92', '0.92', '0.93', '0.93']
+  halt_histogram %: [16.5, 51.0, 11.2, 3.2, 1.6, 1.1, 0.8, 0.7, 0.5, 0.4, 0.3, 0.3, 0.2, 0.2, 0.1, 11.9]
+  Avg ACT steps (last 100): 1.88
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step03000.pt acc=98.84% (0.047s)
+Step  3000  Test 98.84% / 61.20%  Train lm=0.9258±0.0048ϵ[0.9141,0.9492] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=15.6725±3.4555ϵ[4.0000,26.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.498s / 225.932s)
+  cell_acc=99.10%, puzzle_acc=64.10%
+  eval_avg_halt_step: 2.35
+  per_H_acc: ['H0=87.5%', 'H1=88.2%', 'H2=98.4%']
+  H_cos: ['0.723', '0.777']
+  z_H_delta: ['22.125', '17.750']
+  cells: fixed=[21005, 22749] broken=[19477, 1574]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=88.2%', 'H3=98.4%', 'H4=98.7%', 'H5=98.9%', 'H6=99.0%', 'H7=99.0%', 'H8=99.0%', 'H9=99.0%', 'H10=99.0%', 'H11=99.0%', 'H12=99.0%', 'H13=99.0%', 'H14=99.0%', 'H15=99.0%', 'H16=99.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=34.9%', 'H4=48.3%', 'H5=61.2%', 'H6=65.9%', 'H7=66.4%', 'H8=68.5%', 'H9=68.1%', 'H10=67.7%', 'H11=68.1%', 'H12=67.2%', 'H13=65.1%', 'H14=67.7%', 'H15=65.9%', 'H16=66.4%']
+  mean_sigmoid_q_halt: ['0.004', '0.014', '0.469', '0.590', '0.758', '0.801', '0.824', '0.832', '0.836', '0.840', '0.848', '0.840', '0.836', '0.844', '0.840', '0.848']
+  halt_rates: ['0.00', '0.00', '0.44', '0.57', '0.78', '0.81', '0.85', '0.87', '0.86', '0.88', '0.88', '0.87', '0.87', '0.89', '0.88', '0.89']
+  halt_histogram %: [32.1, 44.2, 8.8, 2.3, 1.1, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 8.2]
+  Avg ACT steps (last 100): 1.42
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step03500.pt acc=99.10% (0.046s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=99.10% (0.113s)
+Step  3500  Test 99.10% / 64.10%  Train lm=0.9180±0.0035ϵ[0.9141,0.9375] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=20.7500±3.1147ϵ[7.0000,29.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.587s / 225.849s)
+  cell_acc=99.15%, puzzle_acc=74.00%
+  eval_avg_halt_step: 1.91
+  per_H_acc: ['H0=87.5%', 'H1=90.7%', 'H2=98.4%']
+  H_cos: ['0.750', '0.848']
+  z_H_delta: ['22.000', '17.000']
+  cells: fixed=[14310, 17563] broken=[7690, 1448]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=90.7%', 'H3=98.4%', 'H4=98.6%', 'H5=98.7%', 'H6=98.8%', 'H7=98.8%', 'H8=98.8%', 'H9=98.9%', 'H10=98.9%', 'H11=98.9%', 'H12=98.9%', 'H13=98.9%', 'H14=98.9%', 'H15=98.9%', 'H16=98.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=40.1%', 'H4=55.2%', 'H5=60.3%', 'H6=65.1%', 'H7=65.1%', 'H8=65.5%', 'H9=66.8%', 'H10=67.7%', 'H11=67.7%', 'H12=68.1%', 'H13=68.1%', 'H14=67.7%', 'H15=67.2%', 'H16=67.2%']
+  mean_sigmoid_q_halt: ['0.001', '0.002', '0.512', '0.719', '0.809', '0.863', '0.895', '0.898', '0.918', '0.934', '0.941', '0.945', '0.938', '0.934', '0.941', '0.934']
+  halt_rates: ['0.00', '0.00', '0.49', '0.71', '0.82', '0.88', '0.91', '0.91', '0.93', '0.94', '0.96', '0.96', '0.94', '0.94', '0.95', '0.94']
+  halt_histogram %: [44.8, 37.1, 7.0, 1.8, 0.8, 0.6, 0.4, 0.4, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 6.1]
+  Avg ACT steps (last 100): 1.22
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step04000.pt acc=99.15% (0.046s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/best.pt acc=99.15% (0.113s)
+Step  4000  Test 99.15% / 74.00%  Train lm=0.9180±0.0044ϵ[0.9141,0.9531] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=23.5200±4.3002ϵ[0.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.607s / 226.092s)
+  cell_acc=98.99%, puzzle_acc=68.20%
+  eval_avg_halt_step: 1.76
+  per_H_acc: ['H0=87.5%', 'H1=92.4%', 'H2=98.7%']
+  H_cos: ['0.793', '0.875']
+  z_H_delta: ['21.500', '15.312']
+  cells: fixed=[15529, 14209] broken=[5334, 1111]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=92.4%', 'H3=98.7%', 'H4=98.9%', 'H5=99.0%', 'H6=99.0%', 'H7=99.0%', 'H8=99.0%', 'H9=99.0%', 'H10=99.0%', 'H11=99.0%', 'H12=99.0%', 'H13=99.0%', 'H14=99.0%', 'H15=99.0%', 'H16=99.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=47.0%', 'H4=62.9%', 'H5=67.2%', 'H6=69.0%', 'H7=70.7%', 'H8=70.7%', 'H9=71.1%', 'H10=71.6%', 'H11=71.6%', 'H12=71.1%', 'H13=70.7%', 'H14=70.7%', 'H15=70.3%', 'H16=69.8%']
+  mean_sigmoid_q_halt: ['0.001', '0.005', '0.586', '0.801', '0.898', '0.934', '0.949', '0.953', '0.957', '0.961', '0.973', '0.969', '0.973', '0.973', '0.969', '0.977']
+  halt_rates: ['0.00', '0.00', '0.56', '0.78', '0.91', '0.94', '0.96', '0.96', '0.96', '0.97', '0.98', '0.97', '0.98', '0.98', '0.97', '0.98']
+  halt_histogram %: [54.1, 31.5, 5.7, 1.4, 0.7, 0.5, 0.3, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 4.7]
+  Avg ACT steps (last 100): 1.10
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step04500.pt acc=98.99% (0.046s)
+Step  4500  Test 98.99% / 68.20%  Train lm=0.9141±0.0020ϵ[0.9141,0.9258] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=25.7585±1.9789ϵ[18.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.567s / 226.027s)
+  cell_acc=99.11%, puzzle_acc=74.40%
+  eval_avg_halt_step: 1.78
+  per_H_acc: ['H0=87.5%', 'H1=89.9%', 'H2=98.7%']
+  H_cos: ['0.707', '0.824']
+  z_H_delta: ['22.625', '18.000']
+  cells: fixed=[15469, 19449] broken=[10437, 1159]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=89.9%', 'H3=98.7%', 'H4=99.0%', 'H5=99.1%', 'H6=99.1%', 'H7=99.1%', 'H8=99.1%', 'H9=99.1%', 'H10=99.1%', 'H11=99.1%', 'H12=99.1%', 'H13=99.1%', 'H14=99.1%', 'H15=99.1%', 'H16=99.1%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=45.7%', 'H4=63.4%', 'H5=71.6%', 'H6=72.8%', 'H7=72.8%', 'H8=72.4%', 'H9=73.7%', 'H10=74.6%', 'H11=74.6%', 'H12=74.6%', 'H13=74.6%', 'H14=75.9%', 'H15=75.9%', 'H16=75.4%']
+  mean_sigmoid_q_halt: ['0.000', '0.001', '0.555', '0.738', '0.867', '0.906', '0.938', '0.941', '0.949', '0.957', '0.961', '0.965', '0.953', '0.969', '0.977', '0.969']
+  halt_rates: ['0.00', '0.00', '0.53', '0.74', '0.87', '0.91', '0.94', '0.94', '0.95', '0.97', '0.96', '0.97', '0.96', '0.97', '0.98', '0.97']
+  halt_histogram %: [60.3, 27.7, 4.9, 1.2, 0.5, 0.4, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 3.8]
+  Avg ACT steps (last 100): 1.12
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step05000.pt acc=99.11% (0.046s)
+Step  5000  Test 99.11% / 74.40%  Train lm=0.9141±0.0014ϵ[0.9141,0.9258] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=26.3155±1.8228ϵ[19.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.555s / 226.034s)
+  cell_acc=99.08%, puzzle_acc=74.40%
+  eval_avg_halt_step: 1.78
+  per_H_acc: ['H0=87.5%', 'H1=88.0%', 'H2=98.6%']
+  H_cos: ['0.688', '0.789']
+  z_H_delta: ['22.875', '18.750']
+  cells: fixed=[17077, 23366] broken=[15902, 1221]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=88.0%', 'H3=98.6%', 'H4=98.8%', 'H5=98.8%', 'H6=98.8%', 'H7=98.8%', 'H8=98.9%', 'H9=98.9%', 'H10=98.9%', 'H11=98.9%', 'H12=98.9%', 'H13=98.9%', 'H14=98.9%', 'H15=98.9%', 'H16=98.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=49.1%', 'H4=62.1%', 'H5=65.5%', 'H6=67.2%', 'H7=68.1%', 'H8=68.5%', 'H9=69.0%', 'H10=69.0%', 'H11=69.4%', 'H12=69.8%', 'H13=70.3%', 'H14=70.3%', 'H15=70.3%', 'H16=70.3%']
+  mean_sigmoid_q_halt: ['0.000', '0.002', '0.602', '0.824', '0.863', '0.898', '0.906', '0.926', '0.941', '0.945', '0.953', '0.953', '0.957', '0.957', '0.961', '0.957']
+  halt_rates: ['0.00', '0.00', '0.59', '0.83', '0.86', '0.90', '0.91', '0.93', '0.95', '0.94', '0.95', '0.95', '0.96', '0.96', '0.97', '0.96']
+  halt_histogram %: [64.8, 25.0, 4.3, 1.0, 0.5, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.0, 3.2]
+  Avg ACT steps (last 100): 1.17
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step05500.pt acc=99.08% (0.045s)
+Step  5500  Test 99.08% / 74.40%  Train lm=0.9141±0.0009ϵ[0.9141,0.9219] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=26.5650±1.7850ϵ[20.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.537s / 226.210s)
+  cell_acc=98.88%, puzzle_acc=67.50%
+  eval_avg_halt_step: 1.82
+  per_H_acc: ['H0=87.5%', 'H1=85.1%', 'H2=98.6%']
+  H_cos: ['0.645', '0.793']
+  z_H_delta: ['23.250', '18.875']
+  cells: fixed=[20432, 29446] broken=[25348, 1359]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=85.1%', 'H3=98.6%', 'H4=98.7%', 'H5=98.7%', 'H6=98.7%', 'H7=98.7%', 'H8=98.7%', 'H9=98.7%', 'H10=98.7%', 'H11=98.7%', 'H12=98.7%', 'H13=98.7%', 'H14=98.7%', 'H15=98.7%', 'H16=98.7%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=44.8%', 'H4=59.9%', 'H5=62.5%', 'H6=62.9%', 'H7=63.4%', 'H8=63.4%', 'H9=63.4%', 'H10=63.4%', 'H11=63.8%', 'H12=63.8%', 'H13=63.8%', 'H14=63.8%', 'H15=63.8%', 'H16=63.8%']
+  mean_sigmoid_q_halt: ['0.001', '0.002', '0.594', '0.836', '0.902', '0.926', '0.941', '0.945', '0.953', '0.949', '0.957', '0.957', '0.957', '0.961', '0.961', '0.957']
+  halt_rates: ['0.00', '0.00', '0.58', '0.83', '0.90', '0.93', '0.94', '0.94', '0.95', '0.95', '0.96', '0.96', '0.96', '0.96', '0.96', '0.96']
+  halt_histogram %: [68.2, 22.8, 3.8, 0.9, 0.4, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 2.8]
+  Avg ACT steps (last 100): 1.14
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step06000.pt acc=98.88% (0.046s)
+Step  6000  Test 98.88% / 67.50%  Train lm=0.9141±0.0005ϵ[0.9141,0.9219] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=26.9230±1.6545ϵ[21.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.574s / 226.088s)
+  cell_acc=98.70%, puzzle_acc=53.70%
+  eval_avg_halt_step: 1.43
+  per_H_acc: ['H0=87.5%', 'H1=86.6%', 'H2=98.4%']
+  H_cos: ['0.633', '0.871']
+  z_H_delta: ['23.750', '18.250']
+  cells: fixed=[19124, 26162] broken=[21039, 1486]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=86.6%', 'H3=98.4%', 'H4=98.4%', 'H5=98.4%', 'H6=98.4%', 'H7=98.4%', 'H8=98.4%', 'H9=98.4%', 'H10=98.4%', 'H11=98.4%', 'H12=98.4%', 'H13=98.4%', 'H14=98.4%', 'H15=98.4%', 'H16=98.4%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=39.7%', 'H4=46.6%', 'H5=46.6%', 'H6=46.6%', 'H7=47.0%', 'H8=47.0%', 'H9=47.0%', 'H10=47.0%', 'H11=47.0%', 'H12=47.0%', 'H13=47.0%', 'H14=47.0%', 'H15=47.0%', 'H16=47.0%']
+  mean_sigmoid_q_halt: ['0.001', '0.002', '0.613', '0.891', '0.934', '0.949', '0.965', '0.973', '0.980', '0.984', '0.992', '0.992', '0.992', '0.992', '0.992', '0.992']
+  halt_rates: ['0.00', '0.00', '0.59', '0.89', '0.93', '0.94', '0.96', '0.97', '0.98', '0.99', '0.99', '0.99', '0.99', '0.99', '0.99', '0.99']
+  halt_histogram %: [70.9, 21.1, 3.4, 0.8, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0, 2.4]
+  Avg ACT steps (last 100): 1.12
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step06500.pt acc=98.70% (0.045s)
+Step  6500  Test 98.70% / 53.70%  Train lm=0.9141±0.0003ϵ[0.9141,0.9180] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=27.0425±1.6131ϵ[21.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.484s / 226.249s)
+  cell_acc=98.57%, puzzle_acc=48.90%
+  eval_avg_halt_step: 1.53
+  per_H_acc: ['H0=87.5%', 'H1=87.1%', 'H2=98.3%']
+  H_cos: ['0.633', '0.898']
+  z_H_delta: ['23.875', '18.125']
+  cells: fixed=[18321, 24971] broken=[19121, 1616]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=87.1%', 'H3=98.3%', 'H4=98.3%', 'H5=98.3%', 'H6=98.3%', 'H7=98.3%', 'H8=98.3%', 'H9=98.3%', 'H10=98.3%', 'H11=98.3%', 'H12=98.3%', 'H13=98.3%', 'H14=98.3%', 'H15=98.3%', 'H16=98.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=34.1%', 'H4=40.1%', 'H5=42.2%', 'H6=42.2%', 'H7=42.2%', 'H8=42.2%', 'H9=42.2%', 'H10=42.2%', 'H11=42.2%', 'H12=42.2%', 'H13=42.2%', 'H14=42.2%', 'H15=42.2%', 'H16=42.2%']
+  mean_sigmoid_q_halt: ['0.002', '0.004', '0.578', '0.855', '0.914', '0.953', '0.969', '0.969', '0.973', '0.977', '0.980', '0.984', '0.984', '0.984', '0.988', '0.988']
+  halt_rates: ['0.00', '0.00', '0.57', '0.85', '0.91', '0.95', '0.97', '0.97', '0.97', '0.97', '0.98', '0.99', '0.99', '0.99', '0.99', '0.99']
+  halt_histogram %: [73.0, 19.8, 3.2, 0.7, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0, 2.2]
+  Avg ACT steps (last 100): 1.12
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step07000.pt acc=98.57% (0.045s)
+Step  7000  Test 98.57% / 48.90%  Train lm=0.9141±0.0001ϵ[0.9141,0.9180] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=27.0060±1.6110ϵ[19.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.481s / 226.029s)
+  cell_acc=98.54%, puzzle_acc=46.70%
+  eval_avg_halt_step: 1.48
+  per_H_acc: ['H0=87.5%', 'H1=87.2%', 'H2=98.2%']
+  H_cos: ['0.633', '0.902']
+  z_H_delta: ['23.875', '18.250']
+  cells: fixed=[18079, 24726] broken=[18669, 1668]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=87.2%', 'H3=98.2%', 'H4=98.3%', 'H5=98.3%', 'H6=98.3%', 'H7=98.3%', 'H8=98.3%', 'H9=98.2%', 'H10=98.2%', 'H11=98.2%', 'H12=98.2%', 'H13=98.2%', 'H14=98.2%', 'H15=98.2%', 'H16=98.2%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=32.8%', 'H4=38.8%', 'H5=39.7%', 'H6=40.1%', 'H7=40.1%', 'H8=40.1%', 'H9=40.1%', 'H10=40.1%', 'H11=40.1%', 'H12=40.1%', 'H13=40.1%', 'H14=40.1%', 'H15=40.1%', 'H16=40.1%']
+  mean_sigmoid_q_halt: ['0.002', '0.004', '0.586', '0.859', '0.922', '0.949', '0.973', '0.973', '0.973', '0.977', '0.984', '0.984', '0.980', '0.984', '0.980', '0.984']
+  halt_rates: ['0.00', '0.00', '0.57', '0.84', '0.92', '0.95', '0.97', '0.97', '0.97', '0.97', '0.98', '0.98', '0.98', '0.99', '0.98', '0.99']
+  halt_histogram %: [74.6, 18.8, 2.9, 0.6, 0.3, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 2.0]
+  Avg ACT steps (last 100): 1.09
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step07500.pt acc=98.54% (0.046s)
+Step  7500  Test 98.54% / 46.70%  Train lm=0.9141±0.0000ϵ[0.9141,0.9141] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=27.0065±1.6455ϵ[21.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.519s / 226.066s)
+  cell_acc=98.55%, puzzle_acc=46.80%
+  eval_avg_halt_step: 1.51
+  per_H_acc: ['H0=87.5%', 'H1=87.2%', 'H2=98.3%']
+  H_cos: ['0.633', '0.902']
+  z_H_delta: ['23.875', '18.250']
+  cells: fixed=[18063, 24685] broken=[18617, 1643]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=87.2%', 'H3=98.3%', 'H4=98.3%', 'H5=98.3%', 'H6=98.3%', 'H7=98.3%', 'H8=98.3%', 'H9=98.3%', 'H10=98.3%', 'H11=98.3%', 'H12=98.3%', 'H13=98.3%', 'H14=98.3%', 'H15=98.2%', 'H16=98.2%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=32.3%', 'H4=38.8%', 'H5=40.9%', 'H6=40.9%', 'H7=40.9%', 'H8=40.9%', 'H9=40.9%', 'H10=40.9%', 'H11=40.9%', 'H12=40.9%', 'H13=40.9%', 'H14=40.9%', 'H15=40.9%', 'H16=40.9%']
+  mean_sigmoid_q_halt: ['0.002', '0.004', '0.582', '0.863', '0.930', '0.957', '0.961', '0.965', '0.969', '0.977', '0.977', '0.977', '0.984', '0.980', '0.984', '0.984']
+  halt_rates: ['0.00', '0.00', '0.56', '0.87', '0.93', '0.96', '0.96', '0.97', '0.97', '0.98', '0.98', '0.98', '0.98', '0.98', '0.99', '0.99']
+  halt_histogram %: [76.0, 17.9, 2.7, 0.6, 0.3, 0.2, 0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.8]
+  Avg ACT steps (last 100): 1.12
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x000d/step08000.pt acc=98.55% (0.045s)
+Step  8000  Test 98.55% / 46.80%  Train lm=0.9141±0.0000ϵ[0.9141,0.9141] n_active=30.0000±0.0000ϵ[30.0000,30.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] n_halted=27.0220±1.6318ϵ[20.0000,30.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]  (38.489s / 225.812s)
