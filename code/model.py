@@ -11,6 +11,7 @@ import math
 import traceback
 
 from torch import Tensor, nn
+from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 import torch
 
@@ -447,6 +448,7 @@ class Attention(nn.Module):
         num_key_value_heads: int | None = None,
         causal: bool = False,
         muon_modified: bool = False,
+        checkpoint_muon_norm: bool = False,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
@@ -458,6 +460,7 @@ class Attention(nn.Module):
             num_key_value_heads = num_heads
         self.num_key_value_heads = num_key_value_heads
         self.causal = causal
+        self.checkpoint_muon_norm = checkpoint_muon_norm
 
         # Fused QKV: one kernel, each head orthogonalized independently by Muon
         # Ensemble dim = num_heads + 2 * num_key_value_heads (Q heads + K heads + V heads)
@@ -498,7 +501,10 @@ class Attention(nn.Module):
         out = nn.functional.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
         out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
         if self.o_norm is not None:
-            out = self.o_norm(out)
+            if self.checkpoint_muon_norm:
+                out = torch_checkpoint(self.o_norm, out, use_reentrant=False)
+            else:
+                out = self.o_norm(out)
         return self.o_proj(out)
 
 
@@ -735,6 +741,7 @@ class TransformerBlock(nn.Module):
         num_key_value_heads: int | None = None,
         causal: bool = False,
         attn_muon_modified: bool = False,
+        attn_checkpoint_muon_norm: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -744,6 +751,7 @@ class TransformerBlock(nn.Module):
             num_key_value_heads=num_key_value_heads,
             causal=causal,
             muon_modified=attn_muon_modified,
+            checkpoint_muon_norm=attn_checkpoint_muon_norm,
             norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )

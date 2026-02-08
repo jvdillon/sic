@@ -7,11 +7,11 @@ import functools
 
 from experiment import main
 from maze.x000 import Experiment as Experiment000
-from model import TRM3, TransformerBlock, trunc_normal_init_
+from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
 
 
 class Experiment(Experiment000):
-    config = dataclasses.replace(
+    config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment000.config),
         block_fn=functools.partial(
             TransformerBlock,
@@ -20,6 +20,7 @@ class Experiment(Experiment000):
             mlp_init_weight_fn=trunc_normal_init_,
             attn_init_weight_fn=trunc_normal_init_,
             attn_muon_modified=True,
+            attn_checkpoint_muon_norm=True,
         ),
     )
 
