@@ -1,0 +1,28 @@
+"""x000f: x000 with attn_muon_modified=True."""
+
+from typing import cast
+
+import dataclasses
+import functools
+
+from experiment import main
+from maze.x000 import Experiment as Experiment000
+from model import TRM3, TransformerBlock, trunc_normal_init_
+
+
+class Experiment(Experiment000):
+    config = dataclasses.replace(
+        cast(TRM3.Config, Experiment000.config),
+        block_fn=functools.partial(
+            TransformerBlock,
+            multiple_of=128,
+            num_heads=8,
+            mlp_init_weight_fn=trunc_normal_init_,
+            attn_init_weight_fn=trunc_normal_init_,
+            attn_muon_modified=True,
+        ),
+    )
+
+
+if __name__ == "__main__":
+    main(Experiment())

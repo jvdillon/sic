@@ -343,6 +343,14 @@ class Linear(nn.Module):
         return nn.functional.linear(x, w, b)
 
 
+default_norm_fn = functools.partial(
+    nn.RMSNorm,
+    eps=1e-5,
+    elementwise_affine=False,
+)
+default_act_fn = nn.functional.silu
+
+
 class EnsembleLinear(nn.Module):
     """Linear with ensemble dim for per-head Muon orthogonalization.
 
@@ -438,6 +446,8 @@ class Attention(nn.Module):
         num_heads: int,
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        muon_modified: bool = False,
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         assert num_heads > 0
@@ -464,6 +474,7 @@ class Attention(nn.Module):
             bias=False,
             init_weight_fn=init_weight_fn,
         )
+        self.o_norm = norm_fn(c_in) if muon_modified else None
 
     def forward(
         self,
@@ -486,6 +497,8 @@ class Attention(nn.Module):
         q, k, v = (t.transpose(-2, -3) for t in (q, k, v))  # S H D -> H S D
         out = nn.functional.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
         out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
+        if self.o_norm is not None:
+            out = self.o_norm(out)
         return self.o_proj(out)
 
 
@@ -499,6 +512,8 @@ class AttentionSplitQKV(nn.Module):
         num_heads: int,
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        muon_modified: bool = False,
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -530,6 +545,7 @@ class AttentionSplitQKV(nn.Module):
             bias=False,
             init_weight_fn=init_weight_fn,
         )
+        self.o_norm = norm_fn(c_in) if muon_modified else None
 
     def forward(
         self,
@@ -549,6 +565,8 @@ class AttentionSplitQKV(nn.Module):
         q, k, v = (t.transpose(-2, -3) for t in (q, k, v))  # S H D -> H S D
         out = nn.functional.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
         out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
+        if self.o_norm is not None:
+            out = self.o_norm(out)
         return self.o_proj(out)
 
 
@@ -562,6 +580,8 @@ class AttentionWithEntropy(nn.Module):
         num_heads: int,
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        muon_modified: bool = False,
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -586,6 +606,7 @@ class AttentionWithEntropy(nn.Module):
             bias=False,
             init_weight_fn=init_weight_fn,
         )
+        self.o_norm = norm_fn(c_in) if muon_modified else None
 
     def forward(
         self,
@@ -622,15 +643,9 @@ class AttentionWithEntropy(nn.Module):
 
         out = torch.matmul(attn, v)
         out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
+        if self.o_norm is not None:
+            out = self.o_norm(out)
         return self.o_proj(out), entropy
-
-
-default_norm_fn = functools.partial(
-    nn.RMSNorm,
-    eps=1e-5,
-    elementwise_affine=False,
-)
-default_act_fn = nn.functional.silu
 
 
 class SwiGLU(nn.Module):
@@ -712,13 +727,14 @@ class TransformerBlock(nn.Module):
         expansion: float = 4.0,
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
         gate: bool = True,
+        mlp_muon_modified: bool = True,
         mlp_init_weight_fn: InitFn = normal_init_,
         # Attention specific kwargs.
         num_heads: int = 0,  # Required >0.
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        attn_muon_modified: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -727,6 +743,8 @@ class TransformerBlock(nn.Module):
             num_heads=num_heads,
             num_key_value_heads=num_key_value_heads,
             causal=causal,
+            muon_modified=attn_muon_modified,
+            norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -736,7 +754,7 @@ class TransformerBlock(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            muon_modified=muon_modified,
+            muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
         self.norm1 = norm_fn(c_in)
@@ -767,13 +785,14 @@ class TransformerBlockScaled(nn.Module):
         expansion: float = 4.0,
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
+        mlp_muon_modified: bool = True,
         gate: bool = True,
         mlp_init_weight_fn: InitFn = normal_init_,
         # Attn
         num_heads: int = 0,  # Required >0.
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        attn_muon_modified: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -782,6 +801,8 @@ class TransformerBlockScaled(nn.Module):
             num_heads=num_heads,
             num_key_value_heads=num_key_value_heads,
             causal=causal,
+            muon_modified=attn_muon_modified,
+            norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -791,7 +812,7 @@ class TransformerBlockScaled(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            muon_modified=muon_modified,
+            muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
         self.norm1 = norm_fn(c_in)
@@ -823,7 +844,7 @@ class TransformerBlockSeqNorm(nn.Module):
         expansion: float = 4.0,
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
+        mlp_muon_modified: bool = True,
         gate: bool = True,
         mlp_init_weight_fn: InitFn = normal_init_,
         # Attn
@@ -831,6 +852,7 @@ class TransformerBlockSeqNorm(nn.Module):
         num_key_value_heads: int | None = None,
         causal: bool = False,
         seq_len: int = 82,
+        attn_muon_modified: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -839,6 +861,8 @@ class TransformerBlockSeqNorm(nn.Module):
             num_heads=num_heads,
             num_key_value_heads=num_key_value_heads,
             causal=causal,
+            muon_modified=attn_muon_modified,
+            norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -848,7 +872,7 @@ class TransformerBlockSeqNorm(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            muon_modified=muon_modified,
+            muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
         self.norm1 = norm_fn(seq_len)  # seq_len norm like MLPMixer
@@ -878,13 +902,14 @@ class TransformerBlockPreNorm(nn.Module):
         expansion: float = 4.0,
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
+        mlp_muon_modified: bool = True,
         gate: bool = True,
         mlp_init_weight_fn: InitFn = normal_init_,
         # Attn
         num_heads: int = 0,  # Required >0.
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        attn_muon_modified: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         assert num_heads > 0
@@ -894,6 +919,8 @@ class TransformerBlockPreNorm(nn.Module):
             num_heads=num_heads,
             num_key_value_heads=num_key_value_heads,
             causal=causal,
+            muon_modified=attn_muon_modified,
+            norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -903,7 +930,7 @@ class TransformerBlockPreNorm(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            muon_modified=muon_modified,
+            muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
         self.norm1 = norm_fn(c_in)
@@ -931,13 +958,14 @@ class TransformerBlockSplitQKV(nn.Module):
         expansion: float = 4.0,
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
+        mlp_muon_modified: bool = True,
         gate: bool = True,
         mlp_init_weight_fn: InitFn = normal_init_,
         # Attn
         num_heads: int = 0,  # Required >0.
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        attn_muon_modified: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         assert num_heads > 0
@@ -947,6 +975,8 @@ class TransformerBlockSplitQKV(nn.Module):
             num_heads=num_heads,
             num_key_value_heads=num_key_value_heads,
             causal=causal,
+            muon_modified=attn_muon_modified,
+            norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -956,7 +986,7 @@ class TransformerBlockSplitQKV(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            muon_modified=muon_modified,
+            muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
         self.norm1 = norm_fn(c_in)
@@ -986,13 +1016,14 @@ class TransformerBlockWithEntropy(nn.Module):
         expansion: float = 4.0,
         multiple_of: int = 256,
         act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
+        mlp_muon_modified: bool = True,
         gate: bool = True,
         mlp_init_weight_fn: InitFn = normal_init_,
         # Attn
         num_heads: int = 0,  # Required >0.
         num_key_value_heads: int | None = None,
         causal: bool = False,
+        attn_muon_modified: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         assert num_heads > 0
@@ -1002,6 +1033,8 @@ class TransformerBlockWithEntropy(nn.Module):
             num_heads=num_heads,
             num_key_value_heads=num_key_value_heads,
             causal=causal,
+            muon_modified=attn_muon_modified,
+            norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
         self.mlp = SwiGLU(
@@ -1011,7 +1044,7 @@ class TransformerBlockWithEntropy(nn.Module):
             norm_fn=norm_fn,
             act_fn=act_fn,
             gate=gate,
-            muon_modified=muon_modified,
+            muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
         self.norm1 = norm_fn(c_in)
