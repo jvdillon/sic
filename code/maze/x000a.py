@@ -8,7 +8,7 @@ class Experiment(Experiment000):
     def setup_optimizers(self) -> None:
         self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
             self.model,
-            muon_lr=0.020,
+            muon_lr=0.010,
         )
 
 

@@ -232,7 +232,7 @@ def normal_init_(tensor: Tensor, std: float | None = None) -> Tensor:
 def trunc_normal_init_(
     tensor: Tensor,
     *,
-    std: float | None = None,
+    std: float | None = None,  # Aka LeCun init.
     lower: float = -2.0,
     upper: float = 2.0,
 ) -> Tensor:

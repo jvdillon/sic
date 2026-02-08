@@ -155,6 +155,10 @@ class ExperimentBase:
     # Gradient accumulation
     grad_accum_steps: int = 1
 
+    # Learning rate schedule
+    lr_warmup_steps: int = 0
+    lr_min_ratio: float = 0.0  # 1.0 = no decay, 0.0 = decay to zero
+
     # Reset-retry at inference (#22)
     enable_reset_retry: bool = False
     reset_threshold: float = 0.0  # q_halt < this triggers reset
@@ -205,6 +209,14 @@ class ExperimentBase:
         self.act_steps_history: list[float] = []
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
         self.act_carry: dict[str, Tensor] | None = None
+
+    def _lr_scale(self) -> float:
+        return lr_scale(
+            self.current_step,
+            self.total_train_steps,
+            self.lr_warmup_steps,
+            self.lr_min_ratio,
+        )
 
     def _register_k_heads(self) -> None:
         """Register K-1 additional L_init parameters for WTA."""
@@ -856,11 +868,10 @@ class ExperimentBase:
         self._grad_accum_counter = 0
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-        r = self.current_step / self.total_train_steps
-        lr_scale = 0.5 * (1 + math.cos(math.pi * r))
+        lr_scale_ = self._lr_scale()
         for opt in [self.optimizer1, self.optimizer2]:
             for group in opt.param_groups:
-                group["lr"] = group["initial_lr"] * lr_scale
+                group["lr"] = group["initial_lr"] * lr_scale_
 
         self.optimizer1.step()
         self.optimizer2.step()
@@ -1791,3 +1802,17 @@ def setup_muon_optimizers(
             group["initial_lr"] = group["lr"]
 
     return opt1, opt2
+
+
+def lr_scale(
+    step: int,
+    total_steps: int,
+    warmup_steps: int = 0,
+    min_ratio: float = 0.0,
+) -> float:
+    """Compute LR scale factor with warmup and cosine decay."""
+    if step < warmup_steps:
+        return step / max(1, warmup_steps)
+    progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+    cosine = 0.5 * (1 + math.cos(math.pi * progress))
+    return min_ratio + (1 - min_ratio) * cosine

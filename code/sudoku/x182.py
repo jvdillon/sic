@@ -11,6 +11,7 @@ import math
 from experiment import (
     HALT_TOKEN_ID,
     ExperimentBase,
+    lr_scale,
     main,
     setup_muon_optimizers,
 )
@@ -91,6 +92,10 @@ class Experiment:
     # Sparse pooling config
     expunge_threshold: float = 0.95  # z_L cosine sim threshold for expunge
     min_expunge_step: int = 0  # Don't expunge before this H step
+
+    # Learning rate schedule
+    lr_warmup_steps: int = 0
+    lr_min_ratio: float = 0.0  # 1.0 = no decay, 0.0 = decay to zero
 
     cast_model_to_dtype: bool = True
     max_pending_samples: int = 1000
@@ -580,6 +585,14 @@ class Experiment:
             z_L=z_L,
         )
 
+    def _lr_scale(self) -> float:
+        return lr_scale(
+            self.current_step,
+            self.total_train_steps,
+            self.lr_warmup_steps,
+            self.lr_min_ratio,
+        )
+
     def _update_weights(self) -> None:
         self._grad_accum_counter += 1
         if self._grad_accum_counter < self.grad_accum_steps:
@@ -591,12 +604,10 @@ class Experiment:
             max_norm=1.0,
         )
 
-        lr_scale = 0.5 * (
-            1 + math.cos(math.pi * self.current_step / self.total_train_steps)
-        )
+        lr_scale_ = self._lr_scale()
         for optimizer in [self.optimizer1, self.optimizer2]:
             for param_group in optimizer.param_groups:  # pyright: ignore[reportOptionalMemberAccess]
-                param_group["lr"] = param_group["initial_lr"] * lr_scale
+                param_group["lr"] = param_group["initial_lr"] * lr_scale_
 
         self.optimizer1.step()  # pyright: ignore[reportOptionalMemberAccess]
         self.optimizer2.step()  # pyright: ignore[reportOptionalMemberAccess]
