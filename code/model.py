@@ -262,7 +262,7 @@ def trunc_normal_init_(
         return tensor
 
 
-def _kaiming_uniform_init_(
+def kaiming_uniform_init_(
     tensor: Tensor,
     *,
     c_in: int | None = None,
@@ -270,7 +270,7 @@ def _kaiming_uniform_init_(
 ) -> Tensor:
     if bound is None:
         if c_in is None:
-            raise ValueError("_kaiming_uniform_init_ requires bound or c_in")
+            raise ValueError("kaiming_uniform_init_ requires bound or c_in")
         bound = c_in**-0.5
     assert bound is not None
     nn.init.uniform_(tensor, -bound, bound)
@@ -311,7 +311,7 @@ class Linear(nn.Module):
         *,
         bias: bool = True,
         init_weight_fn: InitFn = normal_init_,
-        init_bias_fn: InitFn = _kaiming_uniform_init_,
+        init_bias_fn: InitFn = kaiming_uniform_init_,
         dtype: torch.dtype | None = None,
     ):
         super().__init__()
@@ -325,8 +325,8 @@ class Linear(nn.Module):
         )
         if bias:
             # TODO(josh): Consider adding to this "if": "or has kwarg 'c_in'".
-            if init_bias_fn is _kaiming_uniform_init_:
-                init_bias_fn = functools.partial(_kaiming_uniform_init_, c_in=c_in)
+            if init_bias_fn is kaiming_uniform_init_:
+                init_bias_fn = functools.partial(kaiming_uniform_init_, c_in=c_in)
             self.bias = nn.Parameter(
                 init_bias_fn(
                     torch.empty(
@@ -437,6 +437,62 @@ class RotaryEmbedding(nn.Module):
         return self.cos_cached, self.sin_cached
 
 
+class RotaryEmbedding2D(nn.Module):
+    """2D RoPE for grid-structured data (e.g., 30x30 maze).
+
+    Splits head_dim in half: first half encodes row, second half encodes column.
+    For position i in flattened sequence: row = i // W, col = i % W.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        grid_shape: tuple[int, int],
+        num_prefix_tokens: int,
+        base: float,
+    ):
+        super().__init__()
+        H, W = grid_shape
+        half_dim = dim // 2
+
+        # Row frequencies (first half of head_dim)
+        inv_freq_row = 1.0 / (
+            base ** (torch.arange(0, half_dim, 2, dtype=torch.float32) / half_dim)
+        )
+        # Column frequencies (second half of head_dim)
+        inv_freq_col = 1.0 / (
+            base ** (torch.arange(0, half_dim, 2, dtype=torch.float32) / half_dim)
+        )
+
+        # Build position encodings for full sequence: prefix + HALT + grid
+        total_len = num_prefix_tokens + 1 + H * W
+        row_pos = torch.zeros(total_len, dtype=torch.float32)
+        col_pos = torch.zeros(total_len, dtype=torch.float32)
+
+        # Prefix tokens get position 0 (or could use special encoding)
+        # HALT token also gets position 0
+        # Grid tokens get their 2D positions
+        grid_start = num_prefix_tokens + 1
+        for i in range(H * W):
+            row_pos[grid_start + i] = i // W
+            col_pos[grid_start + i] = i % W
+
+        # Compute frequencies
+        freqs_row = torch.outer(row_pos, inv_freq_row)  # [total_len, half_dim/2]
+        freqs_col = torch.outer(col_pos, inv_freq_col)  # [total_len, half_dim/2]
+
+        # Concatenate: [row_freqs, row_freqs, col_freqs, col_freqs] to match dim
+        emb = torch.cat(
+            [freqs_row, freqs_row, freqs_col, freqs_col], dim=-1
+        )  # [total_len, dim]
+
+        self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
+        self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
+
+    def forward(self) -> tuple[Tensor, Tensor]:
+        return self.cos_cached, self.sin_cached
+
+
 class Attention(nn.Module):
     """Multi-head attention with fused QKV EnsembleLinear for Muon orthogonalization."""
 
@@ -506,152 +562,6 @@ class Attention(nn.Module):
             else:
                 out = self.o_norm(out)
         return self.o_proj(out)
-
-
-class AttentionSplitQKV(nn.Module):
-    """Attention with separate QK and V projections for independent weight decay."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        num_heads: int,
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        muon_modified: bool = False,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        super().__init__()
-        if num_key_value_heads is None:
-            num_key_value_heads = num_heads
-        self.head_dim = c_in // num_heads
-        self.num_heads = num_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.causal = causal
-
-        # Separate QK from V for different weight decay
-        self.qk_proj = EnsembleLinear(
-            c_in,
-            self.head_dim,
-            num_ensemble=num_heads + num_key_value_heads,
-            bias=False,
-            init_weight_fn=init_weight_fn,
-        )
-        self.v_proj = EnsembleLinear(
-            c_in,
-            self.head_dim,
-            num_ensemble=num_key_value_heads,
-            bias=False,
-            init_weight_fn=init_weight_fn,
-        )
-        self.o_proj = Linear(
-            c_in,
-            c_in,
-            bias=False,
-            init_weight_fn=init_weight_fn,
-        )
-        self.o_norm = norm_fn(c_in) if muon_modified else None
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> Tensor:
-        q, k = self.qk_proj(x).split(
-            [self.num_heads, self.num_key_value_heads],
-            dim=-2,
-        )
-        v = self.v_proj(x)
-
-        if cos_sin is not None:
-            cos, sin = cos_sin
-            q, k = _apply_rotary_pos_emb(q, k, cos, sin)
-
-        q, k, v = (t.transpose(-2, -3) for t in (q, k, v))  # S H D -> H S D
-        out = nn.functional.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
-        out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
-        if self.o_norm is not None:
-            out = self.o_norm(out)
-        return self.o_proj(out)
-
-
-class AttentionWithEntropy(nn.Module):
-    """Attention that computes entropy of attention weights for regularization."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        num_heads: int,
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        muon_modified: bool = False,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        super().__init__()
-        if num_key_value_heads is None:
-            num_key_value_heads = num_heads
-        self.head_dim = c_in // num_heads
-        self.num_heads = num_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.causal = causal
-        self.scale = self.head_dim**-0.5
-
-        self.qkv_proj = EnsembleLinear(
-            c_in,
-            self.head_dim,
-            num_ensemble=num_heads + 2 * num_key_value_heads,
-            bias=False,
-            init_weight_fn=init_weight_fn,
-        )
-        self.o_proj = Linear(
-            c_in,
-            c_in,
-            bias=False,
-            init_weight_fn=init_weight_fn,
-        )
-        self.o_norm = norm_fn(c_in) if muon_modified else None
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        q, k, v = self.qkv_proj(x).split(
-            [
-                self.num_heads,
-                self.num_key_value_heads,
-                self.num_key_value_heads,
-            ],
-            dim=-2,
-        )
-
-        if cos_sin is not None:
-            cos, sin = cos_sin
-            q, k = _apply_rotary_pos_emb(q, k, cos, sin)
-
-        q, k, v = (t.transpose(-2, -3) for t in (q, k, v))  # S H D -> H S D
-
-        # Manual attention to get entropy
-        logits = torch.matmul(q, k.transpose(-2, -1)) * self.scale
-        if self.causal:
-            S = logits.shape[-1]
-            mask = torch.triu(torch.ones(S, S, device=logits.device), diagonal=1).bool()
-            logits = logits.masked_fill(mask, float("-inf"))
-
-        attn = logits.softmax(dim=-1)
-        log_attn = logits - logits.logsumexp(dim=-1, keepdim=True)
-
-        # Entropy: -sum(p * log(p)) per query position, averaged over batch/heads/positions
-        entropy = -(attn * log_attn).sum(dim=-1).mean()
-
-        out = torch.matmul(attn, v)
-        out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
-        if self.o_norm is not None:
-            out = self.o_norm(out)
-        return self.o_proj(out), entropy
 
 
 class SwiGLU(nn.Module):
@@ -729,6 +639,7 @@ class TransformerBlock(nn.Module):
         c_in: int,
         *,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
+        prenorm: bool = False,
         # MLP.
         expansion: float = 4.0,
         multiple_of: int = 256,
@@ -765,6 +676,7 @@ class TransformerBlock(nn.Module):
             muon_modified=mlp_muon_modified,
             init_weight_fn=mlp_init_weight_fn,
         )
+        self.prenorm = prenorm
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
 
@@ -773,302 +685,17 @@ class TransformerBlock(nn.Module):
         x: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None = None,
     ) -> Tensor:
-        x = x + self.attn(x, cos_sin=cos_sin)
-        x = self.norm1(x)
-        x = x + self.mlp(x)
-        x = self.norm2(x)
+        if self.prenorm:
+            z = self.norm1(x)
+            x = x + self.attn(z, cos_sin=cos_sin)
+            z = self.norm2(x)
+            x = x + self.mlp(z)
+        else:
+            x = x + self.attn(x, cos_sin=cos_sin)
+            x = self.norm1(x)
+            x = x + self.mlp(x)
+            x = self.norm2(x)
         return x
-
-
-class TransformerBlockScaled(nn.Module):
-    """Transformer block with scaled post-norm to prevent L-cycle contraction."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        norm_scale: float = 3.0,
-        # MLP
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        mlp_muon_modified: bool = True,
-        gate: bool = True,
-        mlp_init_weight_fn: InitFn = normal_init_,
-        # Attn
-        num_heads: int = 0,  # Required >0.
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        attn_muon_modified: bool = False,
-        attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        super().__init__()
-        self.attn = Attention(
-            c_in,
-            num_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-            causal=causal,
-            muon_modified=attn_muon_modified,
-            norm_fn=norm_fn,
-            init_weight_fn=attn_init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=mlp_muon_modified,
-            init_weight_fn=mlp_init_weight_fn,
-        )
-        self.norm1 = norm_fn(c_in)
-        self.norm2 = norm_fn(c_in)
-        self.scale1 = nn.Parameter(torch.tensor(norm_scale))
-        self.scale2 = nn.Parameter(torch.tensor(norm_scale))
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> Tensor:
-        x = x + self.attn(x, cos_sin=cos_sin)
-        x = self.norm1(x) * self.scale1
-        x = x + self.mlp(x)
-        x = self.norm2(x) * self.scale2
-        return x
-
-
-class TransformerBlockSeqNorm(nn.Module):
-    """Transformer block with seq_len norm (like MLPMixer) to prevent L-cycle contraction."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        # MLP
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        mlp_muon_modified: bool = True,
-        gate: bool = True,
-        mlp_init_weight_fn: InitFn = normal_init_,
-        # Attn
-        num_heads: int = 0,  # Required >0.
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        seq_len: int = 82,
-        attn_muon_modified: bool = False,
-        attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        super().__init__()
-        self.attn = Attention(
-            c_in,
-            num_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-            causal=causal,
-            muon_modified=attn_muon_modified,
-            norm_fn=norm_fn,
-            init_weight_fn=attn_init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=mlp_muon_modified,
-            init_weight_fn=mlp_init_weight_fn,
-        )
-        self.norm1 = norm_fn(seq_len)  # seq_len norm like MLPMixer
-        self.norm2 = norm_fn(c_in)
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> Tensor:
-        x = x + self.attn(x, cos_sin=cos_sin)
-        x = self.norm1(x.transpose(-2, -1)).transpose(-2, -1)  # norm on S dim
-        x = x + self.mlp(x)
-        x = self.norm2(x)
-        return x
-
-
-class TransformerBlockPreNorm(nn.Module):
-    """Transformer block with pre-norm (norm before attention/MLP, not after)."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        # MLP
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        mlp_muon_modified: bool = True,
-        gate: bool = True,
-        mlp_init_weight_fn: InitFn = normal_init_,
-        # Attn
-        num_heads: int = 0,  # Required >0.
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        attn_muon_modified: bool = False,
-        attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        assert num_heads > 0
-        super().__init__()
-        self.attn = Attention(
-            c_in,
-            num_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-            causal=causal,
-            muon_modified=attn_muon_modified,
-            norm_fn=norm_fn,
-            init_weight_fn=attn_init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=mlp_muon_modified,
-            init_weight_fn=mlp_init_weight_fn,
-        )
-        self.norm1 = norm_fn(c_in)
-        self.norm2 = norm_fn(c_in)
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> Tensor:
-        x = x + self.attn(self.norm1(x), cos_sin=cos_sin)
-        x = x + self.mlp(self.norm2(x))
-        return x
-
-
-class TransformerBlockSplitQKV(nn.Module):
-    """Transformer block with split QK/V projections for selective weight decay."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        # MLP
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        mlp_muon_modified: bool = True,
-        gate: bool = True,
-        mlp_init_weight_fn: InitFn = normal_init_,
-        # Attn
-        num_heads: int = 0,  # Required >0.
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        attn_muon_modified: bool = False,
-        attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        assert num_heads > 0
-        super().__init__()
-        self.attn = AttentionSplitQKV(
-            c_in,
-            num_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-            causal=causal,
-            muon_modified=attn_muon_modified,
-            norm_fn=norm_fn,
-            init_weight_fn=attn_init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=mlp_muon_modified,
-            init_weight_fn=mlp_init_weight_fn,
-        )
-        self.norm1 = norm_fn(c_in)
-        self.norm2 = norm_fn(c_in)
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> Tensor:
-        x = x + self.attn(x, cos_sin=cos_sin)
-        x = self.norm1(x)
-        x = x + self.mlp(x)
-        x = self.norm2(x)
-        return x
-
-
-class TransformerBlockWithEntropy(nn.Module):
-    """Transformer block that returns attention entropy for regularization."""
-
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        # MLP
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        mlp_muon_modified: bool = True,
-        gate: bool = True,
-        mlp_init_weight_fn: InitFn = normal_init_,
-        # Attn
-        num_heads: int = 0,  # Required >0.
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        attn_muon_modified: bool = False,
-        attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
-        assert num_heads > 0
-        super().__init__()
-        self.attn = AttentionWithEntropy(
-            c_in,
-            num_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-            causal=causal,
-            muon_modified=attn_muon_modified,
-            norm_fn=norm_fn,
-            init_weight_fn=attn_init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=mlp_muon_modified,
-            init_weight_fn=mlp_init_weight_fn,
-        )
-        self.norm1 = norm_fn(c_in)
-        self.norm2 = norm_fn(c_in)
-
-    def forward(
-        self,
-        x: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None = None,
-    ) -> Tensor | tuple[Tensor, Tensor]:
-        attn_out, entropy = self.attn(x, cos_sin=cos_sin)
-        x = x + attn_out
-        x = self.norm1(x)
-        x = x + self.mlp(x)
-        x = self.norm2(x)
-        return x, entropy
 
 
 class MLPMixerBlock(nn.Module):
@@ -1078,6 +705,7 @@ class MLPMixerBlock(nn.Module):
         self,
         c_in: int,
         *,
+        prenorm: bool = False,
         expansion: float = 4.0,
         multiple_of: int = 256,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
@@ -1113,6 +741,7 @@ class MLPMixerBlock(nn.Module):
             muon_modified=muon_modified,
             init_weight_fn=init_weight_fn,
         )
+        self.prenorm = prenorm
         self.norm1 = norm_fn(seq_len)
         self.norm2 = norm_fn(c_in)
 
@@ -1123,12 +752,20 @@ class MLPMixerBlock(nn.Module):
     ) -> Tensor:
         if cos_sin is not None:
             raise NotImplementedError("MLPMixerBlock does not support RoPE")
-        x = x.transpose(-2, -1)  # [*B, D, S]
-        x = x + self.attn(x)
-        x = self.norm1(x)  # Specifically doing norm on S.
-        x = x.transpose(-2, -1)  # [*B, S, D]
-        x = x + self.mlp(x)
-        x = self.norm2(x)
+        if self.prenorm:
+            x = x.transpose(-2, -1)  # [*B, D, S]
+            z = self.norm1(x)  # Specifically doing norm on S.
+            x = x + self.attn(z)
+            x = x.transpose(-2, -1)  # [*B, S, D]
+            z = self.norm2(x)
+            x = x + self.mlp(z)
+        else:
+            x = x.transpose(-2, -1)  # [*B, D, S]
+            x = x + self.attn(x)
+            x = self.norm1(x)  # Specifically doing norm on S.
+            x = x.transpose(-2, -1)  # [*B, S, D]
+            x = x + self.mlp(x)
+            x = self.norm2(x)
         return x
 
 
@@ -1159,17 +796,6 @@ class Sequential(nn.Sequential):
         for block in self:
             z = block(z, *args, **kwargs)
         return z
-
-
-class SequentialWithEntropy(nn.Sequential):
-    """Sequential that accumulates entropy from TransformerBlockWithEntropy."""
-
-    def forward(self, z: Tensor, *args: Any, **kwargs: Any) -> tuple[Tensor, Tensor]:
-        total_entropy = torch.tensor(0.0, device=z.device, dtype=z.dtype)
-        for block in self:
-            z, entropy = block(z, *args, **kwargs)
-            total_entropy = total_entropy + entropy
-        return z, total_entropy
 
 
 class EMA:
@@ -1589,6 +1215,7 @@ class TRM3(nn.Module):
         # RoPE (Rotary Position Embedding) - use for attention blocks
         use_rope: bool = False
         rope_theta: float = 10000.0
+        rope_2d_grid_shape: tuple[int, int] | None = None  # If set, use 2D RoPE
         num_heads: int = 8  # Only used for RoPE dim calculation
 
         # Prefix tokens (TRM-style): prepend tokens before [HALT, puzzle_grid...]
@@ -1735,11 +1362,22 @@ class TRM3(nn.Module):
 
         # RoPE (only for attention blocks)
         if config.use_rope:
-            self.rope: RotaryEmbedding | None = RotaryEmbedding(
-                dim=config.hidden_size // config.num_heads,
-                max_position_embeddings=config.total_seq_len,
-                base=config.rope_theta,
-            )
+            if config.rope_2d_grid_shape is not None:
+                self.rope: RotaryEmbedding | RotaryEmbedding2D | None = (
+                    RotaryEmbedding2D(
+                        dim=config.hidden_size // config.num_heads,
+                        grid_shape=config.rope_2d_grid_shape,
+                        num_prefix_tokens=config.num_puzzle_id_tokens
+                        + config.num_register_tokens,
+                        base=config.rope_theta,
+                    )
+                )
+            else:
+                self.rope = RotaryEmbedding(
+                    dim=config.hidden_size // config.num_heads,
+                    max_position_embeddings=config.total_seq_len,
+                    base=config.rope_theta,
+                )
         else:
             self.rope = None
 
