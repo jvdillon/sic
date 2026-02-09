@@ -5,6 +5,14 @@ from typing import Any, Literal
 import math
 import warnings
 
+from util import enable_determinism
+
+
+enable_determinism()
+warnings.filterwarnings("ignore", message=".*TF32.*")
+# To get bit-for-bit you may need to: rm -rf /tmp/torchinductor_jvdillon/
+
+
 from experiment import (
     HALT_TOKEN_ID,
     ExperimentBase,
@@ -22,12 +30,6 @@ from util import set_seed
 import torch
 
 from data import PuzzleDataset, augment_sudoku
-
-
-warnings.filterwarnings("ignore", message=".*TF32.*")
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-# To get bit-for-bit you may need to: rm -rf /tmp/torchinductor_jvdillon/
 
 
 class Experiment:

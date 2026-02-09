@@ -43,13 +43,20 @@ def set_seed(seed: int, deterministic: bool = False) -> None:
         for i in range(torch.cuda.device_count()):
             torch.cuda.manual_seed(salt("cuda", i, seed))
     if deterministic:
-        # torch.use_deterministic_algorithms(True)  # Issues.
-        # Force cuDNN to use deterministic convolution algorithms.
-        torch.backends.cudnn.deterministic = True
-        # Disable benchmark mode, which can select different algorithms at runtime
-        torch.backends.cudnn.benchmark = False
-    # Set a fixed hash seed for Python
-    # os.environ['PYTHONHASHSEED'] = str(seed)
+        enable_determinism()
+
+
+def enable_determinism() -> None:
+    """Enable all determinism settings for reproducible results.
+
+    Call once at program start, before any CUDA operations.
+    """
+    # cuDNN deterministic convolutions
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    # SDPA: disable non-deterministic Flash and MemEfficient backends
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
 
 
 class Tee:
