@@ -6,9 +6,12 @@ TRM maze config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
 
 import functools
 
-from experiment import main, setup_muon_optimizers
+from experiment import (
+    Experiment as Experiment182,
+    main,
+    setup_muon_optimizers,
+)
 from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
-from sudoku.x182 import Experiment as Experiment182
 
 from data import get_puzzle_config
 
