@@ -97,7 +97,7 @@ class PuzzleConfig:
 
 _PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
     "sudoku": PuzzleConfig(grid_shape=(9, 9), vocab_size=12, mask_token=10),
-    "maze": PuzzleConfig(grid_shape=(30, 30), vocab_size=12),
+    "maze": PuzzleConfig(grid_shape=(30, 30), vocab_size=6),  # values 1-5 + padding 0
     "arc": PuzzleConfig(grid_shape=(900,), vocab_size=12),
 }
 
