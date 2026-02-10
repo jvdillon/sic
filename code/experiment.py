@@ -2915,18 +2915,25 @@ def train(experiment: ExperimentBase):
         eval_time = time.perf_counter() - eval_start
         epoch_elapsed = eval_start - epoch_start
         train_loss = ""
+        extra_stats = ""
+        main_keys = {"lm", "n_halted"}
         if epoch_losses:
             first = epoch_losses[0]
             if isinstance(first, dict):
                 keys = list(first.keys())
-                parts = []
+                main_parts = []
+                extra_parts = []
                 dicts = [d for d in epoch_losses if isinstance(d, dict)]
                 for k in keys:
                     vals = torch.stack([d[k] for d in dicts])
-                    parts.append(
-                        f"{k}={vals.mean():.4f}±{vals.std():.4f}ϵ[{vals.min():.4f},{vals.max():.4f}]",
-                    )
-                train_loss = "  Train " + " ".join(parts)
+                    stat = f"{k}={vals.mean():.4f}±{vals.std():.4f}ϵ[{vals.min():.4f},{vals.max():.4f}]"
+                    if k in main_keys:
+                        main_parts.append(stat)
+                    else:
+                        extra_parts.append(stat)
+                train_loss = "  Train " + " ".join(main_parts)
+                if extra_parts:
+                    extra_stats = "\n  " + " ".join(extra_parts)
             else:
                 tensors = [t for t in epoch_losses if isinstance(t, Tensor)]
                 losses = torch.stack(tensors)
@@ -2937,7 +2944,7 @@ def train(experiment: ExperimentBase):
         acc_str = f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%{train_loss}"
         timing = f"  ({eval_time:5.3f}s / {epoch_elapsed:6.3f}s)"
 
-        print(f"{step}{acc_str}{timing}", flush=True)
+        print(f"{step}{acc_str}{timing}{extra_stats}", flush=True)
         return eval_start
 
     while True:
