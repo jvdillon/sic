@@ -23,7 +23,7 @@ from model import (
     TRM1Protocol,
     TRM3ConfigProtocol,
 )
-from optimizer import DummyOptimizer, Muon
+from optimizer import DummyOptimizer, Muon, lr_scale
 from torch import Tensor, nn
 from torch.optim import AdamW
 from util import Tee, numpy_rng, set_seed
@@ -3169,17 +3169,3 @@ def setup_muon_optimizers(
             group["initial_lr"] = group["lr"]
 
     return opt1, opt2
-
-
-def lr_scale(
-    step: int,
-    total_steps: int,
-    warmup_steps: int = 0,
-    min_ratio: float = 0.0,
-) -> float:
-    """Compute LR scale factor with warmup and cosine decay."""
-    if step < warmup_steps:
-        return step / max(1, warmup_steps)
-    progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-    cosine = 0.5 * (1 + math.cos(math.pi * progress))
-    return min_ratio + (1 - min_ratio) * cosine

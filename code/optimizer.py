@@ -271,3 +271,17 @@ class DummyOptimizer:
 
     def load_state_dict(self, _state_dict: dict[str, Any]) -> None:
         pass
+
+
+def lr_scale(
+    step: int,
+    total_steps: int,
+    warmup_steps: int = 0,
+    min_ratio: float = 0.0,
+) -> float:
+    """Compute LR scale factor with warmup and cosine decay."""
+    if step < warmup_steps:
+        return step / max(1, warmup_steps)
+    progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+    cosine = 0.5 * (1 + math.cos(math.pi * progress))
+    return min_ratio + (1 - min_ratio) * cosine
