@@ -434,7 +434,7 @@ class RotaryEmbedding(nn.Module):
         self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
         self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
 
-    def _apply(self, fn: Callable, recurse: bool = True) -> RotaryEmbedding:
+    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> RotaryEmbedding:
         # Preserve float32 cos/sin through .to(dtype=...) calls.
         cos, sin = self.cos_cached.clone(), self.sin_cached.clone()
         super()._apply(fn, recurse=recurse)
@@ -497,7 +497,7 @@ class RotaryEmbedding2D(nn.Module):
         self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
         self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
 
-    def _apply(self, fn: Callable, recurse: bool = True) -> RotaryEmbedding2D:
+    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> RotaryEmbedding2D:
         cos, sin = self.cos_cached.clone(), self.sin_cached.clone()
         super()._apply(fn, recurse=recurse)
         self.cos_cached = cos.to(device=self.cos_cached.device)
