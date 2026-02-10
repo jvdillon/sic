@@ -99,6 +99,7 @@ class TRM3ConfigProtocol(Protocol):
     num_puzzle_id_tokens: int
     num_register_tokens: int
     num_puzzle_ids: int
+    q_halt_seq_index: int
     use_rope: bool
     rope_theta: float
     num_heads: int
@@ -127,7 +128,7 @@ class CarryState(TypedDict):
 class WTAForwardOutput(TypedDict):
     """Output of wta_forward."""
 
-    logits: Tensor  # [B, N, num_puzzle_grid_tokens, V] per-head logits (without HALT)
+    logits: Tensor  # [B, N, num_puzzle_grid_tokens, V] per-head logits
     q_halt: Tensor  # [B, N] per-head halt logits
     losses: Tensor  # [B, N] per-head losses
     winner_idx: Tensor  # [B] index of winning head
@@ -417,7 +418,7 @@ class Embedding(nn.Module):
 
 
 class RotaryEmbedding(nn.Module):
-    """RoPE positional encoding."""
+    """RoPE positional encoding. Buffers always stay float32."""
 
     def __init__(
         self,
@@ -432,6 +433,14 @@ class RotaryEmbedding(nn.Module):
         emb = torch.cat([freqs, freqs], dim=-1)
         self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
         self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
+
+    def _apply(self, fn: Callable, recurse: bool = True) -> RotaryEmbedding:
+        # Preserve float32 cos/sin through .to(dtype=...) calls.
+        cos, sin = self.cos_cached.clone(), self.sin_cached.clone()
+        super()._apply(fn, recurse=recurse)
+        self.cos_cached = cos.to(device=self.cos_cached.device)
+        self.sin_cached = sin.to(device=self.sin_cached.device)
+        return self
 
     def forward(self) -> tuple[Tensor, Tensor]:
         return self.cos_cached, self.sin_cached
@@ -464,15 +473,14 @@ class RotaryEmbedding2D(nn.Module):
             base ** (torch.arange(0, half_dim, 2, dtype=torch.float32) / half_dim)
         )
 
-        # Build position encodings for full sequence: prefix + HALT + grid
-        total_len = num_prefix_tokens + 1 + H * W
+        # Build position encodings for full sequence: prefix + grid
+        total_len = num_prefix_tokens + H * W
         row_pos = torch.zeros(total_len, dtype=torch.float32)
         col_pos = torch.zeros(total_len, dtype=torch.float32)
 
         # Prefix tokens get position 0 (or could use special encoding)
-        # HALT token also gets position 0
         # Grid tokens get their 2D positions
-        grid_start = num_prefix_tokens + 1
+        grid_start = num_prefix_tokens
         for i in range(H * W):
             row_pos[grid_start + i] = i // W
             col_pos[grid_start + i] = i % W
@@ -488,6 +496,13 @@ class RotaryEmbedding2D(nn.Module):
 
         self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
         self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
+
+    def _apply(self, fn: Callable, recurse: bool = True) -> RotaryEmbedding2D:
+        cos, sin = self.cos_cached.clone(), self.sin_cached.clone()
+        super()._apply(fn, recurse=recurse)
+        self.cos_cached = cos.to(device=self.cos_cached.device)
+        self.sin_cached = sin.to(device=self.sin_cached.device)
+        return self
 
     def forward(self) -> tuple[Tensor, Tensor]:
         return self.cos_cached, self.sin_cached
@@ -835,7 +850,7 @@ class TRM(nn.Module):
     @dataclasses.dataclass(slots=True, kw_only=True)
     class Config:
         vocab_size: int = 10 + 1 + 1
-        seq_len: int = 9 * 9 + 1
+        seq_len: int = 9 * 9  # puzzle grid tokens only (no HALT)
         hidden_size: int = 512
         num_heads: int = 8
         num_layers: int = 2
@@ -1114,7 +1129,7 @@ class TRM2(TRM):
     class Config(TRM.Config):
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
-            seq_len=9 * 9 + 1,  # 82
+            seq_len=9 * 9,  # 81 (puzzle grid only, no HALT)
             init_weight_fn=trunc_normal_init_,
         )
         head_init_weight_fn: InitFn = trunc_normal_init_
@@ -1155,7 +1170,7 @@ class TRM3(nn.Module):
         # If you change num_puzzle_grid_tokens, you must also provide a compatible block_fn.
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
-            seq_len=num_puzzle_grid_tokens + 1,  # puzzle_grid + halt
+            seq_len=num_puzzle_grid_tokens + 1,  # grid + 1 register (default)
             init_weight_fn=trunc_normal_init_,
         )
         compile_core: bool = True
@@ -1218,22 +1233,32 @@ class TRM3(nn.Module):
         rope_2d_grid_shape: tuple[int, int] | None = None  # If set, use 2D RoPE
         num_heads: int = 8  # Only used for RoPE dim calculation
 
-        # Prefix tokens (TRM-style): prepend tokens before [HALT, puzzle_grid...]
-        # Sequence order: [puzzle_id_tokens..., register_tokens..., HALT, puzzle_grid...]
+        # Prefix tokens: prepend before puzzle_grid
+        # Sequence order: [puzzle_id_tokens..., register_tokens..., puzzle_grid...]
         # - puzzle_id_tokens: per-puzzle learned tokens (embedding table)
         # - register_tokens: shared learned tokens (puzzle-agnostic)
-        # q_head reads from HALT position (num_puzzle_id_tokens + num_register_tokens)
+        # q_head reads from q_halt_seq_index position in the full sequence
         num_puzzle_id_tokens: int = 0  # Per-puzzle learned tokens
-        num_register_tokens: int = 0  # Shared learned tokens
+        num_register_tokens: int = (
+            1  # Shared learned tokens (replaces old HALT token role)
+        )
+        register_token_init_std: float = 1.0  # 0 = zero-init (TRM reference)
+        register_tokens_learnable: bool = (
+            True  # False = fixed (reference uses zero-pad, not learnable)
+        )
         num_puzzle_ids: int = 0  # Size of puzzle ID embedding table
+        q_halt_seq_index: int = 0  # Sequence position from which q_head reads
+
+        # Whether TRM3.__init__ casts all params/buffers to config.dtype via self.to().
+        # Set False to keep RoPE buffers in float32 (needed for b4b match with reference).
+        cast_model_to_dtype: bool = True
 
         @property
         def total_seq_len(self) -> int:
-            """Total sequence length: puzzle_id + register + HALT + puzzle_grid."""
+            """Total sequence length: puzzle_id + register + puzzle_grid."""
             return (
                 self.num_puzzle_id_tokens
                 + self.num_register_tokens
-                + 1
                 + self.num_puzzle_grid_tokens
             )
 
@@ -1269,7 +1294,7 @@ class TRM3(nn.Module):
             config.device = torch.device(config.device)
 
         # Validate: MLPMixerBlock requires seq_len to match actual sequence length.
-        # With prefix tokens, total_seq_len > num_puzzle_grid_tokens + 1, so the
+        # With prefix tokens, total_seq_len > num_puzzle_grid_tokens, so the
         # default block_fn (MLPMixerBlock with seq_len=num_puzzle_grid_tokens+1)
         # will have mismatched dimensions. User must provide a compatible block_fn.
         if (
@@ -1349,14 +1374,20 @@ class TRM3(nn.Module):
         else:
             self.puzzle_id_embed = None
 
-        # Register tokens: shared learned tokens (puzzle-agnostic)
+        # Register tokens: shared tokens (puzzle-agnostic)
         # Init with std=1/embed_scale so after scaling they have unit variance.
         # Created on CPU; moved to device by self.to() call later (standard nn.Parameter pattern).
         if config.num_register_tokens > 0:
-            self.register_tokens: nn.Parameter | None = nn.Parameter(
-                torch.randn(config.num_register_tokens, config.hidden_size)
-                / self.embed_scale,
+            reg_data = trunc_normal_init_(
+                torch.empty(config.num_register_tokens, config.hidden_size),
+                std=config.register_token_init_std / self.embed_scale,
             )
+            if config.register_tokens_learnable:
+                self.register_tokens: nn.Parameter | nn.Buffer | None = nn.Parameter(
+                    reg_data
+                )
+            else:
+                self.register_tokens = nn.Buffer(reg_data, persistent=True)
         else:
             self.register_tokens = None
 
@@ -1399,7 +1430,10 @@ class TRM3(nn.Module):
 
         # PRNG_EQUIVALENCE: This gets the RNG the same as old way.
         # Must also convert to dtype so SVD alignment uses same precision as x177.
-        self.to(device=config.device, dtype=config.dtype)
+        if config.cast_model_to_dtype:
+            self.to(device=config.device, dtype=config.dtype)
+        else:
+            self.to(device=config.device)
 
         # PRNG_EQUIVALENCE: Expand L_init from [1, hidden] to [K_L, hidden].
         # x177 creates L_init_1..K-1 after .to() using CUDA RNG (torch.empty_like on GPU tensor).
@@ -1542,7 +1576,7 @@ class TRM3(nn.Module):
         """
         cfg = self.config
         B = input_ids.shape[0]
-        num_input_tokens = cfg.num_puzzle_grid_tokens + 1  # puzzle_grid + halt
+        num_input_tokens = cfg.num_puzzle_grid_tokens
         total_seq_len = cfg.total_seq_len
         hidden = cfg.hidden_size
 
@@ -1587,10 +1621,8 @@ class TRM3(nn.Module):
         assert isinstance(z_H_out_raw, Tensor)
         assert isinstance(z_L_out_raw, Tensor)
 
-        # logits_raw is [B*N, num_input_tokens, V] (already sliced for puzzle tokens)
-        logits_all = (
-            logits_raw[..., 1:, :].reshape(B, N, cfg.num_puzzle_grid_tokens, -1).float()
-        )
+        # logits_raw is [B*N, num_puzzle_grid_tokens, V] (already sliced for prefix)
+        logits_all = logits_raw.reshape(B, N, cfg.num_puzzle_grid_tokens, -1).float()
         q_halt_all = q_halt_raw.reshape(B, N).float()
         z_H_out = z_H_out_raw.reshape(B, N, total_seq_len, hidden)
         z_L_out = z_L_out_raw.reshape(B, N, total_seq_len, hidden)
@@ -1646,10 +1678,9 @@ class TRM3(nn.Module):
         """Prepend prefix tokens to input embedding.
 
         Sequence order: [puzzle_id_tokens..., register_tokens..., input_emb]
-        where input_emb already has HALT at position 0.
 
         Args:
-            input_emb: [B, S, C] - input embeddings (includes HALT)
+            input_emb: [B, S, C] - input embeddings (puzzle grid tokens)
             puzzle_ids: [B] - puzzle identifiers (required if num_puzzle_id_tokens > 0)
 
         Returns:
@@ -1708,19 +1739,18 @@ class TRM3(nn.Module):
         """Single H-cycle step.
 
         Shapes: B = batch, C = hidden_size, V = vocab_size.
-        num_input_tokens = num_puzzle_grid_tokens + 1 (HALT + puzzle grid).
         With prefix tokens, z_H/z_L have shape [B, total_seq_len, C].
 
-        Sequence order: [puzzle_id_tokens..., register_tokens..., HALT, input...]
+        Sequence order: [puzzle_id_tokens..., register_tokens..., puzzle_grid...]
 
         Args:
-            input_ids: [B, num_input_tokens] - HALT token followed by puzzle grid
+            input_ids: [B, num_puzzle_grid_tokens] - puzzle grid tokens
             z_H: [B, total_seq_len, C]
             z_L: [B, total_seq_len, C]
             puzzle_ids: [B] optional puzzle identifiers (required if num_puzzle_id_tokens > 0)
 
         Returns:
-            dict: logits [B, num_input_tokens, V], q_halt [B], z_H [B, total_seq_len, C], z_L [B, total_seq_len, C]
+            dict: logits [B, num_puzzle_grid_tokens, V], q_halt [B], z_H [B, total_seq_len, C], z_L [B, total_seq_len, C]
 
         """
         cfg = self.config
@@ -2055,8 +2085,8 @@ class TRM3(nn.Module):
             all_logits = [lg[:, n_prefix:] for lg in all_logits]
 
         return {
-            "logits": logits,  # [B, num_input_tokens, V]
-            "all_logits": all_logits,  # List[[B, num_input_tokens, V]]
+            "logits": logits,  # [B, num_puzzle_grid_tokens, V]
+            "all_logits": all_logits,  # List[[B, num_puzzle_grid_tokens, V]]
             "q_halt": q_halt,  # [B]
             "z_H": z_H.detach(),  # [B, total_seq_len, C]
             "z_L": z_L.detach(),  # [B, total_seq_len, C]
@@ -2151,8 +2181,8 @@ class TRM3(nn.Module):
             all_logits = [lg[:, n_prefix:] for lg in all_logits]
 
         return {
-            "logits": logits,  # [B, num_input_tokens, V]
-            "all_logits": all_logits,  # List[[B, num_input_tokens, V]]
+            "logits": logits,  # [B, num_puzzle_grid_tokens, V]
+            "all_logits": all_logits,  # List[[B, num_puzzle_grid_tokens, V]]
             "q_halt": q_halt,  # [B]
             "z_H": z_H.detach(),  # [B, total_seq_len, C]
             "z_L": z_L.detach(),  # [B, total_seq_len, C]
@@ -2196,7 +2226,7 @@ class TRM3(nn.Module):
 
         Returns:
             logits: [B, S, vocab_size]
-            q_halt: [B] (from z_H at HALT position)
+            q_halt: [B] (from z_H at q_halt_seq_index position)
             z_H: [B, S, C]
             z_L: [B, S, C]
 
@@ -2208,8 +2238,6 @@ class TRM3(nn.Module):
         z_H = self.reasoning(z_H + z_L, cos_sin)
 
         logits = self.head(z_H)
-        # HALT position: after prefix tokens (puzzle_id + register)
-        halt_pos = self.config.num_puzzle_id_tokens + self.config.num_register_tokens
-        q_halt = self.q_head(z_H[:, halt_pos]).squeeze(-1)
+        q_halt = self.q_head(z_H[:, self.config.q_halt_seq_index]).squeeze(-1)
 
         return logits, q_halt, z_H, z_L

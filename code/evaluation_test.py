@@ -3,28 +3,17 @@
 from __future__ import annotations
 
 from evaluation import (
-    HALT_TOKEN_ID,
     cells_fixed_broken,
     evaluate_multistart,
     evaluate_single_start,
     h_cosine_similarities,
     per_h_accuracy,
-    prepend_halt,
     run_act_steps,
     z_h_deltas,
 )
 from model import TRM
 
 import torch
-
-
-def test_prepend_halt():
-    inputs = torch.randint(low=0, high=10, size=(2, 81))
-    device = inputs.device
-    out = prepend_halt(inputs, device)
-    assert out.shape == (2, 82)
-    assert (out[:, 0] == HALT_TOKEN_ID).all()
-    assert torch.equal(out[:, 1:], inputs)
 
 
 def test_run_act_steps():
@@ -42,8 +31,8 @@ def test_run_act_steps():
     device = torch.device("cpu")
     dtype = torch.float32
     inputs = torch.randint(low=0, high=10, size=(2, 81))
-    z_H = model.H_init.expand(2, 82, -1)
-    z_L = model.L_init.expand(2, 82, -1)
+    z_H = model.H_init.expand(2, 81, -1)
+    z_L = model.L_init.expand(2, 81, -1)
 
     with torch.no_grad():
         preds, q_halt, z_H_out = run_act_steps(
@@ -58,7 +47,7 @@ def test_run_act_steps():
 
     assert preds.shape == (2, 81)
     assert q_halt.shape == (2,)
-    assert z_H_out.shape == (2, 82, 64)
+    assert z_H_out.shape == (2, 81, 64)
 
 
 def test_evaluate_single_start():
@@ -135,7 +124,7 @@ def test_h_cosine_similarities():
 
 
 def test_z_h_deltas():
-    z_H = [torch.randn(4, 82, 64) for _ in range(3)]
+    z_H = [torch.randn(4, 81, 64) for _ in range(3)]
     deltas = z_h_deltas(z_H)
     assert len(deltas) == 2
     assert all(d >= 0 for d in deltas)

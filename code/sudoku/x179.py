@@ -13,23 +13,22 @@ warnings.filterwarnings("ignore", message=".*TF32.*")
 # To get bit-for-bit you may need to: rm -rf /tmp/torchinductor_jvdillon/
 
 
-from experiment import (
-    HALT_TOKEN_ID,
+from experiment import (  # noqa: E402
     ExperimentBase,
     main,
     setup_muon_optimizers,
 )
-from model import (
+from model import (  # noqa: E402
     EMA,
     TRM3,
     ModelConfigProtocol,
 )
-from torch import Tensor, nn
-from util import set_seed
+from torch import Tensor, nn  # noqa: E402
+from util import set_seed  # noqa: E402
 
-import torch
+import torch  # noqa: E402
 
-from data import PuzzleDataset, augment_sudoku
+from data import PuzzleDataset, augment_sudoku  # noqa: E402
 
 
 class Experiment:
@@ -187,10 +186,9 @@ class Experiment:
 
         # WTA forward pass (samples heads, computes losses, updates carry)
         assert self.device is not None
-        inputs_with_halt = self._prepend_halt_token(carry["inputs"])
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             out = self.model.wta_forward(  # pyright: ignore[reportCallIssue]
-                inputs_with_halt,
+                carry["inputs"],
                 carry["model_carry"],
                 carry["labels"],
                 label_smoothing=self.label_smoothing,
@@ -361,17 +359,6 @@ class Experiment:
         if self.ema is not None:
             ckpt["ema"] = dict(self.ema.shadow)
         return ckpt
-
-    def _prepend_halt_token(self, inputs: Tensor) -> Tensor:
-        """Prepend HALT token for ACT mode."""
-        B = inputs.shape[0]
-        halt_tokens = torch.full(
-            (B, 1),
-            HALT_TOKEN_ID,
-            device=inputs.device,
-            dtype=inputs.dtype,
-        )
-        return torch.cat([halt_tokens, inputs], dim=1)
 
     # --- Evaluation Functions ---
 

@@ -34,7 +34,7 @@ def test_setup_muon_optimizers():
     config = TRM.Config(
         compile_core=False,
         vocab_size=12,
-        seq_len=82,
+        seq_len=81,
         hidden_size=64,
         num_heads=4,
         num_layers=1,
@@ -58,7 +58,7 @@ def _make_test_exp() -> ExperimentBase:
             config = TRM.Config(
                 compile_core=False,
                 vocab_size=12,
-                seq_len=82,
+                seq_len=81,
                 hidden_size=64,
                 num_heads=4,
                 num_layers=1,
@@ -99,7 +99,7 @@ def _make_test_exp_no_ema() -> ExperimentBase:
             config = TRM.Config(
                 compile_core=False,
                 vocab_size=12,
-                seq_len=82,
+                seq_len=81,
                 hidden_size=64,
                 num_heads=4,
                 num_layers=1,
@@ -203,7 +203,7 @@ def test_reset_steps_class_attr():
             config = TRM.Config(
                 compile_core=False,
                 vocab_size=12,
-                seq_len=82,
+                seq_len=81,
                 hidden_size=64,
                 num_heads=4,
                 num_layers=1,
@@ -275,7 +275,7 @@ def test_fast_eval_streaming_replacement():
         config: TRM1ConfigProtocol = TRM.Config(
             compile_core=False,
             vocab_size=12,
-            seq_len=82,
+            seq_len=81,
             hidden_size=32,
             num_heads=2,
             num_layers=1,
@@ -339,7 +339,7 @@ def test_fast_eval_metrics_at_halt_time():
         config: TRM1ConfigProtocol = TRM.Config(
             compile_core=False,
             vocab_size=12,
-            seq_len=82,
+            seq_len=81,
             hidden_size=32,
             num_heads=2,
             num_layers=1,
@@ -402,7 +402,7 @@ def test_no_recompilation_all_paths():
     config = TRM.Config(
         compile_core=False,
         vocab_size=12,
-        seq_len=82,
+        seq_len=81,
         hidden_size=64,
         num_heads=4,
         num_layers=1,
@@ -437,9 +437,9 @@ def test_no_recompilation_all_paths():
 
     # Test inputs
     B = 4
-    x = torch.randint(low=0, high=12, size=(B, 82))
-    z_H = model.H_init.expand(B, 82, -1)
-    z_L = model.L_init.expand(B, 82, -1)
+    x = torch.randint(low=0, high=12, size=(B, 81))
+    z_H = model.H_init.expand(B, 81, -1)
+    z_L = model.L_init.expand(B, 81, -1)
 
     # Path 1: step() - used in ACT training/eval loops
     call_signatures.clear()
@@ -465,7 +465,7 @@ def test_eval_methods_consistent_k1():
         config: TRM1ConfigProtocol = TRM.Config(
             compile_core=False,
             vocab_size=12,
-            seq_len=82,
+            seq_len=81,
             hidden_size=32,
             num_heads=2,
             num_layers=1,
@@ -525,7 +525,7 @@ def test_wta_batched_vs_sequential():
     config = TRM.Config(
         compile_core=False,
         vocab_size=12,
-        seq_len=82,
+        seq_len=81,
         hidden_size=64,
         num_heads=4,
         num_layers=2,
@@ -548,7 +548,7 @@ def test_wta_batched_vs_sequential():
         )
 
     # Create inputs
-    inputs = torch.randint(low=1, high=11, size=(B, 82))
+    inputs = torch.randint(low=1, high=11, size=(B, 81))
     z_H_init = model.H_init.expand(B, seq_len, -1).clone()
 
     # Sequential: K separate forward passes
@@ -582,7 +582,7 @@ def test_wta_batched_vs_sequential():
     out_batched = model(inputs_batched, z_H_batched, z_L_batched)
 
     # Reshape back
-    logits_batched = out_batched["logits"].reshape(B, K, 82, -1)
+    logits_batched = out_batched["logits"].reshape(B, K, 81, -1)
     q_halt_batched = out_batched["q_halt"].reshape(B, K)
     z_H_batched_out = out_batched["z_H"].reshape(B, K, seq_len, -1)
     z_L_batched_out = out_batched["z_L"].reshape(B, K, seq_len, -1)

@@ -39,7 +39,6 @@ __all__ = [
     "evaluate_single_start",
     "h_cosine_similarities",
     "per_h_accuracy",
-    "prepend_halt",
     "print_diagnostics",
     "run_act_steps",
     "z_h_deltas",
@@ -49,32 +48,23 @@ __all__ = [
 HALT_TOKEN_ID = 11
 
 
-def prepend_halt(inputs: Tensor, device: torch.device) -> Tensor:
-    """Prepend HALT token to input sequence. [B, 81] -> [B, 82]."""
-    B = inputs.shape[0]
-    halt_tokens = torch.full((B, 1), HALT_TOKEN_ID, device=device, dtype=inputs.dtype)
-    return torch.cat([halt_tokens, inputs], dim=1)
-
-
 def run_act_steps(
     model: _EvalModelProtocol,
     inputs: Tensor,
     z_H: Tensor,
     z_L: Tensor,
     max_steps: int,
-    device: torch.device,
+    device: torch.device,  # noqa: ARG001  # pyright: ignore[reportUnusedParameter]
     dtype: torch.dtype,  # noqa: ARG001  # pyright: ignore[reportUnusedParameter]
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Run ACT steps and return predictions, q_halt, and final z_H."""
-    inputs_with_halt = prepend_halt(inputs, device)
-
     out: dict[str, Tensor] = {}
     for _ in range(max_steps):
-        out = model.step(inputs_with_halt, z_H, z_L)
+        out = model.step(inputs, z_H, z_L)
         z_H = out["z_H"]
         z_L = out["z_L"]
 
-    preds = out["logits"][:, 1:].argmax(dim=-1)
+    preds = out["logits"].argmax(dim=-1)
     q_halt = out["q_halt"]
     return preds, q_halt, z_H
 
