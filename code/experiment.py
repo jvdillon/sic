@@ -2268,7 +2268,7 @@ class Experiment:
         for i in range(B):
             inp, lab, pid = get_next_puzzle()
             if inp is not None:
-                assert lab is not None and pid is not None
+                assert lab is not None and pid is not None  # noqa: PT018
                 inputs[i] = inp
                 labels[i] = lab
                 puzzle_ids[i] = pid
