@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import functools
 import pathlib
 
 from model import (
@@ -267,6 +268,8 @@ class TestTRM:
             L_cycles=2,
             act=False,
             compile_core=False,
+            seq_len=82,
+            block_fn=functools.partial(MLPMixerBlock, seq_len=82),
         )
 
     @pytest.fixture
@@ -278,6 +281,8 @@ class TestTRM:
             H_cycles=2,
             L_cycles=2,
             compile_core=False,
+            seq_len=82,
+            block_fn=functools.partial(MLPMixerBlock, seq_len=82),
         )
 
     def test_forward_basic(self, config: TRM.Config):
@@ -370,6 +375,8 @@ def _trm_bitforbit_config() -> TRM.Config:
         act=False,
         compile_core=False,
         dtype=torch.float32,
+        seq_len=82,
+        block_fn=functools.partial(MLPMixerBlock, seq_len=82),
     )
 
 
