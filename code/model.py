@@ -103,6 +103,22 @@ class TRM3ConfigProtocol(Protocol):
     use_rope: bool
     rope_theta: float
     num_heads: int
+    carry_H: Literal[
+        "top1",
+        "top2",
+        "copy_top1",
+        "copy_top2",
+        "all",
+        "none",
+    ]
+    carry_L: Literal[
+        "top1",
+        "top2",
+        "copy_top1",
+        "copy_top2",
+        "all",
+        "none",
+    ]
 
     @property
     def total_seq_len(self) -> int: ...

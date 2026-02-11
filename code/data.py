@@ -119,24 +119,31 @@ def _build_dihedral_indices(n: int, device: torch.device) -> Tensor:
     return torch.stack(symmetries)
 
 
+_dihedral_cache: dict[tuple[int, torch.device], Tensor] = {}
+
+
 def augment_sudoku(inputs: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
     """Apply random dihedral symmetry and digit permutation to sudoku puzzles."""
     cfg = get_puzzle_config("sudoku")
-    n = cfg.grid_shape[0]  # side length (9 for sudoku)
+    n = cfg.grid_shape[0]
     B = inputs.shape[0]
     device = inputs.device
 
-    perms = torch.zeros(B, cfg.vocab_size, device=device, dtype=torch.long)
-    perms[:, 0] = 0
-    assert cfg.mask_token is not None
-    perms[:, cfg.mask_token] = cfg.mask_token
+    perms = (
+        torch.arange(cfg.vocab_size, device=device, dtype=torch.long)
+        .expand(B, -1)
+        .clone()
+    )
     rand_vals = torch.rand(B, n, device=device)
     perms[:, 1:10] = rand_vals.argsort(dim=1) + 1
 
     inputs_aug = torch.gather(perms, 1, inputs.long()).to(inputs.dtype)
     labels_aug = torch.gather(perms, 1, labels.long()).to(labels.dtype)
 
-    dihedral_indices = _build_dihedral_indices(n, device)
+    cache_key = (n, device)
+    if cache_key not in _dihedral_cache:
+        _dihedral_cache[cache_key] = _build_dihedral_indices(n, device)
+    dihedral_indices = _dihedral_cache[cache_key]
     sym_choice = torch.randint(0, 8, (B,), device=device)
     selected_indices = dihedral_indices[sym_choice]
 

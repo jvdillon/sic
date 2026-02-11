@@ -166,14 +166,28 @@ class Experiment:
             ),
         }
 
-    def step(self, inputs: Tensor, labels: Tensor) -> dict[str, Any] | None:
+    def step(
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        puzzle_ids: Tensor | None = None,
+        valid_count: int | None = None,
+    ) -> dict[str, Any] | None:
+        del puzzle_ids
         if self.current_step >= self.total_train_steps:
             return None
+        if valid_count is None:
+            valid_count = inputs.shape[0]
         if self.augment_sudoku:
             inputs, labels = augment_sudoku(inputs, labels)
-        return self._step_act(inputs, labels)
+        return self._step_act(inputs, labels, valid_count)
 
-    def _step_act(self, inputs: Tensor, labels: Tensor) -> dict[str, Any]:
+    def _step_act(
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        valid_count: int,
+    ) -> dict[str, Any]:
         """Generalized K_H/K head WTA with configurable pairing and carry policies."""
         B = self.batch_size
 
@@ -182,7 +196,12 @@ class Experiment:
         carry = self.act_carry
 
         # Reset halted puzzles with fresh state
-        self._reset_halted_puzzles(carry, inputs, labels)
+        self._reset_halted_puzzles(carry, inputs, labels, valid_count)
+
+        # Slots with valid data are those not halted after refill.
+        was_running = ~carry["halted"]
+        n_active = was_running.sum()
+        assert n_active > 0
 
         # WTA forward pass (samples heads, computes losses, updates carry)
         assert self.device is not None
@@ -200,8 +219,9 @@ class Experiment:
         logits_all = out["logits"]
         q_halt_all = out["q_halt"]
 
-        # WTA: backprop through winner only
-        lm_loss = losses[torch.arange(B, device=self.device), winner_idx].mean()
+        # WTA: backprop through winner only, masked to valid slots.
+        winner_losses = losses[torch.arange(B, device=self.device), winner_idx]
+        lm_loss = winner_losses[was_running].sum() / n_active
 
         # q_halt loss on winner
         winner_q_halt = q_halt_all[torch.arange(B, device=self.device), winner_idx]
@@ -212,15 +232,14 @@ class Experiment:
             preds = winner_logits.argmax(dim=-1)
             correct = (preds == labels_flat).all(dim=-1).float()
 
-        running = ~carry["halted"]
-        if running.any():
-            q_halt_loss = nn.functional.binary_cross_entropy_with_logits(
-                winner_q_halt[running],
-                correct[running],
-                reduction="mean",
+        q_halt_loss = (
+            nn.functional.binary_cross_entropy_with_logits(
+                winner_q_halt[was_running],
+                correct[was_running],
+                reduction="sum",
             )
-        else:
-            q_halt_loss = torch.tensor(0.0, device=self.device, dtype=self.dtype)
+            / n_active
+        )
 
         if self.current_step < self.q_halt_warmup_steps:
             q_halt_loss = torch.tensor(0.0, device=self.device, dtype=self.dtype)
@@ -231,10 +250,11 @@ class Experiment:
 
         # Update carry state
         carry["model_carry"] = out["carry"]
-        carry["steps"] = carry["steps"] + 1
-        carry["halted"] = self._halted(winner_q_halt, carry["steps"])
+        carry["steps"][was_running] += 1
+        new_halted = self._halted(winner_q_halt, carry["steps"])
+        carry["halted"] = torch.where(was_running, new_halted, True)
 
-        head0_wins = (winner_idx == 0).float().mean()
+        head0_wins = (winner_idx[was_running] == 0).float().mean()
 
         return {
             "lm": lm_loss.detach(),
@@ -247,6 +267,7 @@ class Experiment:
         carry: dict[str, Tensor],
         inputs: Tensor,
         labels: Tensor,
+        valid_count: int,
     ) -> None:
         """Reset halted puzzles with fresh state and new data."""
         halted = carry["halted"]
@@ -262,7 +283,7 @@ class Experiment:
                 if 1 <= steps_taken <= self.max_reasoning_steps:
                     self.halt_steps_histogram[steps_taken - 1] += 1
 
-        n_reset = min(len(halted_indices), len(inputs))
+        n_reset = min(len(halted_indices), valid_count)
         carry["model_carry"] = self.model.reset_carry_at_indices(  # pyright: ignore[reportCallIssue]
             carry["model_carry"],
             halted_indices,

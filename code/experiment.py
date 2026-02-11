@@ -1,6 +1,6 @@
 """TRM experiment framework."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
@@ -37,9 +37,6 @@ from data import PuzzleDataset, augment_sudoku
 warnings.filterwarnings("ignore", message=".*TF32.*")
 
 
-HALT_TOKEN_ID = 11
-
-
 @dataclass
 class _PuzzleIterState:
     """Mutable state for streaming puzzle iteration."""
@@ -48,26 +45,38 @@ class _PuzzleIterState:
     max_samples: int
     pending_inputs: Tensor | None = None
     pending_labels: Tensor | None = None
+    pending_puzzle_ids: Tensor | None = None
     pending_idx: int = 0
     pending_valid: int = 0
     samples_seen: int = 0
 
 
-def _get_next_puzzle(state: _PuzzleIterState) -> tuple[Tensor | None, Tensor | None]:
-    """Get next puzzle from iterator, respecting max_samples limit."""
+def _get_next_puzzle(
+    state: _PuzzleIterState,
+) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
+    """Get next puzzle from iterator, respecting max_samples limit.
+
+    Returns (input, label, puzzle_id) or (None, None, None) if exhausted.
+    """
     if state.max_samples >= 0 and state.samples_seen >= state.max_samples:
-        return None, None
+        return None, None, None
 
     if state.pending_inputs is not None and state.pending_idx < state.pending_valid:
         inp = state.pending_inputs[state.pending_idx]
         lab = state.pending_labels[state.pending_idx]  # pyright: ignore[reportOptionalSubscript]
+        pid = (
+            state.pending_puzzle_ids[state.pending_idx]
+            if state.pending_puzzle_ids is not None
+            else None
+        )
         state.pending_idx += 1
         state.samples_seen += 1
-        return inp, lab
+        return inp, lab, pid
     try:
         batch = next(state.puzzle_iter)
         state.pending_inputs = batch[0]
         state.pending_labels = batch[1]
+        state.pending_puzzle_ids = batch[2]
         # batch[3] is valid_count: number of non-padded samples in the batch.
         # Last batch may be zero-padded to batch_size; valid_count indicates
         # how many samples are real data vs padding.
@@ -78,12 +87,17 @@ def _get_next_puzzle(state: _PuzzleIterState) -> tuple[Tensor | None, Tensor | N
             assert state.pending_labels is not None
             inp = state.pending_inputs[state.pending_idx]
             lab = state.pending_labels[state.pending_idx]
+            pid = (
+                state.pending_puzzle_ids[state.pending_idx]
+                if state.pending_puzzle_ids is not None
+                else None
+            )
             state.pending_idx += 1
             state.samples_seen += 1
-            return inp, lab
+            return inp, lab, pid
     except StopIteration:
         pass
-    return None, None
+    return None, None, None
 
 
 def _reset_eval_slot(
@@ -118,12 +132,7 @@ def _reset_eval_slot(
 
 
 class ExperimentBase:
-    """TRM/TRM2 experiment with ACT training.
-
-    NOTE: This class is Sudoku-specific (hardcoded 81 = 9x9 grid in several places).
-    For TRM3 with different puzzle sizes, use sudoku/x182.py:Experiment which properly
-    parameterizes num_puzzle_grid_tokens and total_seq_len.
-    """
+    """TRM/TRM2 experiment with ACT training."""
 
     model: TRM1Protocol
     device: torch.device  # Set in __init__ if not provided by subclass
@@ -314,29 +323,38 @@ class ExperimentBase:
         inputs: Tensor,
         labels: Tensor,
         puzzle_ids: Tensor | None = None,
+        valid_count: int | None = None,
     ) -> dict[str, Tensor] | None:
         del puzzle_ids  # Not used in base class (no puzzle_identifier conditioning)
         if self.current_step >= self.total_train_steps:
             return None
 
+        if valid_count is None:
+            valid_count = inputs.shape[0]
         if self.augment_sudoku:
             inputs, labels = augment_sudoku(inputs, labels)
-        return self._step_act(inputs, labels)
+        return self._step_act(inputs, labels, valid_count)
 
     def _init_act_carry(self) -> dict[str, Tensor]:
         """Initialize persistent ACT carry state."""
         B = self.batch_size
+        seq_len = self._get_seq_len()
         z_H, z_L = self._init_z(B)
         return {
             "z_H": z_H.clone(),
             "z_L": z_L.clone(),
             "steps": torch.zeros(B, device=self.device, dtype=torch.long),
             "halted": torch.ones(B, device=self.device, dtype=torch.bool),
-            "inputs": torch.zeros(B, 81, device=self.device, dtype=torch.long),
-            "labels": torch.zeros(B, 81, device=self.device, dtype=torch.long),
+            "inputs": torch.zeros(B, seq_len, device=self.device, dtype=torch.long),
+            "labels": torch.zeros(B, seq_len, device=self.device, dtype=torch.long),
         }
 
-    def _step_act(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor]:
+    def _step_act(
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        valid_count: int,
+    ) -> dict[str, Tensor]:
         """ACT step: one forward pass per call, persist carry across calls."""
         B = self.batch_size
         seq_len = self._get_seq_len()
@@ -347,6 +365,9 @@ class ExperimentBase:
         carry = self.act_carry
         halted = carry["halted"]
 
+        # Halted samples get REPLACED with fresh puzzles (new inputs, reset z_H/z_L).
+        # They do NOT keep stale state - halted slots are recycled for new work.
+        # Only fill from valid (non-padded) samples; unfilled slots stay halted.
         if halted.any():
             halted_indices = halted.nonzero(as_tuple=True)[0]
 
@@ -357,7 +378,7 @@ class ExperimentBase:
                     if 1 <= steps_taken <= self.max_reasoning_steps:
                         self.halt_steps_histogram[steps_taken - 1] += 1
 
-            n_reset = min(len(halted_indices), len(inputs))
+            n_reset = min(len(halted_indices), valid_count)
             for i in range(n_reset):
                 idx = halted_indices[i]
                 carry["z_H"][idx] = self.model.H_init.squeeze(0)
@@ -376,12 +397,18 @@ class ExperimentBase:
                 carry["labels"][idx] = labels[i]
                 carry["halted"][idx] = False
 
-        # Forward pass - single H-cycle for ACT training
+        # Slots with valid data are those not halted after refill.
+        # Unfilled slots (from ragged batches) stay halted and are excluded.
+        was_running = ~carry["halted"]
+        n_active = was_running.sum()
+        assert n_active > 0
+
+        # Forward pass on all B slots (avoids recompile); only was_running
+        # slots contribute to loss.
         z_H = carry["z_H"]
         z_L = carry["z_L"]
 
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-            # Call forward which runs H_cycles internally
             out = self.model(carry["inputs"], z_H, z_L)
             logits = out["logits"]
             all_logits = list(out["all_logits"])
@@ -389,46 +416,50 @@ class ExperimentBase:
             new_z_H = out["z_H"]
             new_z_L = out["z_L"]
 
-        # Compute losses
-        labels_flat = carry["labels"].reshape(-1).long()
-        lm_loss = nn.functional.cross_entropy(
-            logits.reshape(-1, logits.shape[-1]),
-            labels_flat,
+        # Compute losses — only on valid (was_running) slots.
+        active_logits = logits[was_running]
+        active_labels = carry["labels"][was_running]
+        per_token_loss = nn.functional.cross_entropy(
+            active_logits.reshape(-1, active_logits.shape[-1]),
+            active_labels.reshape(-1).long(),
             label_smoothing=self.label_smoothing,
-            reduction="sum",
-        )
+            reduction="none",
+        ).reshape(-1, seq_len)
+        lm_loss = per_token_loss.mean(dim=-1).sum() / n_active
 
-        # Diversity loss on H iterations (all_logits always available now)
+        # Diversity loss on H iterations
         diversity_loss = (
-            compute_diversity_loss(all_logits)
+            compute_diversity_loss([t[was_running] for t in all_logits])
             if self.diversity_weight > 0
             else torch.tensor(0.0, device=self.device)
         )
 
-        # Entropy bonus on early steps
+        # Entropy bonus on early steps (per-sample masking)
         entropy_loss = torch.tensor(0.0, device=self.device)
         if self.early_entropy_weight > 0:
-            step_num = carry["steps"][0].item()
-            if step_num <= self.early_entropy_steps:
-                log_probs = torch.log_softmax(logits, dim=-1)
-                probs = torch.softmax(logits, dim=-1)
+            active_steps = carry["steps"][was_running]
+            early_mask = active_steps <= self.early_entropy_steps
+            if early_mask.any():
+                early_logits = active_logits[early_mask]
+                log_probs = torch.log_softmax(early_logits, dim=-1)
+                probs = torch.softmax(early_logits, dim=-1)
                 entropy = -(probs * log_probs).sum(dim=-1).mean()
                 entropy_loss = -self.early_entropy_weight * entropy
 
         with torch.no_grad():
-            preds = logits.argmax(dim=-1)
-            correct = preds == carry["labels"]
+            preds = active_logits.argmax(dim=-1)
+            correct = preds == active_labels
             q_halt_target = correct.all(dim=-1).float()
 
-        running = ~carry["halted"]
-        if running.any():
-            q_halt_loss = nn.functional.binary_cross_entropy_with_logits(
-                q_halt[running],
-                q_halt_target[running],
+        active_q_halt = q_halt[was_running]
+        q_halt_loss = (
+            nn.functional.binary_cross_entropy_with_logits(
+                active_q_halt,
+                q_halt_target,
                 reduction="sum",
             )
-        else:
-            q_halt_loss = torch.tensor(0.0, device=self.device)
+            / n_active
+        )
 
         if self.current_step < self.q_halt_warmup_steps:
             q_halt_loss = torch.tensor(0.0, device=self.device)
@@ -436,7 +467,7 @@ class ExperimentBase:
         total_loss = (
             lm_loss
             + self.q_halt_weight * q_halt_loss
-            + self.diversity_weight * diversity_loss * B * 81
+            + self.diversity_weight * diversity_loss
             + entropy_loss
         )
         total_loss.backward()
@@ -444,11 +475,11 @@ class ExperimentBase:
 
         carry["z_H"] = new_z_H.detach()
         carry["z_L"] = new_z_L.detach()
-        carry["steps"] = carry["steps"] + 1
+        carry["steps"][was_running] += 1
 
         with torch.no_grad():
             is_last_step = carry["steps"] >= self.max_reasoning_steps
-            halted = is_last_step | (q_halt > 0)
+            new_halted = is_last_step | (q_halt > 0)
 
             force_continue = (
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
@@ -460,16 +491,22 @@ class ExperimentBase:
                 device=self.device,
             )
             exploration_halt = carry["steps"] >= min_steps
-            halted = halted & (~force_continue | exploration_halt)
+            new_halted = new_halted & (~force_continue | exploration_halt)
 
-            carry["halted"] = halted
+            # Unfilled slots stay halted until real data arrives.
+            carry["halted"] = torch.where(was_running, new_halted, True)
 
         return {
-            "lm": lm_loss.detach() / (B * 81),
-            "q_halt": q_halt_loss.detach() / B,
+            "lm": lm_loss.detach(),
+            "q_halt": q_halt_loss.detach(),
         }
 
-    def _step_act_wta(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor]:
+    def _step_act_wta(
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        valid_count: int,
+    ) -> dict[str, Tensor]:
         """K-head WTA ACT step. Batches K heads into single [B*K] forward pass.
 
         Note: BatchNorm would break with this batching (stats computed across heads).
@@ -494,30 +531,24 @@ class ExperimentBase:
                     if 1 <= steps_taken <= self.max_reasoning_steps:
                         self.halt_steps_histogram[steps_taken - 1] += 1
 
-            n_reset = min(len(halted_indices), len(inputs))
+            n_reset = min(len(halted_indices), valid_count)
             for i in range(n_reset):
                 idx = halted_indices[i]
                 carry["z_H"][idx] = self.model.H_init.squeeze(0)
-                noise = (
-                    torch.randn(
-                        seq_len,
-                        self.model.config.hidden_size,
-                        device=self.device,
-                        dtype=self.dtype,
-                    )
-                    * self.z_L_noise
-                )
-                carry["z_L"][idx] = self.model.L_init.squeeze(0) + noise
                 carry["steps"][idx] = 0
                 carry["inputs"][idx] = inputs[i]
                 carry["labels"][idx] = labels[i]
                 carry["halted"][idx] = False
 
-        labels_flat = carry["labels"].reshape(B, -1)
+        was_running = ~carry["halted"]
+        n_active = was_running.sum()
+        assert n_active > 0
+
+        labels_flat = carry["labels"]
         z_H = carry["z_H"]
 
         # Batch all K heads into single forward pass: [B*K, ...]
-        # Build z_L for all heads with same noise order as sequential loop
+        # z_L is rebuilt fresh each step from L_init_k (not carried).
         z_L_all = []
         for k in range(self.K):
             L_init_k = (
@@ -550,16 +581,13 @@ class ExperimentBase:
             out = self.model(inputs_batched, z_H=z_H_batched, z_L=z_L_batched)
 
         # Reshape outputs back: [B*K, ...] -> [B, K, ...]
-        logits_all = out["logits"].reshape(B, self.K, 81, -1)
+        logits_all = out["logits"].reshape(B, self.K, seq_len, -1)
         q_halt_all = out["q_halt"].reshape(B, self.K)
         z_H_out = out["z_H"].reshape(B, self.K, seq_len, -1)
-        z_L_out = out["z_L"].reshape(B, self.K, seq_len, -1)
 
-        # Convert to lists for compatibility with rest of function
         all_logits = [logits_all[:, k] for k in range(self.K)]
         all_q_halt = [q_halt_all[:, k] for k in range(self.K)]
         all_z_H = [z_H_out[:, k] for k in range(self.K)]
-        all_z_L = [z_L_out[:, k] for k in range(self.K)]
 
         # Per-puzzle loss for each head
         losses = []
@@ -571,16 +599,16 @@ class ExperimentBase:
                     label_smoothing=self.label_smoothing,
                     reduction="none",
                 )
-                .reshape(B, 81)
+                .reshape(B, seq_len)
                 .mean(dim=-1)
             )
             losses.append(loss_k)
 
-        # WTA: backprop through winner only
+        # WTA: backprop through winner only, masked to valid slots.
         stacked_losses = torch.stack(losses, dim=1)  # [B, K]
         winner_idx = stacked_losses.argmin(dim=1)  # [B]
         winner_loss = stacked_losses[torch.arange(B, device=self.device), winner_idx]
-        lm_loss = winner_loss.mean()
+        lm_loss = winner_loss[was_running].sum() / n_active
 
         # q_halt loss on winner
         winner_q_halt = torch.stack(all_q_halt, dim=1)[
@@ -596,15 +624,14 @@ class ExperimentBase:
             preds = winner_logits.argmax(dim=-1)
             correct = (preds == labels_flat).all(dim=-1).float()
 
-        running = ~carry["halted"]
-        if running.any():
-            q_halt_loss = nn.functional.binary_cross_entropy_with_logits(
-                winner_q_halt[running],
-                correct[running],
-                reduction="mean",
+        q_halt_loss = (
+            nn.functional.binary_cross_entropy_with_logits(
+                winner_q_halt[was_running],
+                correct[was_running],
+                reduction="sum",
             )
-        else:
-            q_halt_loss = torch.tensor(0.0, device=self.device)
+            / n_active
+        )
 
         if self.current_step < self.q_halt_warmup_steps:
             q_halt_loss = torch.tensor(0.0, device=self.device)
@@ -613,23 +640,18 @@ class ExperimentBase:
         total_loss.backward()
         self._update_weights()
 
-        # Update carry state using winner's z_H/z_L
+        # Update carry state using winner's z_H (z_L is rebuilt fresh each step).
         new_z_H = torch.stack(all_z_H, dim=1)[
-            torch.arange(B, device=self.device),
-            winner_idx,
-        ]
-        new_z_L = torch.stack(all_z_L, dim=1)[
             torch.arange(B, device=self.device),
             winner_idx,
         ]
 
         carry["z_H"] = new_z_H.detach()
-        carry["z_L"] = new_z_L.detach()
-        carry["steps"] = carry["steps"] + 1
+        carry["steps"][was_running] += 1
 
         with torch.no_grad():
             is_last_step = carry["steps"] >= self.max_reasoning_steps
-            halted = is_last_step | (winner_q_halt > 0)
+            new_halted = is_last_step | (winner_q_halt > 0)
 
             force_continue = (
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
@@ -641,11 +663,11 @@ class ExperimentBase:
                 device=self.device,
             )
             exploration_halt = carry["steps"] >= min_steps
-            halted = halted & (~force_continue | exploration_halt)
+            new_halted = new_halted & (~force_continue | exploration_halt)
 
-            carry["halted"] = halted
+            carry["halted"] = torch.where(was_running, new_halted, True)
 
-        head0_wins = (winner_idx == 0).float().mean()
+        head0_wins = (winner_idx[was_running] == 0).float().mean()
 
         return {
             "lm": lm_loss.detach(),
@@ -663,7 +685,12 @@ class ExperimentBase:
         ).mean()
         return H_avg - avg_H
 
-    def _step_act_wta_jsd(self, inputs: Tensor, labels: Tensor) -> dict[str, Tensor]:
+    def _step_act_wta_jsd(
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        valid_count: int,
+    ) -> dict[str, Tensor]:
         """K-head WTA + JSD ACT step. Batches K heads into single [B*K] forward pass.
 
         Note: BatchNorm would break with this batching (stats computed across heads).
@@ -688,28 +715,23 @@ class ExperimentBase:
                     if 1 <= steps_taken <= self.max_reasoning_steps:
                         self.halt_steps_histogram[steps_taken - 1] += 1
 
-            n_reset = min(len(halted_indices), len(inputs))
+            n_reset = min(len(halted_indices), valid_count)
             for i in range(n_reset):
                 idx = halted_indices[i]
                 carry["z_H"][idx] = self.model.H_init.squeeze(0)
-                noise = (
-                    torch.randn(
-                        seq_len,
-                        self.model.config.hidden_size,
-                        device=self.device,
-                        dtype=self.dtype,
-                    )
-                    * self.z_L_noise
-                )
-                carry["z_L"][idx] = self.model.L_init.squeeze(0) + noise
                 carry["steps"][idx] = 0
                 carry["inputs"][idx] = inputs[i]
                 carry["labels"][idx] = labels[i]
                 carry["halted"][idx] = False
 
+        was_running = ~carry["halted"]
+        n_active = was_running.sum()
+        assert n_active > 0
+
         z_H = carry["z_H"]
 
         # Batch all K heads into single forward pass: [B*K, ...]
+        # z_L is rebuilt fresh each step from L_init_k (not carried).
         z_L_all = []
         for k in range(self.K):
             L_init_k = (
@@ -740,17 +762,15 @@ class ExperimentBase:
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             out = self.model(inputs_batched, z_H=z_H_batched, z_L=z_L_batched)
 
-        logits_all = out["logits"].reshape(B, self.K, 81, -1)
+        logits_all = out["logits"].reshape(B, self.K, seq_len, -1)
         q_halt_all = out["q_halt"].reshape(B, self.K)
         z_H_out = out["z_H"].reshape(B, self.K, seq_len, -1)
-        z_L_out = out["z_L"].reshape(B, self.K, seq_len, -1)
 
         all_logits = [logits_all[:, k] for k in range(self.K)]
         all_q_halt = [q_halt_all[:, k] for k in range(self.K)]
         all_z_H = [z_H_out[:, k] for k in range(self.K)]
-        all_z_L = [z_L_out[:, k] for k in range(self.K)]
 
-        labels_flat = carry["labels"].reshape(B, -1)
+        labels_flat = carry["labels"]
         losses = []
         for k in range(self.K):
             loss_k = (
@@ -760,7 +780,7 @@ class ExperimentBase:
                     label_smoothing=self.label_smoothing,
                     reduction="none",
                 )
-                .reshape(B, 81)
+                .reshape(B, seq_len)
                 .mean(dim=-1)
             )
             losses.append(loss_k)
@@ -768,10 +788,10 @@ class ExperimentBase:
         stacked_losses = torch.stack(losses, dim=1)
         winner_idx = stacked_losses.argmin(dim=1)
         winner_loss = stacked_losses[torch.arange(B, device=self.device), winner_idx]
-        lm_loss = winner_loss.mean()
+        lm_loss = winner_loss[was_running].sum() / n_active
 
-        # JSD loss
-        jsd = self._jsd_loss(all_logits)
+        # JSD loss — only on valid slots
+        jsd = self._jsd_loss([t[was_running] for t in all_logits])
         if self.current_step < self.jsd_warmup_steps:
             t = self.current_step / self.jsd_warmup_steps
             jsd_weight = self.jsd_weight_init * (1 - t) + self.jsd_weight_final * t
@@ -792,15 +812,14 @@ class ExperimentBase:
             preds = winner_logits.argmax(dim=-1)
             correct = (preds == labels_flat).all(dim=-1).float()
 
-        running = ~carry["halted"]
-        if running.any():
-            q_halt_loss = nn.functional.binary_cross_entropy_with_logits(
-                winner_q_halt[running],
-                correct[running],
-                reduction="mean",
+        q_halt_loss = (
+            nn.functional.binary_cross_entropy_with_logits(
+                winner_q_halt[was_running],
+                correct[was_running],
+                reduction="sum",
             )
-        else:
-            q_halt_loss = torch.tensor(0.0, device=self.device)
+            / n_active
+        )
 
         if self.current_step < self.q_halt_warmup_steps:
             q_halt_loss = torch.tensor(0.0, device=self.device)
@@ -809,22 +828,18 @@ class ExperimentBase:
         total_loss.backward()
         self._update_weights()
 
+        # Update carry state using winner's z_H (z_L is rebuilt fresh each step).
         new_z_H = torch.stack(all_z_H, dim=1)[
-            torch.arange(B, device=self.device),
-            winner_idx,
-        ]
-        new_z_L = torch.stack(all_z_L, dim=1)[
             torch.arange(B, device=self.device),
             winner_idx,
         ]
 
         carry["z_H"] = new_z_H.detach()
-        carry["z_L"] = new_z_L.detach()
-        carry["steps"] = carry["steps"] + 1
+        carry["steps"][was_running] += 1
 
         with torch.no_grad():
             is_last_step = carry["steps"] >= self.max_reasoning_steps
-            halted = is_last_step | (winner_q_halt > 0)
+            new_halted = is_last_step | (winner_q_halt > 0)
 
             force_continue = (
                 torch.rand(B, device=self.device) < self.halt_exploration_prob
@@ -836,11 +851,11 @@ class ExperimentBase:
                 device=self.device,
             )
             exploration_halt = carry["steps"] >= min_steps
-            halted = halted & (~force_continue | exploration_halt)
+            new_halted = new_halted & (~force_continue | exploration_halt)
 
-            carry["halted"] = halted
+            carry["halted"] = torch.where(was_running, new_halted, True)
 
-        head0_wins = (winner_idx == 0).float().mean()
+        head0_wins = (winner_idx[was_running] == 0).float().mean()
 
         return {
             "lm": lm_loss.detach(),
@@ -948,68 +963,20 @@ class ExperimentBase:
         halt_histogram = [0] * self.max_reasoning_steps
 
         # Batch state
-        inputs = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
-        labels = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
+        grid_len = self.config.seq_len
+        inputs = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
+        labels = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
         z_H, z_L = self._init_z(B)
         steps = torch.zeros(B, device=self.device, dtype=torch.int32)
         valid = torch.zeros(B, device=self.device, dtype=torch.bool)
 
-        # Cache init states for resets (squeeze(0) to get [seq_len, hidden])
         H_init_single = self.model.H_init.squeeze(0)
         L_init_single = self.model.L_init.squeeze(0)
 
-        # Puzzle iterator
-        puzzle_iter = iter(loader)
-        pending_inputs = None
-        pending_labels = None
-        pending_idx = 0
-        pending_valid = 0
-        samples_seen = 0
+        puz_state = _PuzzleIterState(iter(loader), self.max_eval_samples)
 
-        def get_next_puzzle():
-            """Get next puzzle from iterator. Returns (input, label) or (None, None) if exhausted."""
-            nonlocal \
-                pending_inputs, \
-                pending_labels, \
-                pending_idx, \
-                pending_valid, \
-                samples_seen
-
-            # Respect max_eval_samples limit
-            if self.max_eval_samples >= 0 and samples_seen >= self.max_eval_samples:
-                return None, None
-
-            if pending_inputs is not None and pending_idx < pending_valid:
-                assert pending_labels is not None
-                inp = pending_inputs[pending_idx]
-                lab = pending_labels[pending_idx]
-                pending_idx += 1
-                samples_seen += 1
-                return inp, lab
-
-            # Need new batch
-            try:
-                batch = next(puzzle_iter)
-                pending_inputs = batch[0]
-                pending_labels = batch[1]
-                # batch[3] is valid_count: number of non-padded samples (last batch
-                # may be zero-padded to batch_size).
-                pending_valid = batch[3]
-                pending_idx = 0
-                if pending_valid > 0:
-                    inp = pending_inputs[pending_idx]
-                    lab = pending_labels[pending_idx]
-                    pending_idx += 1
-                    samples_seen += 1
-                    return inp, lab
-            except StopIteration:
-                pass
-
-            return None, None
-
-        # Initialize batch
         for i in range(B):
-            inp, lab = get_next_puzzle()
+            inp, lab, _pid = _get_next_puzzle(puz_state)
             if inp is not None:
                 assert lab is not None
                 inputs[i] = inp
@@ -1028,10 +995,10 @@ class ExperimentBase:
 
                 z_H = out["z_H"]
                 z_L = out["z_L"]
-                logits = out["logits"]  # [B, 81, vocab]
+                logits = out["logits"]  # [B, grid_len, vocab]
                 q_halt = out["q_halt"]  # [B] - raw logit, halt when > 0
 
-                preds = logits.argmax(dim=-1)  # [B, 81]
+                preds = logits.argmax(dim=-1)  # [B, grid_len]
                 steps += valid.int()
 
                 # Determine which samples halt (q_halt > 0 means sigmoid(q_halt) > 0.5)
@@ -1039,16 +1006,16 @@ class ExperimentBase:
 
                 if halted.any():
                     # Vectorized metrics for halted samples
-                    correct_mask = preds == labels  # [B, 81]
+                    correct_mask = preds == labels  # [B, grid_len]
                     cell_correct_per_sample = correct_mask.sum(dim=1)  # [B]
-                    puzzle_correct_per_sample = cell_correct_per_sample == 81  # [B]
+                    puzzle_correct_per_sample = cell_correct_per_sample == grid_len
 
                     # Accumulate only for halted samples
                     n_halted = halted.sum().item()
                     total_puzzles += n_halted
                     total_correct += puzzle_correct_per_sample[halted].sum().item()
                     total_cell_correct += cell_correct_per_sample[halted].sum().item()
-                    total_cells += 81 * n_halted
+                    total_cells += grid_len * n_halted
                     total_steps += steps[halted].sum().item()
 
                     # Update histogram
@@ -1060,19 +1027,18 @@ class ExperimentBase:
                     # Replace halted samples with new puzzles (must be sequential for iterator)
                     halted_idx = halted.nonzero(as_tuple=True)[0]
                     for idx_tensor in halted_idx:
-                        idx = idx_tensor.item()
-                        inp, lab = get_next_puzzle()
+                        idx = int(idx_tensor.item())
+                        inp, lab, _pid = _get_next_puzzle(puz_state)
                         if inp is not None:
                             assert lab is not None
-                            i = int(idx)
-                            inputs[i] = inp
-                            labels[i] = lab
-                            z_H[i] = H_init_single
-                            z_L[i] = L_init_single
-                            steps[i] = 0
-                            valid[i] = True
+                            inputs[idx] = inp
+                            labels[idx] = lab
+                            z_H[idx] = H_init_single
+                            z_L[idx] = L_init_single
+                            steps[idx] = 0
+                            valid[idx] = True
                         else:
-                            valid[int(idx)] = False
+                            valid[idx] = False
 
         cell_acc = 100 * total_cell_correct / total_cells if total_cells > 0 else 0.0
         puzzle_acc = 100 * total_correct / total_puzzles if total_puzzles > 0 else 0.0
@@ -1105,9 +1071,9 @@ class ExperimentBase:
         total_cells = 0
         total_puzzles = 0
 
-        # Batch state: [B, 81] for inputs/labels, [B, K, seq_len, hidden] for z
-        inputs = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
-        labels = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
+        grid_len = self.config.seq_len
+        inputs = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
+        labels = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
         z_H = torch.zeros(
             B,
             self.K,
@@ -1129,7 +1095,7 @@ class ExperimentBase:
         has_winner = torch.zeros(B, device=self.device, dtype=torch.bool)
         winner_logits = torch.zeros(
             B,
-            81,
+            grid_len,
             self.model.config.vocab_size,
             device=self.device,
             dtype=self.dtype,
@@ -1150,7 +1116,7 @@ class ExperimentBase:
         # Initialize batch
         for i in range(B):
             puzzle_idx = puz_state.samples_seen
-            inp, lab = _get_next_puzzle(puz_state)
+            inp, lab, _pid = _get_next_puzzle(puz_state)
             if inp is not None:
                 assert lab is not None
                 _reset_eval_slot(
@@ -1194,9 +1160,9 @@ class ExperimentBase:
                 logits_stack = out["logits"].reshape(
                     B,
                     self.K,
-                    81,
+                    grid_len,
                     -1,
-                )  # [B, K, 81, vocab]
+                )  # [B, K, grid_len, vocab]
 
                 steps += valid.int()
 
@@ -1216,7 +1182,7 @@ class ExperimentBase:
                     selected_logits = logits_stack[
                         batch_idx,
                         winner_head,
-                    ]  # [B, 81, vocab]
+                    ]  # [B, grid_len, vocab]
 
                     winner_logits[any_halted] = selected_logits[any_halted]
                     has_winner[any_halted] = True
@@ -1237,8 +1203,8 @@ class ExperimentBase:
                         preds = winner_logits[idx].argmax(dim=-1)
                         correct = (preds == labels[idx]).sum().item()
                         total_cells_correct += correct
-                        total_cells += 81
-                        total_correct += 1 if correct == 81 else 0
+                        total_cells += grid_len
+                        total_correct += 1 if correct == grid_len else 0
                         total_puzzles += 1
 
                         if progress and total_puzzles % 1000 == 0:
@@ -1251,7 +1217,7 @@ class ExperimentBase:
 
                         # Replace with new puzzle
                         puzzle_idx = puz_state.samples_seen
-                        inp, lab = _get_next_puzzle(puz_state)
+                        inp, lab, _pid = _get_next_puzzle(puz_state)
                         if inp is not None:
                             assert lab is not None
                             _reset_eval_slot(
@@ -1717,9 +1683,12 @@ class Experiment:
         inputs: Tensor,
         labels: Tensor,
         puzzle_ids: Tensor | None = None,
+        valid_count: int | None = None,
     ) -> dict[str, Tensor] | None:
         if self.current_step >= self.total_train_steps:
             return None
+        if valid_count is None:
+            valid_count = inputs.shape[0]
         if self.augment_sudoku:
             inputs, labels = augment_sudoku(inputs, labels)
 
@@ -1727,7 +1696,11 @@ class Experiment:
         max_h_steps, train_q_halt = self.max_steps_schedule[max(valid_keys)]
         state = self._state
 
-        self._enqueue(inputs, labels, puzzle_ids)
+        self._enqueue(
+            inputs[:valid_count],
+            labels[:valid_count],
+            puzzle_ids[:valid_count] if puzzle_ids is not None else None,
+        )
         self._fill_pending()
 
         forward_result = self._forward(state)
@@ -1789,14 +1762,32 @@ class Experiment:
             chains = state.chain_indices[active_samples]
             valid = chains >= 0
             valid_chains = chains[valid]
-            state.z_L[valid_chains] = forward_result["z_L"][valid_chains].detach()
-            winner_z_H = (
-                forward_result["z_H"][winner_chains]
-                .detach()
-                .unsqueeze(1)
-                .expand(-1, self.K, -1, -1)
-            )
-            state.z_H[valid_chains] = winner_z_H[valid]
+            carry_H = self.config.carry_H
+            carry_L = self.config.carry_L
+            if carry_H == "copy_top1":
+                winner_z_H = (
+                    forward_result["z_H"][winner_chains]
+                    .detach()
+                    .unsqueeze(1)
+                    .expand(-1, self.K, -1, -1)
+                )
+                state.z_H[valid_chains] = winner_z_H[valid]
+            elif carry_H == "all":
+                state.z_H[valid_chains] = forward_result["z_H"][valid_chains].detach()
+            else:
+                raise ValueError(f"Unsupported carry_H: {carry_H!r}")
+            if carry_L == "copy_top1":
+                winner_z_L = (
+                    forward_result["z_L"][winner_chains]
+                    .detach()
+                    .unsqueeze(1)
+                    .expand(-1, self.K, -1, -1)
+                )
+                state.z_L[valid_chains] = winner_z_L[valid]
+            elif carry_L == "all":
+                state.z_L[valid_chains] = forward_result["z_L"][valid_chains].detach()
+            else:
+                raise ValueError(f"Unsupported carry_L: {carry_L!r}")
             state.h_step[active_samples] += 1
 
         num_halted = 0
@@ -1952,6 +1943,25 @@ class Experiment:
                 self._pending_puzzle_ids = self._pending_puzzle_ids[num_filled:]
         return num_filled
 
+    def _run_h_cycles(
+        self,
+        core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],
+        embeddings: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+        cos_sin: tuple[Tensor, Tensor] | None,
+        cos_sin_detach: tuple[Tensor, Tensor] | None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        for _ in range(self.model.config.H_cycles - 1):
+            with torch.no_grad():
+                _logits, _q_halt, z_H, z_L = core(
+                    embeddings.detach(),
+                    z_H.detach(),
+                    z_L.detach(),
+                    cos_sin_detach,
+                )
+        return core(embeddings, z_H, z_L, cos_sin)
+
     def _forward(self, state: "TrainingState") -> ForwardResult:
         num_chains = state.num_chains
         active = state.batch_index >= 0
@@ -2052,15 +2062,14 @@ class Experiment:
                 if cos_sin is not None
                 else None
             )
-            for _ in range(self.model.config.H_cycles - 1):
-                with torch.no_grad():
-                    logits, q_halt, z_H, z_L = core(
-                        embeddings.detach(),
-                        z_H.detach(),
-                        z_L.detach(),
-                        cos_sin_detach,
-                    )
-            logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
+            logits, q_halt, z_H, z_L = self._run_h_cycles(
+                core,
+                embeddings,
+                z_H,
+                z_L,
+                cos_sin,
+                cos_sin_detach,
+            )
 
         # Slice output to exclude prefix positions
         # Sequence was: [puzzle_id_tokens..., register_tokens..., input...]
@@ -2201,77 +2210,26 @@ class Experiment:
         total_steps = 0
         halt_histogram = [0] * self.max_reasoning_steps
 
-        inputs = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
-        labels = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
+        grid_len = self.config.num_puzzle_grid_tokens
+        inputs = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
+        labels = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
         z_H, z_L = self._init_z(B)
         steps = torch.zeros(B, device=self.device, dtype=torch.int32)
         valid = torch.zeros(B, device=self.device, dtype=torch.bool)
 
-        H_init_single = self.model.H_init.squeeze(0)
-        L_init_single = self.model.L_init.squeeze(0)
-
-        puzzle_iter = iter(loader)
-        pending_inputs = None
-        pending_labels = None
-        pending_idx = 0
-        pending_valid = 0
-        samples_seen = 0
+        H_init_single = self.model.H_init[0]
+        L_init_single = self.model.L_init[0]
 
         puzzle_ids = torch.zeros(B, device=self.device, dtype=torch.int32)
-
-        def get_next_puzzle():
-            nonlocal \
-                pending_inputs, \
-                pending_labels, \
-                pending_puzzle_ids, \
-                pending_idx, \
-                pending_valid, \
-                samples_seen
-            if self.max_eval_samples >= 0 and samples_seen >= self.max_eval_samples:
-                return None, None, None
-            if pending_inputs is not None and pending_idx < pending_valid:
-                assert pending_labels is not None
-                inp = pending_inputs[pending_idx]
-                lab = pending_labels[pending_idx]
-                pid = (
-                    pending_puzzle_ids[pending_idx]
-                    if pending_puzzle_ids is not None
-                    else torch.tensor(0, dtype=torch.int32)
-                )
-                pending_idx += 1
-                samples_seen += 1
-                return inp, lab, pid
-            try:
-                batch = next(puzzle_iter)
-                pending_inputs = batch[0]
-                pending_labels = batch[1]
-                pending_puzzle_ids = batch[2]
-                pending_valid = batch[3]
-                pending_idx = 0
-                if pending_valid > 0:
-                    inp = pending_inputs[pending_idx]
-                    lab = pending_labels[pending_idx]
-                    pid = (
-                        pending_puzzle_ids[pending_idx]
-                        if pending_puzzle_ids is not None
-                        else torch.tensor(0, dtype=torch.int32)
-                    )
-                    pending_idx += 1
-                    samples_seen += 1
-                    return inp, lab, pid
-            except StopIteration:
-                pass
-            return None, None, None
-
-        pending_puzzle_ids = None
+        puz_state = _PuzzleIterState(iter(loader), self.max_eval_samples)
 
         for i in range(B):
-            inp, lab, pid = get_next_puzzle()
+            inp, lab, pid = _get_next_puzzle(puz_state)
             if inp is not None:
-                assert lab is not None and pid is not None  # noqa: PT018
+                assert lab is not None
                 inputs[i] = inp
                 labels[i] = lab
-                puzzle_ids[i] = pid
+                puzzle_ids[i] = pid if pid is not None else 0
                 valid[i] = True
 
         if not valid.any():
@@ -2295,13 +2253,13 @@ class Experiment:
                 if halted.any():
                     correct_mask = preds == labels
                     cell_correct_per_sample = correct_mask.sum(dim=1)
-                    puzzle_correct_per_sample = cell_correct_per_sample == 81
+                    puzzle_correct_per_sample = cell_correct_per_sample == grid_len
 
                     n_halted = halted.sum().item()
                     total_puzzles += n_halted
                     total_correct += puzzle_correct_per_sample[halted].sum().item()
                     total_cell_correct += cell_correct_per_sample[halted].sum().item()
-                    total_cells += 81 * n_halted
+                    total_cells += grid_len * n_halted
                     total_steps += steps[halted].sum().item()
 
                     halted_steps = steps[halted].cpu().tolist()
@@ -2311,21 +2269,19 @@ class Experiment:
 
                     halted_idx = halted.nonzero(as_tuple=True)[0]
                     for idx_tensor in halted_idx:
-                        idx = idx_tensor.item()
-                        inp, lab, pid = get_next_puzzle()
+                        idx = int(idx_tensor.item())
+                        inp, lab, pid = _get_next_puzzle(puz_state)
                         if inp is not None:
                             assert lab is not None
-                            assert pid is not None
-                            i = int(idx)
-                            inputs[i] = inp
-                            labels[i] = lab
-                            puzzle_ids[i] = pid
-                            z_H[i] = H_init_single
-                            z_L[i] = L_init_single
-                            steps[i] = 0
-                            valid[i] = True
+                            inputs[idx] = inp
+                            labels[idx] = lab
+                            puzzle_ids[idx] = pid if pid is not None else 0
+                            z_H[idx] = H_init_single
+                            z_L[idx] = L_init_single
+                            steps[idx] = 0
+                            valid[idx] = True
                         else:
-                            valid[int(idx)] = False
+                            valid[idx] = False
 
         cell_acc = 100 * total_cell_correct / total_cells if total_cells > 0 else 0.0
         puzzle_acc = 100 * total_correct / total_puzzles if total_puzzles > 0 else 0.0
@@ -2353,8 +2309,9 @@ class Experiment:
         total_cells = 0
         total_puzzles = 0
 
-        inputs = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
-        labels = torch.zeros(B, 81, device=self.device, dtype=torch.int32)
+        grid_len = self.config.num_puzzle_grid_tokens
+        inputs = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
+        labels = torch.zeros(B, grid_len, device=self.device, dtype=torch.int32)
         z_H = torch.zeros(
             B, self.K, seq_len, hidden, device=self.device, dtype=self.dtype
         )
@@ -2365,24 +2322,30 @@ class Experiment:
         valid = torch.zeros(B, device=self.device, dtype=torch.bool)
         has_winner = torch.zeros(B, device=self.device, dtype=torch.bool)
         winner_logits = torch.zeros(
-            B, 81, self.model.config.vocab_size, device=self.device, dtype=self.dtype
+            B,
+            grid_len,
+            self.model.config.vocab_size,
+            device=self.device,
+            dtype=self.dtype,
         )
 
-        H_init_single = self.model.H_init.squeeze(0)
+        H_init_single = self.model.H_init[0]
         L_inits = []
         for k in range(self.K):
             if hasattr(self.model, f"L_init_{k}"):
-                L_inits.append(getattr(self.model, f"L_init_{k}").squeeze(0))
+                L_inits.append(getattr(self.model, f"L_init_{k}")[0])
             else:
-                L_inits.append(self.model.L_init.squeeze(0))
+                L_inits.append(self.model.L_init[0])
 
+        puzzle_ids = torch.zeros(B, device=self.device, dtype=torch.int32)
         puz_state = _PuzzleIterState(iter(loader), self.max_eval_samples)
 
         for i in range(B):
             puzzle_idx = puz_state.samples_seen
-            inp, lab = _get_next_puzzle(puz_state)
+            inp, lab, pid = _get_next_puzzle(puz_state)
             if inp is not None:
                 assert lab is not None
+                puzzle_ids[i] = pid if pid is not None else 0
                 _reset_eval_slot(
                     self,
                     i,
@@ -2412,14 +2375,19 @@ class Experiment:
                 inputs_batched = (
                     inputs.unsqueeze(1).expand(B, self.K, -1).reshape(B * self.K, -1)
                 )
+                pids_batched = (
+                    puzzle_ids.unsqueeze(1).expand(B, self.K).reshape(B * self.K)
+                )
 
                 with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
-                    out = self.model(inputs_batched, z_H_batched, z_L_batched)
+                    out = self.model(
+                        inputs_batched, z_H_batched, z_L_batched, pids_batched
+                    )
 
                 z_H = out["z_H"].reshape(B, self.K, seq_len, -1)
                 z_L = out["z_L"].reshape(B, self.K, seq_len, -1)
                 q_halt_stack = out["q_halt"].reshape(B, self.K)
-                logits_stack = out["logits"].reshape(B, self.K, 81, -1)
+                logits_stack = out["logits"].reshape(B, self.K, grid_len, -1)
 
                 steps += valid.int()
                 can_win = valid & ~has_winner
@@ -2448,8 +2416,8 @@ class Experiment:
                         preds = winner_logits[idx].argmax(dim=-1)
                         correct = (preds == labels[idx]).sum().item()
                         total_cells_correct += correct
-                        total_cells += 81
-                        total_correct += 1 if correct == 81 else 0
+                        total_cells += grid_len
+                        total_correct += 1 if correct == grid_len else 0
                         total_puzzles += 1
 
                         if progress and total_puzzles % 1000 == 0:
@@ -2460,9 +2428,10 @@ class Experiment:
                             )
 
                         puzzle_idx = puz_state.samples_seen
-                        inp, lab = _get_next_puzzle(puz_state)
+                        inp, lab, pid = _get_next_puzzle(puz_state)
                         if inp is not None:
                             assert lab is not None
+                            puzzle_ids[idx] = pid if pid is not None else 0
                             _reset_eval_slot(
                                 self,
                                 idx,
@@ -2567,13 +2536,14 @@ class Experiment:
 
                         out_retry: dict[str, Tensor] = {}
                         assert self.device is not None
+                        puzzle_ids_stuck = puzzle_ids[stuck_idx]
                         for _ in range(self.max_reasoning_steps):
                             with torch.autocast(
                                 device_type=self.device.type,
                                 dtype=self.dtype,
                             ):
                                 out_retry = self.model(
-                                    inputs_stuck, z_H_retry, z_L_retry
+                                    inputs_stuck, z_H_retry, z_L_retry, puzzle_ids_stuck
                                 )
                             z_H_retry = out_retry["z_H"]
                             z_L_retry = out_retry["z_L"]
@@ -2955,13 +2925,12 @@ def train(experiment: ExperimentBase):
 
         try:
             samples, targets, puzzle_ids, valid_count = next(loader)
-            del valid_count  # TODO(josh): We need to be normalizing using this.
         except StopIteration:
             loader = iter(trainloader)
             continue
 
         prev_step = experiment.current_step
-        loss = experiment.step(samples, targets, puzzle_ids)
+        loss = experiment.step(samples, targets, puzzle_ids, valid_count)
         if loss is None:
             done = True
         else:
@@ -2996,7 +2965,7 @@ def main(
 
 
 def resume_from_checkpoint(
-    exp: "ExperimentBase",
+    exp: Any,
     ckpt_path: str,
     resume_optimizer: bool = True,
     resume_ema: bool = True,
@@ -3004,7 +2973,7 @@ def resume_from_checkpoint(
     """Resume experiment from checkpoint.
 
     Args:
-        exp: Experiment instance
+        exp: Experiment instance (ExperimentBase or Experiment)
         ckpt_path: Path to checkpoint file
         resume_optimizer: If True, load optimizer state. If False, fresh optimizers.
         resume_ema: If True, load EMA state. If False, copy model weights to EMA.
@@ -3054,7 +3023,19 @@ def resume_from_checkpoint(
                 if p.requires_grad and n in exp.ema.shadow:
                     exp.ema.shadow[n].copy_(p.data)
 
-    exp.act_carry = None
+    # Reset carry state — ExperimentBase uses act_carry, Experiment uses _state
+    if hasattr(exp, "act_carry"):
+        exp.act_carry = None
+    if hasattr(exp, "_state"):
+        exp._state = TrainingState(  # noqa: SLF001
+            num_chains=exp.num_chains,
+            num_puzzle_grid_tokens=exp.config.num_puzzle_grid_tokens,
+            total_seq_len=exp.config.total_seq_len,
+            hidden_size=exp.config.hidden_size,
+            K=exp.K,
+            device=exp.device,
+            dtype=exp.dtype,
+        )
     print(f"Resumed from {ckpt_path} at step {exp.current_step}")
 
 

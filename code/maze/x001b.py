@@ -20,7 +20,6 @@ _CFG = get_puzzle_config("maze")
 
 class Experiment(ExperimentBase):
     total_train_steps: int = 16_000
-    label_smoothing: float = 0.15  # WAS: 0.2
     use_ema: bool = False
     lr_warmup_steps: int = 0
     lr_min_ratio: float = 1.0
@@ -31,9 +30,9 @@ class Experiment(ExperimentBase):
     data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
     augment_sudoku: bool = False
     eval_every_steps: int = 500
-    batch_size: int = 128
+    batch_size: int = 42
     eval_batch_size: int | None = 256
-    K: int = 1
+    K: int = 4
     q_halt_weight: float = 0.05
 
     config: TRM3ConfigProtocol = dataclasses.replace(
@@ -43,10 +42,10 @@ class Experiment(ExperimentBase):
         H_cycles=3,
         L_cycles=4,
         K_H=1,
-        K_L=1,
-        carry_H="all",
+        K_L=4,
+        carry_H="copy_top1",
         carry_L="all",
-        z_L_init_svd=False,
+        z_L_init_svd=True,
         use_rope=True,
         num_heads=8,  # Only used for RoPE dim calculation
         num_puzzle_id_tokens=1,
@@ -70,8 +69,8 @@ class Experiment(ExperimentBase):
     def setup_optimizers(self) -> None:
         self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
             self.model,
-            muon_lr=0.010,  # WAS: 0.05
-            muon_wd=0.1,  # WAS: 1e-4/0.01=0.01
+            muon_lr=0.001,
+            muon_wd=0.02,  # 1e-4/0.005=0.01
         )
 
 

@@ -11,6 +11,7 @@ class Experiment(Experiment000l):
         self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
             self.model,
             muon_lr=0.010,
+            # muon_wd=1e-4/0.01=0.01
         )
 
 
