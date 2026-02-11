@@ -578,7 +578,7 @@ class ExperimentBase:
         )
 
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-            out = self.model(inputs_batched, z_H=z_H_batched, z_L=z_L_batched)
+            out = self._eval_forward(inputs_batched, z_H_batched, z_L_batched)
 
         # Reshape outputs back: [B*K, ...] -> [B, K, ...]
         logits_all = out["logits"].reshape(B, self.K, seq_len, -1)
@@ -760,7 +760,7 @@ class ExperimentBase:
         )
 
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-            out = self.model(inputs_batched, z_H=z_H_batched, z_L=z_L_batched)
+            out = self._eval_forward(inputs_batched, z_H_batched, z_L_batched)
 
         logits_all = out["logits"].reshape(B, self.K, seq_len, -1)
         q_halt_all = out["q_halt"].reshape(B, self.K)
@@ -942,6 +942,15 @@ class ExperimentBase:
             return self.evaluate_act_haltfast(loader)
         return self.evaluate_act_full(loader)
 
+    def _eval_forward(
+        self,
+        input_ids: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+    ) -> dict[str, Any]:
+        """Single ACT-step forward for eval. Override for prediction feedback."""
+        return self.model(input_ids, z_H, z_L)
+
     def evaluate_act_haltfast(self, loader: Any) -> tuple[float, float]:
         """Fast eval: streaming replacement when q_halt > 0, fixed batch size.
 
@@ -991,7 +1000,7 @@ class ExperimentBase:
             while valid.any():
                 # Forward pass
                 with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-                    out = self.model(inputs, z_H, z_L)
+                    out = self._eval_forward(inputs, z_H, z_L)
 
                 z_H = out["z_H"]
                 z_L = out["z_L"]
@@ -1151,7 +1160,7 @@ class ExperimentBase:
                 )
 
                 with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-                    out = self.model(inputs_batched, z_H_batched, z_L_batched)
+                    out = self._eval_forward(inputs_batched, z_H_batched, z_L_batched)
 
                 # Reshape outputs back: [B*K, ...] -> [B, K, ...]
                 z_H = out["z_H"].reshape(B, self.K, seq_len, -1)
@@ -1293,7 +1302,7 @@ class ExperimentBase:
                 out: dict[str, Tensor] = {}
                 for step in range(self.max_reasoning_steps):
                     with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-                        out = self.model(inputs, z_H, z_L)
+                        out = self._eval_forward(inputs, z_H, z_L)
                     z_H = out["z_H"]
                     z_L = out["z_L"]
                     q_halt = out["q_halt"]
@@ -1348,7 +1357,7 @@ class ExperimentBase:
                                 device_type=self.device.type,
                                 dtype=self.dtype,
                             ):
-                                out_retry = self.model(
+                                out_retry = self._eval_forward(
                                     inputs_stuck,
                                     z_H_retry,
                                     z_L_retry,
@@ -2194,6 +2203,18 @@ class Experiment:
             return self.evaluate_act_haltfast(loader)
         return self.evaluate_act_full(loader)
 
+    def _eval_forward(
+        self,
+        input_ids: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+        puzzle_ids: Tensor | None = None,
+    ) -> dict[str, Any]:
+        """Single ACT-step forward for eval. Override for prediction feedback."""
+        if puzzle_ids is not None:
+            return self.model(input_ids, z_H, z_L, puzzle_ids)
+        return self.model(input_ids, z_H, z_L)
+
     def evaluate_act_haltfast(self, loader: Any) -> tuple[float, float]:
         """Fast eval: streaming replacement when q_halt > 0, fixed batch size."""
         bs = (
@@ -2239,7 +2260,7 @@ class Experiment:
         with torch.no_grad():
             while valid.any():
                 with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
-                    out = self.model(inputs, z_H, z_L, puzzle_ids)
+                    out = self._eval_forward(inputs, z_H, z_L, puzzle_ids)
 
                 z_H = out["z_H"]
                 z_L = out["z_L"]
@@ -2380,7 +2401,7 @@ class Experiment:
                 )
 
                 with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
-                    out = self.model(
+                    out = self._eval_forward(
                         inputs_batched, z_H_batched, z_L_batched, pids_batched
                     )
 
@@ -2500,7 +2521,7 @@ class Experiment:
                 out: dict[str, Tensor] = {}
                 for step in range(self.max_reasoning_steps):
                     with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
-                        out = self.model(inputs, z_H, z_L, puzzle_ids)
+                        out = self._eval_forward(inputs, z_H, z_L, puzzle_ids)
                     z_H = out["z_H"]
                     z_L = out["z_L"]
                     q_halt = out["q_halt"]
@@ -2542,7 +2563,7 @@ class Experiment:
                                 device_type=self.device.type,
                                 dtype=self.dtype,
                             ):
-                                out_retry = self.model(
+                                out_retry = self._eval_forward(
                                     inputs_stuck, z_H_retry, z_L_retry, puzzle_ids_stuck
                                 )
                             z_H_retry = out_retry["z_H"]
