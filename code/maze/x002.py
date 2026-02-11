@@ -19,6 +19,8 @@ import torch
 
 
 class Experiment(Experiment000l):
+    feedback_preserves_emb_grad: bool = False
+
     def _pred_feedback(
         self,
         base_emb: Tensor,
@@ -52,7 +54,11 @@ class Experiment(Experiment000l):
                     z_L.detach(),
                     cos_sin_detach,
                 )
+            if self.feedback_preserves_emb_grad:
                 embeddings = self._pred_feedback(base_emb, logits, n_prefix)
+            else:
+                with torch.no_grad():
+                    embeddings = self._pred_feedback(base_emb, logits, n_prefix)
         return core(embeddings, z_H, z_L, cos_sin)
 
     def _eval_forward(
