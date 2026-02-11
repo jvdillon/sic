@@ -1,0 +1,128 @@
+Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias', 'puzzle_id_embed.weight')
+Muon 2D params: ('reasoning.0.attn.o_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.o_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
+Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasoning.1.attn.qkv_proj.weight')
+Saved step 0 checkpoint with RNG: /home/jvdillon/projects/sic/code/maze/ckpts/x006/step00000_rng.pt
+  cell_acc=87.28%, puzzle_acc=0.00%
+  eval_avg_halt_step: 16.00
+  per_H_acc: ['H0=50.2%', 'H1=87.3%', 'H2=87.3%']
+  H_cos: ['0.508', '0.934']
+  z_H_delta: ['13.688', '8.125']
+  cells: fixed=[77666, 0] broken=[232, 0]
+  per_ACT_cell_acc: ['H1=50.2%', 'H2=87.3%', 'H3=87.3%', 'H4=87.3%', 'H5=87.3%', 'H6=87.3%', 'H7=87.3%', 'H8=87.3%', 'H9=87.3%', 'H10=87.3%', 'H11=87.3%', 'H12=87.3%', 'H13=87.3%', 'H14=87.3%', 'H15=87.3%', 'H16=87.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
+  mean_sigmoid_q_halt: ['0.042', '0.026', '0.020', '0.023', '0.026', '0.027', '0.028', '0.029', '0.031', '0.032', '0.032', '0.032', '0.033', '0.034', '0.034', '0.035']
+  halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
+  halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+  Avg ACT steps (last 100): 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x006/step00500.pt acc=87.28% (0.057s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x006/best.pt acc=87.28% (0.110s)
+Step   500  Test 87.28% /  0.00%  Train lm=1.0781±0.2852ϵ[0.9141,3.0000] n_halted=7.8769±30.8197ϵ[0.0000,128.0000]  (36.637s / 414.817s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  cell_acc=86.75%, puzzle_acc=0.00%
+  eval_avg_halt_step: 16.00
+  per_H_acc: ['H0=87.5%', 'H1=87.3%', 'H2=87.5%']
+  H_cos: ['0.746', '0.910']
+  z_H_delta: ['18.625', '25.250']
+  cells: fixed=[0, 464] broken=[464, 0]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=87.3%', 'H3=87.5%', 'H4=87.3%', 'H5=86.7%', 'H6=86.6%', 'H7=86.7%', 'H8=86.7%', 'H9=86.7%', 'H10=86.7%', 'H11=86.7%', 'H12=86.7%', 'H13=86.7%', 'H14=86.7%', 'H15=86.7%', 'H16=86.7%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
+  mean_sigmoid_q_halt: ['0.117', '0.007', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000']
+  halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
+  halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+  Avg ACT steps (last 100): 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x006/step01000.pt acc=86.75% (0.058s)
+Step  1000  Test 86.75% /  0.00%  Train lm=1.0859±0.2832ϵ[0.9023,2.5000] n_halted=7.8769±30.8197ϵ[0.0000,128.0000]  (27.954s / 404.294s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  cell_acc=87.50%, puzzle_acc=0.00%
+  eval_avg_halt_step: 16.00
+  per_H_acc: ['H0=87.5%', 'H1=87.5%', 'H2=87.5%']
+  H_cos: ['0.941', '0.984']
+  z_H_delta: ['15.250', '8.312']
+  cells: fixed=[0, 9] broken=[0, 1]
+  per_ACT_cell_acc: ['H1=87.5%', 'H2=87.5%', 'H3=87.5%', 'H4=87.5%', 'H5=87.5%', 'H6=87.5%', 'H7=87.5%', 'H8=87.5%', 'H9=87.5%', 'H10=87.5%', 'H11=87.5%', 'H12=87.5%', 'H13=87.5%', 'H14=87.5%', 'H15=87.5%', 'H16=87.5%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
+  mean_sigmoid_q_halt: ['0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000']
+  halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
+  halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
+  Avg ACT steps (last 100): 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x006/step01500.pt acc=87.50% (0.054s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x006/best.pt acc=87.50% (0.135s)
+Step  1500  Test 87.50% /  0.00%  Train lm=0.9531±0.1299ϵ[0.8867,1.9453] n_halted=7.8769±30.8197ϵ[0.0000,128.0000]  (28.076s / 404.310s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+Traceback (most recent call last):
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 2985, in main
+    return train(experiment)  # pyright: ignore[reportArgumentType]
+           ^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 2954, in train
+    loss = experiment.step(samples, targets, puzzle_ids, valid_count)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/maze/x006.py", line 285, in step
+    self._do_rewind(halt_batch_list)
+  File "/home/jvdillon/projects/sic/code/maze/x006.py", line 156, in _do_rewind
+    _logits, z_H_out, z_L_out = self._core_forward(tokens, z_H_in, z_L_in)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/maze/x006.py", line 96, in _core_forward
+    logits, _q_halt, z_H_out, z_L_out = self._run_h_cycles(
+                                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/maze/x006.py", line 65, in _run_h_cycles
+    result = checkpoint(
+             ^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_compile.py", line 53, in inner
+    return disable_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/utils/checkpoint.py", line 503, in checkpoint
+    ret = function(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 832, in compile_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/model.py", line 2209, in core_compiled
+    @torch.compile(mode="default", fullgraph=True)
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/aot_autograd.py", line 1130, in forward
+    return compiled_fn(full_args)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 339, in runtime_wrapper
+    all_outs = call_func_at_runtime_with_args(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+                            ^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/utils.py", line 103, in g
+    return f(*args)
+           ^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/autograd/function.py", line 581, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 2118, in forward
+    fw_outs = call_func_at_runtime_with_args(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/utils.py", line 129, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+                            ^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 526, in wrapper
+    return compiled_fn(runtime_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 724, in inner_fn
+    outs = compiled_fn(args)
+           ^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_inductor/output_code.py", line 613, in __call__
+    return self.current_callable(inputs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_inductor/utils.py", line 2962, in run
+    out = model(new_inputs)
+          ^^^^^^^^^^^^^^^^^
+  File "/tmp/torchinductor_jvdillon/5p/c5pcbxtc2rxdtwbhvnzpvvcbgqhbfxecdqxah2un74jer3bxqcim.py", line 1402, in call
+    triton_per_fused__to_copy__unsafe_view_add_mean_mul_pow_rsqrt_5.run(buf180, buf182, buf174, buf183, 117248, 512, stream=stream0)
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_inductor/runtime/triton_heuristics.py", line 1310, in run
+    return launcher(
+           ^^^^^^^^^
+  File "<string>", line 5, in launcher
+  File "/home/jvdillon/projects/sic/.venv/lib/python3.11/site-packages/torch/_inductor/runtime/static_cuda_launcher.py", line 244, in run
+    _StaticCudaLauncher._launch_kernel(
+KeyboardInterrupt
