@@ -27,9 +27,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+import dataclasses
 
 from maze.x000l import Experiment as Experiment000l
+from model import TRM3, TRM3ConfigProtocol
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
@@ -41,6 +44,11 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment000l):
+    config: TRM3ConfigProtocol = dataclasses.replace(
+        cast(TRM3.Config, Experiment000l.config),
+        max_num_compile_core=4,
+    )
+
     def __init__(self) -> None:
         super().__init__()
         self._z_traj: dict[int, list[tuple[Tensor, Tensor]]] = defaultdict(list)

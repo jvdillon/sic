@@ -536,6 +536,7 @@ class Attention(nn.Module):
         causal: bool = False,
         muon_modified: bool = False,
         checkpoint_muon_norm: bool = False,
+        qk_norm: bool = False,
         norm_fn: Callable[[int], nn.Module] = default_norm_fn,
         init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
@@ -565,6 +566,7 @@ class Attention(nn.Module):
             init_weight_fn=init_weight_fn,
         )
         self.o_norm = norm_fn(c_in) if muon_modified else None
+        self.qk_norm = norm_fn(self.head_dim) if qk_norm else None
 
     def forward(
         self,
@@ -579,6 +581,10 @@ class Attention(nn.Module):
             ],
             dim=-2,
         )
+
+        if self.qk_norm is not None:
+            q = self.qk_norm(q)
+            k = self.qk_norm(k)
 
         if cos_sin is not None:
             cos, sin = cos_sin
@@ -684,6 +690,7 @@ class TransformerBlock(nn.Module):
         causal: bool = False,
         attn_muon_modified: bool = False,
         attn_checkpoint_muon_norm: bool = False,
+        attn_qk_norm: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
     ):
         super().__init__()
@@ -694,6 +701,7 @@ class TransformerBlock(nn.Module):
             causal=causal,
             muon_modified=attn_muon_modified,
             checkpoint_muon_norm=attn_checkpoint_muon_norm,
+            qk_norm=attn_qk_norm,
             norm_fn=norm_fn,
             init_weight_fn=attn_init_weight_fn,
         )
