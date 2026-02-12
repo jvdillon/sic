@@ -349,6 +349,81 @@ class ExperimentBase:
             "labels": torch.zeros(B, seq_len, device=self.device, dtype=torch.long),
         }
 
+    def _compute_act_loss(
+        self,
+        carry: dict[str, Tensor],
+        was_running: Tensor,
+        logits: Tensor,
+        all_logits: list[Tensor],
+        q_halt: Tensor,
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        """Compute total loss for one ACT step. Override for custom losses."""
+        n_active = was_running.sum().clamp(min=1).float()
+        seq_len = logits.shape[-2]
+        active_logits = logits[was_running]
+        active_labels = carry["labels"][was_running]
+
+        per_token_loss = nn.functional.cross_entropy(
+            active_logits.reshape(-1, active_logits.shape[-1]),
+            active_labels.reshape(-1).long(),
+            label_smoothing=self.label_smoothing,
+            reduction="none",
+        ).reshape(-1, seq_len)
+        lm_loss = per_token_loss.mean(dim=-1).sum() / n_active
+
+        diversity_loss = (
+            compute_diversity_loss([t[was_running] for t in all_logits])
+            if self.diversity_weight > 0
+            else torch.tensor(0.0, device=self.device)
+        )
+
+        entropy_loss = torch.tensor(0.0, device=self.device)
+        if self.early_entropy_weight > 0:
+            active_steps = carry["steps"][was_running]
+            early_mask = active_steps <= self.early_entropy_steps
+            if early_mask.any():
+                early_logits = active_logits[early_mask]
+                log_probs = torch.log_softmax(early_logits, dim=-1)
+                probs = torch.softmax(early_logits, dim=-1)
+                entropy = -(probs * log_probs).sum(dim=-1).mean()
+                entropy_loss = -self.early_entropy_weight * entropy
+
+        with torch.no_grad():
+            preds = active_logits.argmax(dim=-1)
+            correct = preds == active_labels
+            q_halt_target = correct.all(dim=-1).float()
+
+        active_q_halt = q_halt[was_running]
+        q_halt_loss = (
+            nn.functional.binary_cross_entropy_with_logits(
+                active_q_halt,
+                q_halt_target,
+                reduction="sum",
+            )
+            / n_active
+        )
+
+        if self.current_step < self.q_halt_warmup_steps:
+            q_halt_loss = torch.tensor(0.0, device=self.device)
+
+        total_loss = (
+            lm_loss
+            + self.q_halt_weight * q_halt_loss
+            + self.diversity_weight * diversity_loss
+            + entropy_loss
+        )
+        return total_loss, {
+            "lm": lm_loss.detach(),
+            "q_halt": q_halt_loss.detach(),
+        }
+
+    def _act_post_backward(
+        self,
+        carry: dict[str, Tensor],
+        was_running: Tensor,
+    ) -> None:
+        """Hook called after backward() but before _update_weights()."""
+
     def _step_act(
         self,
         inputs: Tensor,
@@ -416,61 +491,11 @@ class ExperimentBase:
             new_z_H = out["z_H"]
             new_z_L = out["z_L"]
 
-        # Compute losses — only on valid (was_running) slots.
-        active_logits = logits[was_running]
-        active_labels = carry["labels"][was_running]
-        per_token_loss = nn.functional.cross_entropy(
-            active_logits.reshape(-1, active_logits.shape[-1]),
-            active_labels.reshape(-1).long(),
-            label_smoothing=self.label_smoothing,
-            reduction="none",
-        ).reshape(-1, seq_len)
-        lm_loss = per_token_loss.mean(dim=-1).sum() / n_active
-
-        # Diversity loss on H iterations
-        diversity_loss = (
-            compute_diversity_loss([t[was_running] for t in all_logits])
-            if self.diversity_weight > 0
-            else torch.tensor(0.0, device=self.device)
-        )
-
-        # Entropy bonus on early steps (per-sample masking)
-        entropy_loss = torch.tensor(0.0, device=self.device)
-        if self.early_entropy_weight > 0:
-            active_steps = carry["steps"][was_running]
-            early_mask = active_steps <= self.early_entropy_steps
-            if early_mask.any():
-                early_logits = active_logits[early_mask]
-                log_probs = torch.log_softmax(early_logits, dim=-1)
-                probs = torch.softmax(early_logits, dim=-1)
-                entropy = -(probs * log_probs).sum(dim=-1).mean()
-                entropy_loss = -self.early_entropy_weight * entropy
-
-        with torch.no_grad():
-            preds = active_logits.argmax(dim=-1)
-            correct = preds == active_labels
-            q_halt_target = correct.all(dim=-1).float()
-
-        active_q_halt = q_halt[was_running]
-        q_halt_loss = (
-            nn.functional.binary_cross_entropy_with_logits(
-                active_q_halt,
-                q_halt_target,
-                reduction="sum",
-            )
-            / n_active
-        )
-
-        if self.current_step < self.q_halt_warmup_steps:
-            q_halt_loss = torch.tensor(0.0, device=self.device)
-
-        total_loss = (
-            lm_loss
-            + self.q_halt_weight * q_halt_loss
-            + self.diversity_weight * diversity_loss
-            + entropy_loss
+        total_loss, loss_dict = self._compute_act_loss(
+            carry, was_running, logits, all_logits, q_halt,
         )
         total_loss.backward()
+        self._act_post_backward(carry, was_running)
         self._update_weights()
 
         carry["z_H"] = new_z_H.detach()
@@ -496,10 +521,7 @@ class ExperimentBase:
             # Unfilled slots stay halted until real data arrives.
             carry["halted"] = torch.where(was_running, new_halted, True)
 
-        return {
-            "lm": lm_loss.detach(),
-            "q_halt": q_halt_loss.detach(),
-        }
+        return loss_dict
 
     def _step_act_wta(
         self,

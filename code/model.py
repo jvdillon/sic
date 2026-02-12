@@ -91,6 +91,7 @@ class TRM3ConfigProtocol(Protocol):
     L_cycles: int
     head_bias: bool
     block_fn: Callable[[int], nn.Module]
+    block_kwargs_by_layer: dict[int, dict[str, Any]]
     compile_core: bool
     compile_reasoning: bool
     max_num_compile_core: int
@@ -119,6 +120,7 @@ class TRM3ConfigProtocol(Protocol):
         "all",
         "none",
     ]
+    core_damping: float
 
     @property
     def total_seq_len(self) -> int: ...
@@ -692,8 +694,10 @@ class TransformerBlock(nn.Module):
         attn_checkpoint_muon_norm: bool = False,
         attn_qk_norm: bool = False,
         attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
+        checkpoint: bool = False,
     ):
         super().__init__()
+        self.checkpoint = checkpoint
         self.attn = Attention(
             c_in,
             num_heads=num_heads,
@@ -719,7 +723,7 @@ class TransformerBlock(nn.Module):
         self.norm1 = norm_fn(c_in)
         self.norm2 = norm_fn(c_in)
 
-    def forward(
+    def _forward(
         self,
         x: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None = None,
@@ -735,6 +739,17 @@ class TransformerBlock(nn.Module):
             x = x + self.mlp(x)
             x = self.norm2(x)
         return x
+
+    def forward(
+        self,
+        x: Tensor,
+        cos_sin: tuple[Tensor, Tensor] | None = None,
+    ) -> Tensor:
+        if self.checkpoint and x.requires_grad:
+            return torch.utils.checkpoint.checkpoint(
+                self._forward, x, cos_sin, use_reentrant=False,
+            )
+        return self._forward(x, cos_sin)
 
 
 class MLPMixerBlock(nn.Module):
@@ -1197,6 +1212,9 @@ class TRM3(nn.Module):
             seq_len=num_puzzle_grid_tokens + 1,  # grid + 1 register (default)
             init_weight_fn=trunc_normal_init_,
         )
+        block_kwargs_by_layer: dict[int, dict[str, Any]] = dataclasses.field(
+            default_factory=dict,
+        )
         compile_core: bool = True
         compile_reasoning: bool = False
         max_num_compile_core: int = 3
@@ -1276,6 +1294,11 @@ class TRM3(nn.Module):
         # Whether TRM3.__init__ casts all params/buffers to config.dtype via self.to().
         # Set False to keep RoPE buffers in float32 (needed for b4b match with reference).
         cast_model_to_dtype: bool = True
+
+        # Damping factor for iterative reasoning: z = (1-α)·z + α·reasoning(z).
+        # 0.0 = no damping (default), 0.5 = half step. Enforces contractivity
+        # when reasoning block uses post-norm (which constrains output magnitude).
+        core_damping: float = 0.0
 
         @property
         def total_seq_len(self) -> int:
@@ -1382,7 +1405,13 @@ class TRM3(nn.Module):
         # PRNG_EQUIVALENCE: Must consume RNG for backwards compat.
         _ = normal_init_(torch.empty_like(self.q_head.weight))
         self.reasoning = Sequential(
-            *[config.block_fn(config.hidden_size) for _ in range(config.num_layers)],
+            *[
+                config.block_fn(
+                    config.hidden_size,
+                    **config.block_kwargs_by_layer.get(i, {}),
+                )
+                for i in range(config.num_layers)
+            ],
         )
 
         # Puzzle ID embedding: per-puzzle learned tokens
@@ -2256,10 +2285,16 @@ class TRM3(nn.Module):
 
         """
         L_cycles = self.config.L_cycles
+        alpha = self.config.core_damping
         c = z_H + input_emb
-        for _ in range(L_cycles):
-            z_L = self.reasoning(z_L + c, cos_sin)
-        z_H = self.reasoning(z_H + z_L, cos_sin)
+        if alpha > 0:
+            for _ in range(L_cycles):
+                z_L = (1 - alpha) * z_L + alpha * self.reasoning(z_L + c, cos_sin)
+            z_H = (1 - alpha) * z_H + alpha * self.reasoning(z_H + z_L, cos_sin)
+        else:
+            for _ in range(L_cycles):
+                z_L = self.reasoning(z_L + c, cos_sin)
+            z_H = self.reasoning(z_H + z_L, cos_sin)
 
         logits = self.head(z_H)
         q_halt = self.q_head(z_H[:, self.config.q_halt_seq_index]).squeeze(-1)
