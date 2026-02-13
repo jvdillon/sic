@@ -5,6 +5,7 @@ Evaluates 4 checkpoints × 2 splits, saves per-cell logits and q_halt at each st
 
 from collections import deque
 from pathlib import Path
+from typing import Any
 
 import pickle
 import sys
@@ -20,7 +21,8 @@ from data import load_puzzle_dataset
 
 def load_model(exp_module_name: str, ckpt_path: str, device: torch.device):
     """Load experiment and checkpoint."""
-    import importlib
+    import importlib  # noqa: PLC0415
+
     mod = importlib.import_module(f"maze.{exp_module_name}")
     exp = mod.Experiment()
     # Move model to target device if needed
@@ -41,13 +43,13 @@ def load_model(exp_module_name: str, ckpt_path: str, device: torch.device):
 
 
 def collect_trajectories(
-    exp,
+    exp: Any,
     inputs: torch.Tensor,
     labels: torch.Tensor,
     device: torch.device,
     max_steps: int = 16,
     batch_size: int = 128,
-) -> dict:
+) -> dict[str, Any]:
     """Run max_steps ACT steps, collect logits and q_halt at each step."""
     ema = exp.ema
     use_ema = ema is not None
@@ -68,7 +70,7 @@ def collect_trajectories(
             inp = inputs[start:end].to(device)
             B = inp.shape[0]
 
-            z_H, z_L = exp._init_z(B)
+            z_H, z_L = exp._init_z(B)  # noqa: SLF001
             puzzle_ids = torch.zeros(B, device=device, dtype=torch.long)
 
             for step in range(max_steps):
@@ -79,7 +81,9 @@ def collect_trajectories(
                 logits = out["logits"]  # [B, grid_len, vocab]
                 q_halt = out["q_halt"]  # [B]
 
-                all_logits[start:end, step] = logits.cpu().float().numpy().astype(np.float16)
+                all_logits[start:end, step] = (
+                    logits.cpu().float().numpy().astype(np.float16)
+                )
                 all_q_halt[start:end, step] = q_halt.cpu().float().numpy()
 
             if (end - 1) % 500 < batch_size:
@@ -97,7 +101,7 @@ def collect_trajectories(
     }
 
 
-def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict:
+def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict[str, Any]:
     """Compute maze structural features: path length, wrong turns, depths."""
     grid = inp.reshape(30, 30)
     sol = lab.reshape(30, 30)
@@ -105,9 +109,15 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict:
     starts = np.argwhere(grid == 3)
     ends = np.argwhere(grid == 4)
     if len(starts) == 0 or len(ends) == 0:
-        return {"path_len": 0, "wrong_turns": 0, "max_wrong_depth": 0,
-                "mean_wrong_depth": 0, "total_wrong_cells": 0,
-                "start": (-1, -1), "end": (-1, -1)}
+        return {
+            "path_len": 0,
+            "wrong_turns": 0,
+            "max_wrong_depth": 0,
+            "mean_wrong_depth": 0,
+            "total_wrong_cells": 0,
+            "start": (-1, -1),
+            "end": (-1, -1),
+        }
 
     start = tuple(starts[0])
     end = tuple(ends[0])
@@ -120,7 +130,12 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict:
     for r, c in solution_cells:
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
-            if 0 <= nr < 30 and 0 <= nc < 30 and grid[nr, nc] >= 2 and (nr, nc) not in solution_cells:
+            if (
+                0 <= nr < 30
+                and 0 <= nc < 30
+                and grid[nr, nc] >= 2
+                and (nr, nc) not in solution_cells
+            ):
                 # BFS to measure depth of this dead-end branch
                 visited = set()
                 q = deque([(nr, nc)])
@@ -129,10 +144,13 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict:
                     wr, wc = q.popleft()
                     for ddr, ddc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                         wnr, wnc = wr + ddr, wc + ddc
-                        if (0 <= wnr < 30 and 0 <= wnc < 30
-                                and (wnr, wnc) not in visited
-                                and grid[wnr, wnc] >= 2
-                                and (wnr, wnc) not in solution_cells):
+                        if (
+                            0 <= wnr < 30
+                            and 0 <= wnc < 30
+                            and (wnr, wnc) not in visited
+                            and grid[wnr, wnc] >= 2
+                            and (wnr, wnc) not in solution_cells
+                        ):
                             visited.add((wnr, wnc))
                             q.append((wnr, wnc))
                 wrong_turn_depths.append(len(visited))
@@ -154,7 +172,9 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict:
         "path_len": len(solution_cells),
         "wrong_turns": len(wrong_turn_depths),
         "max_wrong_depth": max(wrong_turn_depths) if wrong_turn_depths else 0,
-        "mean_wrong_depth": float(np.mean(wrong_turn_depths)) if wrong_turn_depths else 0,
+        "mean_wrong_depth": float(np.mean(wrong_turn_depths))
+        if wrong_turn_depths
+        else 0,
         "total_wrong_cells": sum(wrong_turn_depths),
         "start": start,
         "end": end,
@@ -170,27 +190,85 @@ def main():
     # Configuration: (exp_module, ckpt_step, data_dir, split, n_puzzles, label)
     configs = [
         # x07b (augmented) - train: first 250 instances = rows 0..1999
-        ("x07b", 9500, "/opt/scratch/datasets/maze-30x30-hard-1k-aug", "train", 2000, "x07b_train_9500"),
-        ("x07b", 7500, "/opt/scratch/datasets/maze-30x30-hard-1k-aug", "train", 2000, "x07b_train_7500"),
+        (
+            "x07b",
+            9500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
+            "train",
+            2000,
+            "x07b_train_9500",
+        ),
+        (
+            "x07b",
+            7500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
+            "train",
+            2000,
+            "x07b_train_7500",
+        ),
         # x07b test
-        ("x07b", 9500, "/opt/scratch/datasets/maze-30x30-hard-1k-aug", "test", 250, "x07b_test_9500"),
-        ("x07b", 7500, "/opt/scratch/datasets/maze-30x30-hard-1k-aug", "test", 250, "x07b_test_7500"),
+        (
+            "x07b",
+            9500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
+            "test",
+            250,
+            "x07b_test_9500",
+        ),
+        (
+            "x07b",
+            7500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
+            "test",
+            250,
+            "x07b_test_7500",
+        ),
         # x07 (non-augmented) - train
-        ("x07", 12500, "/opt/scratch/datasets/maze-30x30-hard-1k", "train", 250, "x07_train_12500"),
-        ("x07", 6500, "/opt/scratch/datasets/maze-30x30-hard-1k", "train", 250, "x07_train_6500"),
+        (
+            "x07",
+            12500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k",
+            "train",
+            250,
+            "x07_train_12500",
+        ),
+        (
+            "x07",
+            6500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k",
+            "train",
+            250,
+            "x07_train_6500",
+        ),
         # x07 test
-        ("x07", 12500, "/opt/scratch/datasets/maze-30x30-hard-1k", "test", 250, "x07_test_12500"),
-        ("x07", 6500, "/opt/scratch/datasets/maze-30x30-hard-1k", "test", 250, "x07_test_6500"),
+        (
+            "x07",
+            12500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k",
+            "test",
+            250,
+            "x07_test_12500",
+        ),
+        (
+            "x07",
+            6500,
+            "/opt/scratch/datasets/maze-30x30-hard-1k",
+            "test",
+            250,
+            "x07_test_6500",
+        ),
     ]
 
     results = {}
 
     for exp_name, step, data_dir, split, n_puzzles, label in configs:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Collecting: {label}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
-        ckpt_path = str(Path(__file__).parent / "ckpts" / exp_name / f"step{step:05d}.pt")
+        ckpt_path = str(
+            Path(__file__).parent / "ckpts" / exp_name / f"step{step:05d}.pt"
+        )
         print(f"  Checkpoint: {ckpt_path}")
 
         # Load data
@@ -214,18 +292,24 @@ def main():
             structures = []
             for i in range(n_instances):
                 base_idx = i * 8
-                structures.append(analyze_maze_structure(
-                    traj["inputs"][base_idx], traj["labels"][base_idx]
-                ))
+                structures.append(
+                    analyze_maze_structure(
+                        traj["inputs"][base_idx], traj["labels"][base_idx]
+                    )
+                )
         else:
             structures = []
             for i in range(min(250, len(inputs))):
-                structures.append(analyze_maze_structure(
-                    traj["inputs"][i], traj["labels"][i]
-                ))
+                structures.append(
+                    analyze_maze_structure(traj["inputs"][i], traj["labels"][i])
+                )
 
         traj["maze_structures"] = structures
-        traj["group_indices"] = group_indices[:n_puzzles + 1].numpy() if len(group_indices) > n_puzzles else group_indices.numpy()
+        traj["group_indices"] = (
+            group_indices[: n_puzzles + 1].numpy()
+            if len(group_indices) > n_puzzles
+            else group_indices.numpy()
+        )
         results[label] = traj
 
         # Quick summary
@@ -238,7 +322,7 @@ def main():
         torch.cuda.empty_cache()
 
     print(f"\nSaving to {out_path}...")
-    with open(out_path, "wb") as f:
+    with out_path.open("wb") as f:
         pickle.dump(results, f)
     print(f"Done. File size: {out_path.stat().st_size / 1e6:.1f} MB")
 

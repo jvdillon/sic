@@ -105,17 +105,19 @@ class Experiment(ExperimentBase):
         all_logits: list[Tensor],
         q_halt: Tensor,
     ) -> tuple[Tensor, dict[str, Tensor]]:
-        total_loss, loss_dict = super()._compute_act_loss(
-            carry, was_running, logits, all_logits, q_halt,
+        total_loss, loss_dict = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]
+            carry,
+            was_running,
+            logits,
+            all_logits,
+            q_halt,
         )
         # Probe reasoning block Lipschitz constant via finite difference.
         x = carry["z_L"][:1].detach()
         eps_vec = torch.randn_like(x)
         eps_vec = eps_vec / eps_vec.norm() * self.lip_eps
-        cos_sin = (
-            None if self.model.rope is None
-            else self.model.rope()
-        )
+        cos_sin = None if self.model.rope is None else self.model.rope()
+        assert self.device is not None
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             f_x = self.model.reasoning(x, cos_sin)
             f_x_eps = self.model.reasoning(x + eps_vec, cos_sin)

@@ -50,7 +50,9 @@ def _test_config() -> TRM3.Config:
         cast_model_to_dtype=False,
         num_register_tokens=0,
         block_fn=functools.partial(
-            MLPMixerBlock, seq_len=81, init_weight_fn=trunc_normal_init_,
+            MLPMixerBlock,
+            seq_len=81,
+            init_weight_fn=trunc_normal_init_,
         ),
     )
 
@@ -141,7 +143,7 @@ def test_reset_transient_state():
     exp.reset_transient_state()
 
     # _state should be fresh
-    assert exp._state.h_step.sum() == 0  # noqa: SLF001
+    assert exp._state.h_step.sum() == 0  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
 
 def test_resume_from_checkpoint_new_format():
@@ -264,7 +266,7 @@ def test_fast_eval_streaming_replacement():
             out["q_halt"] = torch.full_like(q_halt, -10.0)
         return out
 
-    exp.model.forward = tracking_forward  # pyright: ignore[reportAttributeAccessIssue]
+    exp.model.forward = tracking_forward
 
     grid_len = exp.config.num_puzzle_grid_tokens
     all_inputs = [torch.randint(low=1, high=11, size=(2, grid_len)) for _ in range(3)]
@@ -314,7 +316,7 @@ def test_fast_eval_metrics_at_halt_time():
 
         return out
 
-    exp.model.forward = controlled_forward  # pyright: ignore[reportAttributeAccessIssue]
+    exp.model.forward = controlled_forward
 
     grid_len = exp.config.num_puzzle_grid_tokens
     B = 2
@@ -355,7 +357,7 @@ def test_no_recompilation_all_paths():
         call_signatures.append(sig)
         return originalcore(input_emb, z_H, z_L, cos_sin)
 
-    model.core = trackingcore  # pyright: ignore[reportAttributeAccessIssue]
+    model.core = trackingcore
 
     B = 4
     grid_len = config.num_puzzle_grid_tokens
@@ -447,7 +449,9 @@ def test_wta_batched_vs_sequential():
         cast_model_to_dtype=False,
         num_register_tokens=0,
         block_fn=functools.partial(
-            MLPMixerBlock, seq_len=81, init_weight_fn=trunc_normal_init_,
+            MLPMixerBlock,
+            seq_len=81,
+            init_weight_fn=trunc_normal_init_,
         ),
     )
     model = config.setup()

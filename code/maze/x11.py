@@ -108,17 +108,14 @@ class Experiment(ExperimentBase):
         carry: dict[str, Tensor],
         was_running: Tensor,
     ) -> None:
-        # Called after backward() but before _update_weights().
-        # We do the mixing after _update_weights by overriding it.
-        pass
+        del carry, was_running
 
     def _update_weights(self) -> None:
         super()._update_weights()
         # Initialize EMA on first call.
         if self._act_ema is None:
             self._act_ema = {
-                n: p.data.clone()
-                for n, p in self.model.named_parameters()
+                n: p.data.clone() for n, p in self.model.named_parameters()
             }
             return
         ema = self._act_ema

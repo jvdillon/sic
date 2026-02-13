@@ -1,5 +1,7 @@
 """Replay a bad step from saved full state with instrumentation."""
 
+from typing import Any
+
 import random
 import sys
 
@@ -10,12 +12,14 @@ from util import numpy_rng
 import torch
 
 
-SNAPSHOT_PATH = sys.argv[1] if len(sys.argv) > 1 else (
-    "maze/ckpts/debug_x005_drop/pre_step03582.pt"
+SNAPSHOT_PATH = (
+    sys.argv[1]
+    if len(sys.argv) > 1
+    else ("maze/ckpts/debug_x005_drop/pre_step03582.pt")
 )
 
 
-def restore_rng(snap):
+def restore_rng(snap: Any) -> None:
     random.setstate(snap["rng_python"])
     numpy_rng.bit_generator.state = snap["rng_numpy"]
     torch.set_rng_state(snap["rng_torch"])
@@ -23,7 +27,7 @@ def restore_rng(snap):
         torch.cuda.set_rng_state(t, i)
 
 
-def restore_training_state(exp, snap):
+def restore_training_state(exp: Any, snap: Any) -> None:
     state = exp._state  # noqa: SLF001
     state.z_H.copy_(snap["z_H"].to(state.z_H.device))
     state.z_L.copy_(snap["z_L"].to(state.z_L.device))
@@ -34,10 +38,10 @@ def restore_training_state(exp, snap):
     state.puzzle_ids.copy_(snap["puzzle_ids"].to(state.puzzle_ids.device))
     state.chain_indices.copy_(snap["chain_indices"].to(state.chain_indices.device))
     state.active.copy_(snap["active"].to(state.active.device))
-    exp._wrong_count.copy_(snap["_wrong_count"].to(exp._wrong_count.device))
-    exp._pending_inputs = snap["_pending_inputs"].to(exp.device)
-    exp._pending_labels = snap["_pending_labels"].to(exp.device)
-    exp._pending_puzzle_ids = snap["_pending_puzzle_ids"].to(exp.device)
+    exp._wrong_count.copy_(snap["_wrong_count"].to(exp._wrong_count.device))  # noqa: SLF001
+    exp._pending_inputs = snap["_pending_inputs"].to(exp.device)  # noqa: SLF001
+    exp._pending_labels = snap["_pending_labels"].to(exp.device)  # noqa: SLF001
+    exp._pending_puzzle_ids = snap["_pending_puzzle_ids"].to(exp.device)  # noqa: SLF001
 
 
 # Load snapshot
@@ -48,7 +52,9 @@ print(f"Loaded snapshot from {SNAPSHOT_PATH}, step={snap['step']}")
 exp = Experiment()
 exp.setup_optimizers()
 exp.model.load_state_dict(snap["model"])
+assert exp.optimizer1 is not None
 exp.optimizer1.load_state_dict(snap["optimizer1"])
+assert exp.optimizer2 is not None
 exp.optimizer2.load_state_dict(snap["optimizer2"])
 exp.current_step = snap["step"]
 restore_training_state(exp, snap)
@@ -62,10 +68,11 @@ print(f"Step {exp.current_step:6d}  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%  
 restore_rng(snap)
 
 # ── Instrumented step ──
-state = exp._state  # noqa: SLF001
+state = exp._state  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
 pre_params = {
-    n: p.data.detach().clone() for n, p in exp.model.named_parameters()
+    n: p.data.detach().clone()
+    for n, p in exp.model.named_parameters()
     if p.requires_grad
 }
 
@@ -80,9 +87,11 @@ for group in exp.optimizer2.param_groups:
         s = exp.optimizer2.state.get(p)
         if s and "momentum_buffer" in s:
             buf = s["momentum_buffer"]
-            print(f"  shape={list(p.shape)!s:30s}"
-                  f"  buf_norm={buf.float().norm().item():10.4f}"
-                  f"  buf_max={buf.float().abs().max().item():10.6f}")
+            print(
+                f"  shape={list(p.shape)!s:30s}"
+                f"  buf_norm={buf.float().norm().item():10.4f}"
+                f"  buf_max={buf.float().abs().max().item():10.6f}"
+            )
 
 # Active state
 active_mask = state.batch_index >= 0
@@ -103,17 +112,18 @@ print(f"  sample hash: {samples.sum().item():.6f}")
 
 if exp.augment_sudoku:
     from experiment import augment_sudoku
+
     samples, targets = augment_sudoku(samples, targets)
 
-exp._enqueue(  # noqa: SLF001
+exp._enqueue(  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
     samples[:valid_count].to(exp.device),
     targets[:valid_count].to(exp.device),
-    puzzle_ids[:valid_count].to(exp.device) if puzzle_ids is not None else None,
+    puzzle_ids[:valid_count].to(exp.device) if puzzle_ids is not None else None,  # pyright: ignore[reportUnnecessaryComparison]
 )
-exp._fill_pending()  # noqa: SLF001
+exp._fill_pending()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
 # Forward
-forward_result = exp._forward(state)  # noqa: SLF001
+forward_result = exp._forward(state)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 active_samples, winner_chains = state.select_winners(forward_result["losses"])
 
 print("\n=== FORWARD RESULT ===")
@@ -122,14 +132,18 @@ print(f"  winner_chains: {winner_chains.tolist()[:10]}...")
 print(f"  losses (winners): {forward_result['losses'][winner_chains].tolist()[:10]}...")
 print(f"  q_halt (winners): {forward_result['q_halt'][winner_chains].tolist()[:10]}...")
 print(f"  loss mean: {forward_result['losses'][winner_chains].mean().item():.6f}")
-print(f"  loss sum/bs: {forward_result['losses'][winner_chains].sum().item() / exp.batch_size:.6f}")
+print(
+    f"  loss sum/bs: {forward_result['losses'][winner_chains].sum().item() / exp.batch_size:.6f}"
+)
 
 with torch.no_grad():
     predictions = forward_result["logits"][winner_chains].argmax(dim=-1)
     correct = (predictions == state.labels[active_samples]).all(dim=-1).float()
     n_correct = int(correct.sum().item())
     n_total = len(correct)
-print(f"  puzzles correct: {n_correct}/{n_total} ({100*n_correct/max(n_total,1):.1f}%)")
+print(
+    f"  puzzles correct: {n_correct}/{n_total} ({100 * n_correct / max(n_total, 1):.1f}%)"
+)
 
 # Backward
 assert exp.device is not None
@@ -156,7 +170,7 @@ for name, p in exp.model.named_parameters():
     if p.grad is not None:
         gnorm = p.grad.float().norm().item()
         gmax = p.grad.float().abs().max().item()
-        total_norm_sq += gnorm ** 2
+        total_norm_sq += gnorm**2
         print(f"  {name:50s}  grad_norm={gnorm:10.6f}  grad_max={gmax:10.6f}")
 print(f"  {'TOTAL GRAD NORM':50s}  {total_norm_sq**0.5:10.6f}")
 
@@ -169,13 +183,16 @@ if exp.grad_clip_max_norm is not None:
     print(f"  max_norm: {exp.grad_clip_max_norm}")
     print(f"  clipped: {pre_clip_norm.item() > exp.grad_clip_max_norm}")
 
-lr_scale = exp._lr_scale()  # noqa: SLF001
+lr_scale = exp._lr_scale()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 print("\n=== LR ===")
 print(f"  lr_scale: {lr_scale:.6f}")
 for i, opt in enumerate([exp.optimizer1, exp.optimizer2]):
+    assert opt is not None
     for j, pg in enumerate(opt.param_groups):
         pg["lr"] = pg["initial_lr"] * lr_scale
-        print(f"  opt{i+1} group{j} initial_lr={pg['initial_lr']:.6f}  effective_lr={pg['lr']:.6f}")
+        print(
+            f"  opt{i + 1} group{j} initial_lr={pg['initial_lr']:.6f}  effective_lr={pg['lr']:.6f}"
+        )
 
 exp.optimizer1.step()
 exp.optimizer2.step()
@@ -188,9 +205,11 @@ for group in exp.optimizer2.param_groups:
         s = exp.optimizer2.state.get(p)
         if s and "momentum_buffer" in s:
             buf = s["momentum_buffer"]
-            print(f"  shape={list(p.shape)!s:30s}"
-                  f"  buf_norm={buf.float().norm().item():10.4f}"
-                  f"  buf_max={buf.float().abs().max().item():10.6f}")
+            print(
+                f"  shape={list(p.shape)!s:30s}"
+                f"  buf_norm={buf.float().norm().item():10.4f}"
+                f"  buf_max={buf.float().abs().max().item():10.6f}"
+            )
 
 print("\n=== PARAM DELTAS ===")
 max_delta_name = ""
@@ -221,14 +240,17 @@ if len(active_samples) > 0:
     if train_q_halt:
         q_halt_positive = forward_result["q_halt"][winner_chains] > 0
         force_continue = (
-            torch.rand(len(h_steps), device=state.device)
-            < exp.halt_exploration_prob
+            torch.rand(len(h_steps), device=state.device) < exp.halt_exploration_prob
         )
         min_random_steps = torch.randint(
-            low=2, high=max(3, max_h_steps + 1),
-            size=(len(h_steps),), device=state.device,
+            low=2,
+            high=max(3, max_h_steps + 1),
+            size=(len(h_steps),),
+            device=state.device,
         )
-        halt = (at_max | q_halt_positive) & (~force_continue | (h_steps >= min_random_steps))
+        halt = (at_max | q_halt_positive) & (
+            ~force_continue | (h_steps >= min_random_steps)
+        )
     else:
         halt = at_max
     num_halted = int(halt.sum().item())
@@ -238,10 +260,12 @@ if len(active_samples) > 0:
 print("\n=== HALTING ===")
 print(f"  num_halted: {num_halted}")
 
-state.expunge(forward_result["losses"].detach(), exp.expunge_threshold, exp.min_expunge_step)
-exp._fill_pending()  # noqa: SLF001
+state.expunge(
+    forward_result["losses"].detach(), exp.expunge_threshold, exp.min_expunge_step
+)
+exp._fill_pending()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
 # Post-step eval
 cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
-print(f"\n{'='*80}")
+print(f"\n{'=' * 80}")
 print(f"Step {exp.current_step:6d}  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%  (POST)")

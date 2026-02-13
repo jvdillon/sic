@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import dataclasses
 
@@ -18,14 +18,13 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k" #-aug"
+    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"  # -aug"
 
-    max_steps_schedule: dict[int, tuple[int, bool]] = {
-            0: (1, False),
-            1000: (2, False),
-            2000: (4, False),
-            3000: (6, False),
-            3000: (6, True),
+    max_steps_schedule: ClassVar[dict[int, tuple[int, bool]]] = {  # pyright: ignore[reportIncompatibleVariableOverride]
+        0: (1, False),
+        1000: (2, False),
+        2000: (4, False),
+        3000: (6, True),
     }
 
     config: TRM3ConfigProtocol = dataclasses.replace(

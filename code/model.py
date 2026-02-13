@@ -509,9 +509,7 @@ class RotaryEmbedding2D(nn.Module):
         freqs_row = torch.outer(row_pos, inv_freq)
         freqs_col = torch.outer(col_pos, inv_freq)
 
-        emb = torch.cat(
-            [freqs_row, freqs_row, freqs_col, freqs_col], dim=-1
-        )
+        emb = torch.cat([freqs_row, freqs_row, freqs_col, freqs_col], dim=-1)
 
         self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
         self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
@@ -747,8 +745,11 @@ class TransformerBlock(nn.Module):
         cos_sin: tuple[Tensor, Tensor] | None = None,
     ) -> Tensor:
         if self.checkpoint and x.requires_grad:
-            return torch.utils.checkpoint.checkpoint(
-                self._forward, x, cos_sin, use_reentrant=False,
+            return torch.utils.checkpoint.checkpoint(  # pyright: ignore[reportAttributeAccessIssue]
+                self._forward,
+                x,
+                cos_sin,
+                use_reentrant=False,
             )
         return self._forward(x, cos_sin)
 

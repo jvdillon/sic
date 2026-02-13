@@ -1,5 +1,7 @@
 """Per-puzzle accuracy trajectory across ACT steps, PRE vs POST."""
 
+from typing import Any
+
 import random
 import sys
 
@@ -9,8 +11,10 @@ from util import numpy_rng
 import torch
 
 
-SNAPSHOT_PATH = sys.argv[1] if len(sys.argv) > 1 else (
-    "maze/ckpts/debug_x005_drop/pre_step03565.pt"
+SNAPSHOT_PATH = (
+    sys.argv[1]
+    if len(sys.argv) > 1
+    else ("maze/ckpts/debug_x005_drop/pre_step03565.pt")
 )
 
 snap = torch.load(SNAPSHOT_PATH, weights_only=False)
@@ -19,7 +23,7 @@ print(f"Loaded snapshot from {SNAPSHOT_PATH}, step={snap['step']}")
 MAX_STEPS = 16
 
 
-def per_step_detail(exp):
+def per_step_detail(exp: Any) -> Any:
     """Return per-puzzle: (grid_len, correct_per_step[16], wrong_positions_per_step)."""
     exp.model.eval()
     results = []
@@ -34,20 +38,21 @@ def per_step_detail(exp):
             B = inputs.shape[0]
             grid_len = inputs.shape[1]
 
-            z_H, z_L = exp._init_z(B)
+            z_H, z_L = exp._init_z(B)  # noqa: SLF001
             # Track per-step: which cells are wrong
-            step_wrong = torch.zeros(B, MAX_STEPS, grid_len, device=exp.device, dtype=torch.bool)
+            step_wrong = torch.zeros(
+                B, MAX_STEPS, grid_len, device=exp.device, dtype=torch.bool
+            )
 
             for step in range(MAX_STEPS):
                 with torch.autocast(device_type=exp.device.type, dtype=exp.dtype):
-                    out = exp._eval_forward(inputs, z_H, z_L, puzzle_ids)
+                    out = exp._eval_forward(inputs, z_H, z_L, puzzle_ids)  # noqa: SLF001
                 z_H = out["z_H"]
                 z_L = out["z_L"]
                 preds = out["logits"].argmax(dim=-1)
                 step_wrong[:, step] = preds != labels
 
-            for i in range(valid_count):
-                results.append(step_wrong[i].cpu())
+            results.extend([step_wrong[i].cpu() for i in range(valid_count)])
     exp.model.train()
     return results
 
@@ -63,18 +68,29 @@ pre_wrong = per_step_detail(exp)
 # POST
 print("Applying training step...")
 exp.model.load_state_dict(snap["model"])
+assert exp.optimizer1 is not None
 exp.optimizer1.load_state_dict(snap["optimizer1"])
+assert exp.optimizer2 is not None
 exp.optimizer2.load_state_dict(snap["optimizer2"])
 exp.current_step = snap["step"]
 exp.total_train_steps = snap["step"] + 10
-state = exp._state
-for key in ["z_H", "z_L", "batch_index", "h_step", "inputs", "labels",
-            "puzzle_ids", "chain_indices", "active"]:
+state = exp._state  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+for key in [
+    "z_H",
+    "z_L",
+    "batch_index",
+    "h_step",
+    "inputs",
+    "labels",
+    "puzzle_ids",
+    "chain_indices",
+    "active",
+]:
     getattr(state, key).copy_(snap[key].to(getattr(state, key).device))
-exp._wrong_count.copy_(snap["_wrong_count"].to(exp._wrong_count.device))
-exp._pending_inputs = snap["_pending_inputs"].to(exp.device)
-exp._pending_labels = snap["_pending_labels"].to(exp.device)
-exp._pending_puzzle_ids = snap["_pending_puzzle_ids"].to(exp.device)
+exp._wrong_count.copy_(snap["_wrong_count"].to(exp._wrong_count.device))  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+exp._pending_inputs = snap["_pending_inputs"].to(exp.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+exp._pending_labels = snap["_pending_labels"].to(exp.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+exp._pending_puzzle_ids = snap["_pending_puzzle_ids"].to(exp.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 random.setstate(snap["rng_python"])
 numpy_rng.bit_generator.state = snap["rng_numpy"]
 torch.set_rng_state(snap["rng_torch"])
@@ -83,8 +99,10 @@ for i, t in enumerate(snap["rng_cuda"]):
 trainloader = exp.make_train_loader()
 samples, targets, puzzle_ids, valid_count = next(iter(trainloader))
 exp.step(
-    samples.to(exp.device), targets.to(exp.device),
-    puzzle_ids.to(exp.device) if puzzle_ids is not None else None, valid_count,
+    samples.to(exp.device),
+    targets.to(exp.device),
+    puzzle_ids.to(exp.device) if puzzle_ids is not None else None,  # pyright: ignore[reportUnnecessaryComparison]
+    valid_count,
 )
 
 print("Evaluating POST...")
@@ -106,7 +124,7 @@ print(f"\nPuzzles perfect at some PRE step but never at any POST step: {len(lost
 
 # For lost puzzles: how many wrong cells at each step?
 print("\n=== LOST PUZZLES: wrong cells per step ===")
-print(f"{'puz':>4s}  " + "  ".join(f"s{s+1:02d}" for s in range(MAX_STEPS)))
+print(f"{'puz':>4s}  " + "  ".join(f"s{s + 1:02d}" for s in range(MAX_STEPS)))
 for idx in lost[:50]:  # first 50
     pre_counts = [pre_wrong[idx][s].sum().item() for s in range(MAX_STEPS)]
     post_counts = [post_wrong[idx][s].sum().item() for s in range(MAX_STEPS)]
@@ -142,7 +160,9 @@ new_at_16 = 0
 fixed_by_16 = 0
 for idx in lost:
     w2 = set(post_wrong[idx][1].nonzero(as_tuple=True)[0].tolist())  # step 2 (idx 1)
-    w16 = set(post_wrong[idx][15].nonzero(as_tuple=True)[0].tolist())  # step 16 (idx 15)
+    w16 = set(
+        post_wrong[idx][15].nonzero(as_tuple=True)[0].tolist()
+    )  # step 16 (idx 15)
     inherited += len(w2 & w16)
     new_at_16 += len(w16 - w2)
     fixed_by_16 += len(w2 - w16)

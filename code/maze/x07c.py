@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from experiment import main
 from maze.x07 import Experiment as Experiment07
 from torch.utils.checkpoint import checkpoint
+
+
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 class Experiment(Experiment07):

@@ -1,5 +1,7 @@
 """Scan training steps, save full state before any big puzzle_acc drop."""
 
+from typing import Any
+
 import pathlib
 import random
 
@@ -17,7 +19,7 @@ DROP_THRESHOLD = 10.0  # percentage points
 SAVE_DIR = pathlib.Path(__file__).parent / "ckpts" / "debug_x005_drop"
 
 
-def save_full_state(exp):
+def save_full_state(exp: Any) -> Any:
     """Save everything needed to replay one step: model, optimizers, RNG, carries."""
     state = exp._state  # noqa: SLF001
     return {
@@ -42,11 +44,11 @@ def save_full_state(exp):
         "chain_indices": state.chain_indices.cpu().clone(),
         "active": state.active.cpu().clone(),
         # Pending sample queue
-        "_pending_inputs": exp._pending_inputs.cpu().clone(),
-        "_pending_labels": exp._pending_labels.cpu().clone(),
-        "_pending_puzzle_ids": exp._pending_puzzle_ids.cpu().clone(),
+        "_pending_inputs": exp._pending_inputs.cpu().clone(),  # noqa: SLF001
+        "_pending_labels": exp._pending_labels.cpu().clone(),  # noqa: SLF001
+        "_pending_puzzle_ids": exp._pending_puzzle_ids.cpu().clone(),  # noqa: SLF001
         # x005-specific
-        "_wrong_count": exp._wrong_count.cpu().clone(),
+        "_wrong_count": exp._wrong_count.cpu().clone(),  # noqa: SLF001
     }
 
 
@@ -57,7 +59,7 @@ resume_from_checkpoint(exp, str(CKPT_PATH))
 # Fast-forward to SCAN_START
 exp.eval_every_steps = 999999
 exp.total_train_steps = SCAN_START
-train(exp)  # pyright: ignore[reportArgumentType]
+train(exp)
 exp.total_train_steps = SCAN_END + 1
 
 prev_puzzle_acc = None
@@ -74,8 +76,10 @@ for _ in range(SCAN_START, SCAN_END + 1):
             SAVE_DIR.mkdir(parents=True, exist_ok=True)
             path = SAVE_DIR / f"pre_step{prev_step:05d}.pt"
             torch.save(prev_snapshot, path)
-            print(f"DROP {prev_puzzle_acc:.1f}% -> {puzzle_acc:.1f}% "
-                  f"({-drop:+.1f}pp) at step {prev_step}->{exp.current_step}")
+            print(
+                f"DROP {prev_puzzle_acc:.1f}% -> {puzzle_acc:.1f}% "
+                f"({-drop:+.1f}pp) at step {prev_step}->{exp.current_step}"
+            )
             print(f"Saved full state to {path}")
             break
 
@@ -93,6 +97,6 @@ for _ in range(SCAN_START, SCAN_END + 1):
     exp.step(
         samples.to(exp.device),
         targets.to(exp.device),
-        puzzle_ids.to(exp.device) if puzzle_ids is not None else None,
+        puzzle_ids.to(exp.device) if puzzle_ids is not None else None,  # pyright: ignore[reportUnnecessaryComparison]
         valid_count,
     )

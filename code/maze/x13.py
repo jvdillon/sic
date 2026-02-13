@@ -105,8 +105,12 @@ class Experiment(ExperimentBase):
         self.label_smoothing = self.smooth_start + t * (
             self.smooth_end - self.smooth_start
         )
-        result = super()._compute_act_loss(
-            carry, was_running, logits, all_logits, q_halt,
+        result = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]
+            carry,
+            was_running,
+            logits,
+            all_logits,
+            q_halt,
         )
         self.label_smoothing = old_smooth
         return result

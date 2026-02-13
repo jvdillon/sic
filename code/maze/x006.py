@@ -353,4 +353,4 @@ if __name__ == "__main__":
     print(f"Loaded model weights from {_ckpt_path}")
     from experiment import train
 
-    train(exp)  # pyright: ignore[reportArgumentType]
+    train(exp)

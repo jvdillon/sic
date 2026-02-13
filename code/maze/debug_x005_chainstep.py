@@ -10,8 +10,10 @@ import sys
 import torch
 
 
-SNAPSHOT_PATH = sys.argv[1] if len(sys.argv) > 1 else (
-    "maze/ckpts/debug_x005_drop/pre_step03565.pt"
+SNAPSHOT_PATH = (
+    sys.argv[1]
+    if len(sys.argv) > 1
+    else ("maze/ckpts/debug_x005_drop/pre_step03565.pt")
 )
 
 snap = torch.load(SNAPSHOT_PATH, weights_only=False)
@@ -27,10 +29,12 @@ print("  h_step values for active chains:")
 
 active_h = h_step[active]
 print(f"    h_steps: {active_h.tolist()}")
-print(f"    min={active_h.min().item()} max={active_h.max().item()} "
-      f"mean={active_h.float().mean().item():.1f}")
+print(
+    f"    min={active_h.min().item()} max={active_h.max().item()} "
+    f"mean={active_h.float().mean().item():.1f}"
+)
 
-from collections import Counter
+from collections import Counter  # noqa: E402
 
 
 counts = Counter(active_h.tolist())
@@ -39,7 +43,7 @@ print(f"    distribution: {dict(sorted(counts.items()))}")
 # How many are at late steps (>= 4)?
 late = (active_h >= 4).sum().item()
 total = active_h.shape[0]
-print(f"    late (h_step >= 4): {late}/{total} ({100*late/total:.1f}%)")
+print(f"    late (h_step >= 4): {late}/{total} ({100 * late / total:.1f}%)")
 
 # Also check batch_index to see which training samples are active
 active_bi = batch_index[active]

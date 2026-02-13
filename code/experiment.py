@@ -127,7 +127,6 @@ def _reset_eval_slot(
     valid[idx] = True
 
 
-
 class ForwardResult(TypedDict):
     losses: Tensor  # [P] per-chain losses (inf for inactive)
     logits: Tensor  # [P, num_puzzle_grid_tokens, V]
