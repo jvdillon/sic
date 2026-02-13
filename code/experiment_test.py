@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import functools
 import tempfile
 
 from experiment import (
-    ExperimentBase,
+    Experiment,
     compute_diversity_loss,
     resume_from_checkpoint,
     setup_muon_optimizers,
 )
-from model import TRM, TRM1ConfigProtocol
+from model import TRM3, MLPMixerBlock, TRM3ConfigProtocol, trunc_normal_init_
 from torch import Tensor
 
 import torch
@@ -30,43 +31,48 @@ def test_compute_diversity_loss():
     assert -1 <= loss.item() <= 1
 
 
-def test_setup_muon_optimizers():
-    config = TRM.Config(
-        compile_core=False,
+def _test_config() -> TRM3.Config:
+    return TRM3.Config(
         vocab_size=12,
-        seq_len=81,
+        num_puzzle_grid_tokens=81,
         hidden_size=64,
         num_heads=4,
         num_layers=1,
         H_cycles=2,
         L_cycles=2,
+        K_H=1,
+        K_L=1,
+        carry_H="all",
+        carry_L="all",
+        compile_core=False,
+        dtype=torch.float32,
+        device="cpu",
+        cast_model_to_dtype=False,
+        num_register_tokens=0,
+        block_fn=functools.partial(
+            MLPMixerBlock, seq_len=81, init_weight_fn=trunc_normal_init_,
+        ),
     )
+
+
+def test_setup_muon_optimizers():
+    config = _test_config()
     model = config.setup()
     opt1, opt2 = setup_muon_optimizers(model)
-
     assert len(opt1.param_groups) >= 1
     assert len(opt2.param_groups) >= 1
 
 
-def _make_test_exp() -> ExperimentBase:
-    class TestExp(ExperimentBase):
+def _make_test_exp() -> Experiment:
+    class TestExp(Experiment):
+        batch_size: int = 4
+        K: int = 1
+        use_ema: bool = True
+        cast_model_to_dtype: bool = False
+        max_steps_schedule: dict[int, tuple[int, bool]] = {0: (16, True)}  # noqa: RUF012
+        config: TRM3ConfigProtocol = _test_config()
+
         def __init__(self):
-            self.device = torch.device("cpu")
-            self.dtype = torch.float32
-            self.batch_size = 4
-            self.compile_model = False
-            config = TRM.Config(
-                compile_core=False,
-                vocab_size=12,
-                seq_len=81,
-                hidden_size=64,
-                num_heads=4,
-                num_layers=1,
-                H_cycles=2,
-                L_cycles=2,
-                dtype=self.dtype,
-            )
-            self.model = config.setup()
             super().__init__()
             self.setup_optimizers()
 
@@ -87,27 +93,16 @@ def test_checkpoint_format():
     assert ckpt["best_acc"] == 0.0
 
 
-def _make_test_exp_no_ema() -> ExperimentBase:
-    class TestExpNoEma(ExperimentBase):
+def _make_test_exp_no_ema() -> Experiment:
+    class TestExpNoEma(Experiment):
+        batch_size: int = 4
+        K: int = 1
         use_ema: bool = False
+        cast_model_to_dtype: bool = False
+        max_steps_schedule: dict[int, tuple[int, bool]] = {0: (16, True)}  # noqa: RUF012
+        config: TRM3ConfigProtocol = _test_config()
 
         def __init__(self):
-            self.device = torch.device("cpu")
-            self.dtype = torch.float32
-            self.batch_size = 4
-            self.compile_model = False
-            config = TRM.Config(
-                compile_core=False,
-                vocab_size=12,
-                seq_len=81,
-                hidden_size=64,
-                num_heads=4,
-                num_layers=1,
-                H_cycles=2,
-                L_cycles=2,
-                dtype=self.dtype,
-            )
-            self.model = config.setup()
             super().__init__()
             self.setup_optimizers()
 
@@ -141,12 +136,12 @@ def test_resume_no_ema():
 
 def test_reset_transient_state():
     exp = _make_test_exp()
-    exp.act_carry = {"dummy": torch.tensor(1.0)}
     exp.current_step = 1000
 
     exp.reset_transient_state()
 
-    assert exp.act_carry is None
+    # _state should be fresh
+    assert exp._state.h_step.sum() == 0  # noqa: SLF001
 
 
 def test_resume_from_checkpoint_new_format():
@@ -192,54 +187,34 @@ def test_resume_from_checkpoint_old_format():
 
 
 def test_reset_steps_class_attr():
-    class TestExpWithReset(ExperimentBase):
+    class TestExpWithReset(Experiment):
+        batch_size: int = 4
+        K: int = 1
         reset_steps: list[int] = [1500, 3000]  # noqa: RUF012
-
-        def __init__(self):
-            self.device = torch.device("cpu")
-            self.dtype = torch.float32
-            self.batch_size = 4
-            self.compile_model = False
-            config = TRM.Config(
-                compile_core=False,
-                vocab_size=12,
-                seq_len=81,
-                hidden_size=64,
-                num_heads=4,
-                num_layers=1,
-                H_cycles=2,
-                L_cycles=2,
-                dtype=self.dtype,
-            )
-            self.model = config.setup()
-            super().__init__()
+        cast_model_to_dtype: bool = False
+        max_steps_schedule: dict[int, tuple[int, bool]] = {0: (16, True)}  # noqa: RUF012
+        config: TRM3ConfigProtocol = _test_config()
 
     exp = TestExpWithReset()
     assert exp.reset_steps == [1500, 3000]
 
 
 def test_data_loader_yields_valid_count():
-    """Test that data loader yields 3-tuple with valid_count for padding."""
-    # Test the padding logic directly without running full eval
+    """Test that data loader yields 4-tuple with valid_count for padding."""
     batch_size = 16
     valid_count = 10
 
-    # Simulate what the loader does for incomplete batch
     inputs = torch.randint(low=1, high=11, size=(valid_count, 81))
     labels = torch.randint(low=1, high=11, size=(valid_count, 81))
 
-    # Pad to batch_size
     pad_size = batch_size - valid_count
     inputs_pad = torch.zeros(pad_size, 81, dtype=inputs.dtype)
     labels_pad = torch.zeros(pad_size, 81, dtype=labels.dtype)
     padded_inputs = torch.cat([inputs, inputs_pad])
     padded_labels = torch.cat([labels, labels_pad])
 
-    # Verify shapes
     assert padded_inputs.shape == (batch_size, 81)
     assert padded_labels.shape == (batch_size, 81)
-
-    # Verify slicing works correctly
     assert (padded_inputs[:valid_count] == inputs).all()
     assert (padded_labels[:valid_count] == labels).all()
 
@@ -249,49 +224,31 @@ def test_eval_metrics_use_valid_count():
     batch_size = 16
     valid_count = 10
 
-    # Create predictions and labels with padding
     preds = torch.randint(low=1, high=11, size=(batch_size, 81))
     labels = torch.randint(low=1, high=11, size=(batch_size, 81))
-
-    # Make first valid_count samples correct, rest wrong
     preds[:valid_count] = labels[:valid_count]
 
-    # Full batch would show 10/16 = 62.5% accuracy
     full_acc = (preds == labels).float().mean().item()
-
-    # Valid-only should show 100% accuracy
     valid_acc = (preds[:valid_count] == labels[:valid_count]).float().mean().item()
 
     assert valid_acc == 1.0
-    assert full_acc < 1.0  # Padding brings down accuracy
+    assert full_acc < 1.0
 
 
 def test_fast_eval_streaming_replacement():
-    """Test that fast_eval uses streaming replacement - halted samples are replaced with new puzzles."""
+    """Test that fast_eval uses streaming replacement."""
 
-    class FastEvalExp(ExperimentBase):
+    class FastEvalExp(Experiment):
         eval_method: Literal["standard", "fast", "wta"] = "fast"
-        max_reasoning_steps: int = 16
-        config: TRM1ConfigProtocol = TRM.Config(
-            compile_core=False,
-            vocab_size=12,
-            seq_len=81,
-            hidden_size=32,
-            num_heads=2,
-            num_layers=1,
-            H_cycles=1,
-            L_cycles=1,
-        )
-
-        def __init__(self):
-            self.device = torch.device("cpu")
-            self.batch_size = 2
-            self.compile_model = False
-            super().__init__()
+        batch_size: int = 2
+        eval_batch_size: int | None = 2
+        K: int = 1
+        cast_model_to_dtype: bool = False
+        max_steps_schedule: dict[int, tuple[int, bool]] = {0: (16, True)}  # noqa: RUF012
+        config: TRM3ConfigProtocol = _test_config()
 
     exp = FastEvalExp()
 
-    # Track how many forward passes
     original_forward = exp.model.forward
     step_count = 0
 
@@ -301,19 +258,17 @@ def test_fast_eval_streaming_replacement():
         out = original_forward(*args, **kwargs)
         q_halt = out["q_halt"]
         assert isinstance(q_halt, Tensor)
-        # All samples halt after 2 steps
         if step_count % 2 == 0:
             out["q_halt"] = torch.ones_like(q_halt)
         else:
             out["q_halt"] = torch.full_like(q_halt, -10.0)
         return out
 
-    exp.model.forward = tracking_forward
+    exp.model.forward = tracking_forward  # pyright: ignore[reportAttributeAccessIssue]
 
-    # Create loader with 6 puzzles total (3 batches of 2)
-    # With batch_size=2 and streaming, we should process all 6
-    all_inputs = [torch.randint(low=1, high=11, size=(2, 81)) for _ in range(3)]
-    all_labels = [torch.randint(low=1, high=11, size=(2, 81)) for _ in range(3)]
+    grid_len = exp.config.num_puzzle_grid_tokens
+    all_inputs = [torch.randint(low=1, high=11, size=(2, grid_len)) for _ in range(3)]
+    all_labels = [torch.randint(low=1, high=11, size=(2, grid_len)) for _ in range(3)]
 
     def fake_loader():
         for inp, lab in zip(all_inputs, all_labels, strict=False):
@@ -321,37 +276,20 @@ def test_fast_eval_streaming_replacement():
 
     _, _ = exp.evaluate_act_haltfast(fake_loader())
 
-    # With streaming: 6 puzzles processed
-    # Batch stays at size 2, each puzzle takes 2 steps to halt
-    # Forward passes: step 1 (no halt), step 2 (all halt, refill)
-    #                 step 3 (no halt), step 4 (all halt, refill)
-    #                 step 5 (no halt), step 6 (all halt, done)
-    # Total = 6 forward passes
     assert step_count == 6, f"Expected 6 steps for 6 puzzles but got {step_count}"
 
 
 def test_fast_eval_metrics_at_halt_time():
     """Test that fast_eval computes metrics at halt time per sample."""
 
-    class FastEvalExp(ExperimentBase):
+    class FastEvalExp(Experiment):
         eval_method: Literal["standard", "fast", "wta"] = "fast"
-        max_reasoning_steps: int = 4
-        config: TRM1ConfigProtocol = TRM.Config(
-            compile_core=False,
-            vocab_size=12,
-            seq_len=81,
-            hidden_size=32,
-            num_heads=2,
-            num_layers=1,
-            H_cycles=1,
-            L_cycles=1,
-        )
-
-        def __init__(self):
-            self.device = torch.device("cpu")
-            self.batch_size = 2
-            self.compile_model = False
-            super().__init__()
+        batch_size: int = 2
+        eval_batch_size: int | None = 2
+        K: int = 1
+        cast_model_to_dtype: bool = False
+        max_steps_schedule: dict[int, tuple[int, bool]] = {0: (4, True)}  # noqa: RUF012
+        config: TRM3ConfigProtocol = _test_config()
 
     exp = FastEvalExp()
 
@@ -367,7 +305,6 @@ def test_fast_eval_metrics_at_halt_time():
         assert isinstance(logits, Tensor)
         assert isinstance(q_halt, Tensor)
 
-        # Step 2: all samples predict 5 and halt
         if step_count == 2:
             out["logits"] = torch.zeros_like(logits)
             out["logits"][:, :, 5] = 100
@@ -377,12 +314,12 @@ def test_fast_eval_metrics_at_halt_time():
 
         return out
 
-    exp.model.forward = controlled_forward
+    exp.model.forward = controlled_forward  # pyright: ignore[reportAttributeAccessIssue]
 
-    # Labels are all 5s - should get 100% accuracy
+    grid_len = exp.config.num_puzzle_grid_tokens
     B = 2
-    inputs = torch.randint(low=1, high=11, size=(B, 81))
-    labels = torch.full((B, 81), 5, dtype=torch.long)
+    inputs = torch.randint(low=1, high=11, size=(B, grid_len))
+    labels = torch.full((B, grid_len), 5, dtype=torch.long)
 
     def fake_loader():
         yield (inputs, labels, torch.zeros(B, dtype=torch.int32), B)
@@ -394,24 +331,10 @@ def test_fast_eval_metrics_at_halt_time():
 
 
 def test_no_recompilation_all_paths():
-    """Test that step() and forward() use same core signature (no recompile).
-
-    The torch.compile issue was: different kwargs caused separate compiled graphs.
-    This test verifies all code paths call core with identical positional args.
-    """
-    config = TRM.Config(
-        compile_core=False,
-        vocab_size=12,
-        seq_len=81,
-        hidden_size=64,
-        num_heads=4,
-        num_layers=1,
-        H_cycles=2,
-        L_cycles=2,
-    )
+    """Test that step() and forward() use same core signature (no recompile)."""
+    config = _test_config()
     model = config.setup()
 
-    # Track core calls
     call_signatures: list[object] = []
     originalcore = model.core
 
@@ -421,7 +344,6 @@ def test_no_recompilation_all_paths():
         z_L: torch.Tensor,
         cos_sin: tuple[torch.Tensor, torch.Tensor] | None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Record shapes of all args (signature proxy)
         sig = (
             tuple(input_emb.shape),
             tuple(z_H.shape),
@@ -433,25 +355,25 @@ def test_no_recompilation_all_paths():
         call_signatures.append(sig)
         return originalcore(input_emb, z_H, z_L, cos_sin)
 
-    model.core = trackingcore
+    model.core = trackingcore  # pyright: ignore[reportAttributeAccessIssue]
 
-    # Test inputs
     B = 4
-    x = torch.randint(low=0, high=12, size=(B, 81))
-    z_H = model.H_init.expand(B, 81, -1)
-    z_L = model.L_init.expand(B, 81, -1)
+    grid_len = config.num_puzzle_grid_tokens
+    seq_len = config.total_seq_len
+    x = torch.randint(low=0, high=12, size=(B, grid_len))
+    z_H = model.H_init[0].expand(B, seq_len, -1)
+    z_L = model.L_init[0].expand(B, seq_len, -1)
 
-    # Path 1: step() - used in ACT training/eval loops
+    # Path 1: step()
     call_signatures.clear()
     model.step(x, z_H, z_L)
     step_sig = call_signatures[0]
 
-    # Path 2: forward() - used for diagnostics
+    # Path 2: forward()
     call_signatures.clear()
     model(x, z_H, z_L)
     forward_sigs = call_signatures
 
-    # All calls must have same signature
     for sig in forward_sigs:
         assert sig == step_sig, f"Signature mismatch: {sig} vs {step_sig}"
 
@@ -459,31 +381,20 @@ def test_no_recompilation_all_paths():
 def test_eval_methods_consistent_k1():
     """Test that full, fast, and wta eval give same results with K=1."""
 
-    class EvalTestExp(ExperimentBase):
-        max_reasoning_steps: int = 4
+    class EvalTestExp(Experiment):
+        batch_size: int = 2
+        eval_batch_size: int | None = 2
         K: int = 1
-        config: TRM1ConfigProtocol = TRM.Config(
-            compile_core=False,
-            vocab_size=12,
-            seq_len=81,
-            hidden_size=32,
-            num_heads=2,
-            num_layers=1,
-            H_cycles=1,
-            L_cycles=1,
-        )
+        cast_model_to_dtype: bool = False
+        max_steps_schedule: dict[int, tuple[int, bool]] = {0: (4, True)}  # noqa: RUF012
+        config: TRM3ConfigProtocol = _test_config()
 
-        def __init__(self):
-            self.device = torch.device("cpu")
-            self.batch_size = 2
-            self.compile_model = False
-            super().__init__()
+    grid_len = 81
 
-    # Create deterministic test data
     torch.manual_seed(42)
     n_puzzles = 4
-    inputs = torch.randint(low=1, high=11, size=(n_puzzles, 81))
-    labels = torch.randint(low=1, high=11, size=(n_puzzles, 81))
+    inputs = torch.randint(low=1, high=11, size=(n_puzzles, grid_len))
+    labels = torch.randint(low=1, high=11, size=(n_puzzles, grid_len))
 
     def make_loader():
         for i in range(0, n_puzzles, 2):
@@ -494,24 +405,20 @@ def test_eval_methods_consistent_k1():
                 2,
             )
 
-    # Test full eval
     exp_full = EvalTestExp()
     torch.manual_seed(0)
     cell_full, puzzle_full = exp_full.evaluate_act_full(make_loader())
 
-    # Test fast eval
     exp_fast = EvalTestExp()
     torch.manual_seed(0)
     cell_fast, puzzle_fast = exp_fast.evaluate_act_haltfast(make_loader())
 
-    # Test wta eval with K=1
     exp_wta = EvalTestExp()
     exp_wta.eval_method = "wta"
     exp_wta.K = 1
     torch.manual_seed(0)
     cell_wta, puzzle_wta = exp_wta.evaluate_act_haltfast_wta(make_loader())
 
-    # All should give identical results
     assert cell_full == cell_fast, f"full={cell_full} vs fast={cell_fast}"
     assert cell_full == cell_wta, f"full={cell_full} vs wta={cell_wta}"
     assert puzzle_full == puzzle_fast, f"full={puzzle_full} vs fast={puzzle_fast}"
@@ -522,43 +429,52 @@ def test_wta_batched_vs_sequential():
     """Verify batched K-head forward gives same results as sequential."""
     torch.manual_seed(42)
 
-    config = TRM.Config(
-        compile_core=False,
+    config = TRM3.Config(
         vocab_size=12,
-        seq_len=81,
+        num_puzzle_grid_tokens=81,
         hidden_size=64,
         num_heads=4,
         num_layers=2,
         H_cycles=1,
         L_cycles=1,
+        K_H=1,
+        K_L=1,
+        carry_H="all",
+        carry_L="all",
+        compile_core=False,
         dtype=torch.float32,
+        device="cpu",
+        cast_model_to_dtype=False,
+        num_register_tokens=0,
+        block_fn=functools.partial(
+            MLPMixerBlock, seq_len=81, init_weight_fn=trunc_normal_init_,
+        ),
     )
     model = config.setup()
     model.eval()
 
     B, K = 4, 3
-    seq_len = config.seq_len
+    seq_len = config.total_seq_len
     hidden = config.hidden_size
 
-    # Register extra L_init params
     for k in range(1, K):
         model.register_parameter(
             f"L_init_{k}",
             torch.nn.Parameter(torch.randn(seq_len, hidden) * 0.1),
         )
 
-    # Create inputs
-    inputs = torch.randint(low=1, high=11, size=(B, 81))
-    z_H_init = model.H_init.expand(B, seq_len, -1).clone()
+    grid_len = config.num_puzzle_grid_tokens
+    inputs = torch.randint(low=1, high=11, size=(B, grid_len))
+    z_H_init = model.H_init[0].expand(B, seq_len, -1).clone()
 
-    # Sequential: K separate forward passes
+    # Sequential
     torch.manual_seed(123)
     seq_logits = []
     seq_q_halt = []
     seq_z_H = []
     seq_z_L = []
     for k in range(K):
-        L_init_k = model.L_init if k == 0 else getattr(model, f"L_init_{k}")
+        L_init_k = model.L_init[0] if k == 0 else getattr(model, f"L_init_{k}")
         z_L_k = L_init_k.expand(B, seq_len, -1).clone()
         out = model(inputs, z_H_init, z_L_k)
         seq_logits.append(out["logits"])
@@ -566,11 +482,11 @@ def test_wta_batched_vs_sequential():
         seq_z_H.append(out["z_H"])
         seq_z_L.append(out["z_L"])
 
-    # Batched: single [B*K] forward pass
-    torch.manual_seed(123)  # Same seed - but no noise in this test
+    # Batched
+    torch.manual_seed(123)
     z_L_all = []
     for k in range(K):
-        L_init_k = model.L_init if k == 0 else getattr(model, f"L_init_{k}")
+        L_init_k = model.L_init[0] if k == 0 else getattr(model, f"L_init_{k}")
         z_L_all.append(L_init_k.expand(B, seq_len, -1).clone())
 
     z_L_batched = torch.stack(z_L_all, dim=1).reshape(B * K, seq_len, -1)
@@ -581,13 +497,11 @@ def test_wta_batched_vs_sequential():
 
     out_batched = model(inputs_batched, z_H_batched, z_L_batched)
 
-    # Reshape back
-    logits_batched = out_batched["logits"].reshape(B, K, 81, -1)
+    logits_batched = out_batched["logits"].reshape(B, K, grid_len, -1)
     q_halt_batched = out_batched["q_halt"].reshape(B, K)
     z_H_batched_out = out_batched["z_H"].reshape(B, K, seq_len, -1)
     z_L_batched_out = out_batched["z_L"].reshape(B, K, seq_len, -1)
 
-    # Compare
     for k in range(K):
         assert torch.allclose(seq_logits[k], logits_batched[:, k], atol=1e-5), (
             f"logits mismatch for head {k}"

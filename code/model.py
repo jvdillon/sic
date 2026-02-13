@@ -468,7 +468,8 @@ class RotaryEmbedding2D(nn.Module):
     """2D RoPE for grid-structured data (e.g., 30x30 maze).
 
     Splits head_dim in half: first half encodes row, second half encodes column.
-    For position i in flattened sequence: row = i // W, col = i % W.
+    Grid cells are placed at positions (1..H, 1..W), reserving row 0 for prefix
+    tokens (puzzle_id, registers). Caller passes the raw grid shape (e.g. (30,30)).
     """
 
     def __init__(
@@ -480,37 +481,37 @@ class RotaryEmbedding2D(nn.Module):
     ):
         super().__init__()
         H, W = grid_shape
+        if num_prefix_tokens > W:
+            raise ValueError(
+                f"num_prefix_tokens ({num_prefix_tokens}) > grid width ({W});"
+                " prefix columns would exceed grid column range"
+            )
         half_dim = dim // 2
 
-        # Row frequencies (first half of head_dim)
-        inv_freq_row = 1.0 / (
-            base ** (torch.arange(0, half_dim, 2, dtype=torch.float32) / half_dim)
-        )
-        # Column frequencies (second half of head_dim)
-        inv_freq_col = 1.0 / (
+        inv_freq = 1.0 / (
             base ** (torch.arange(0, half_dim, 2, dtype=torch.float32) / half_dim)
         )
 
-        # Build position encodings for full sequence: prefix + grid
         total_len = num_prefix_tokens + H * W
         row_pos = torch.zeros(total_len, dtype=torch.float32)
         col_pos = torch.zeros(total_len, dtype=torch.float32)
 
-        # Prefix tokens get position 0 (or could use special encoding)
-        # Grid tokens get their 2D positions
+        # Prefix tokens: row 0, unique columns
+        for j in range(num_prefix_tokens):
+            col_pos[j] = j
+
+        # Grid tokens: (1..H, 1..W)
         grid_start = num_prefix_tokens
         for i in range(H * W):
-            row_pos[grid_start + i] = i // W
-            col_pos[grid_start + i] = i % W
+            row_pos[grid_start + i] = 1 + i // W
+            col_pos[grid_start + i] = 1 + i % W
 
-        # Compute frequencies
-        freqs_row = torch.outer(row_pos, inv_freq_row)  # [total_len, half_dim/2]
-        freqs_col = torch.outer(col_pos, inv_freq_col)  # [total_len, half_dim/2]
+        freqs_row = torch.outer(row_pos, inv_freq)
+        freqs_col = torch.outer(col_pos, inv_freq)
 
-        # Concatenate: [row_freqs, row_freqs, col_freqs, col_freqs] to match dim
         emb = torch.cat(
             [freqs_row, freqs_row, freqs_col, freqs_col], dim=-1
-        )  # [total_len, dim]
+        )
 
         self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
         self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
@@ -1270,6 +1271,7 @@ class TRM3(nn.Module):
         z_L_random_init: bool = False
 
         # RoPE (Rotary Position Embedding) - use for attention blocks
+        # Warning: This basically has to be true because our model is bias free.
         use_rope: bool = False
         rope_theta: float = 10000.0
         rope_2d_grid_shape: tuple[int, int] | None = None  # If set, use 2D RoPE

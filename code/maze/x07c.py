@@ -1,0 +1,40 @@
+"""x08a: x08 + muon_lr=0.02."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from experiment import main
+from maze.x07 import Experiment as Experiment07
+from torch.utils.checkpoint import checkpoint
+
+
+class Experiment(Experiment07):
+    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k-aug"
+
+    def _run_h_cycles(
+        self,
+        core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],
+        embeddings: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+        cos_sin: tuple[Tensor, Tensor] | None,
+        cos_sin_detach: tuple[Tensor, Tensor] | None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        del cos_sin_detach
+        for _ in range(self.model.config.H_cycles - 1):
+            result = checkpoint(
+                core,
+                embeddings,
+                z_H,
+                z_L,
+                cos_sin,
+                use_reentrant=False,
+            )
+            assert result is not None
+            _logits, _q_halt, z_H, z_L = result
+        return core(embeddings, z_H, z_L, cos_sin)
+
+
+if __name__ == "__main__":
+    main(Experiment())

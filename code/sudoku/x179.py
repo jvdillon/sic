@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", message=".*TF32.*")
 
 
 from experiment import (  # noqa: E402
-    ExperimentBase,
+    Experiment as ExperimentNew,
     main,
     setup_muon_optimizers,
 )
@@ -385,18 +385,18 @@ class Experiment:
 
     @property
     def K(self) -> int:
-        """For ExperimentBase: number of WTA heads (= K_L)."""
+        """For Experiment eval: number of WTA heads (= K_L)."""
         return self.config.K_L
 
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
-        """For ExperimentBase: Create initial z_H and z_L states for eval (single head)."""
+        """For Experiment eval: Create initial z_H and z_L states for eval (single head)."""
         seq_len = self.config.total_seq_len
         z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
         z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
         return z_H, z_L
 
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
-        """For ExperimentBase: Create z_L for all K heads for a single puzzle (WTA eval).
+        """For Experiment eval: Create z_L for all K heads for a single puzzle (WTA eval).
 
         Returns: [K, total_seq_len, hidden]
         """
@@ -404,12 +404,12 @@ class Experiment:
         # L_init is [K, hidden], expand to [K, total_seq_len, hidden]
         return self.model.L_init.unsqueeze(1).expand(-1, self.config.total_seq_len, -1)  # pyright: ignore[reportCallIssue]
 
-    # Monkey patch in eval stuff from ExperimentBase.
-    evaluate = ExperimentBase.evaluate
-    evaluate_act = ExperimentBase.evaluate_act
-    evaluate_act_full = ExperimentBase.evaluate_act_full
-    evaluate_act_haltfast = ExperimentBase.evaluate_act_haltfast
-    evaluate_act_haltfast_wta = ExperimentBase.evaluate_act_haltfast_wta
+    # Monkey patch in eval stuff from Experiment.
+    evaluate = ExperimentNew.evaluate
+    evaluate_act = ExperimentNew.evaluate_act
+    evaluate_act_full = ExperimentNew.evaluate_act_full
+    evaluate_act_haltfast = ExperimentNew.evaluate_act_haltfast
+    evaluate_act_haltfast_wta = ExperimentNew.evaluate_act_haltfast_wta
 
 
 if __name__ == "__main__":
