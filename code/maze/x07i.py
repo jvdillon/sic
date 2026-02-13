@@ -28,7 +28,7 @@ class Experiment(Experiment07):
         num_puzzle_id_tokens=1,
         num_puzzle_ids=1,
         num_register_tokens=15,
-        register_token_init_std=0.0,
+        register_token_init_std=1.0,
         register_tokens_learnable=False,
         q_halt_seq_index=0,
     )

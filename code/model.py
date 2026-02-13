@@ -1304,9 +1304,9 @@ class TRM3(nn.Module):
         # when reasoning block uses post-norm (which constrains output magnitude).
         core_damping: float = 0.0
 
-        # Anchor: sequence index zeroed every reasoning() call in core().
-        # Provides a fixed reference point for RoPE-based position recovery.
-        # None = off. 0 = first token (register position).
+        # Anchor: sequence index reset to a learned embedding every
+        # reasoning() call in core(). Fixed reference point for RoPE-based
+        # position recovery. None = off.
         anchor_seq_index: int | None = None
 
         @property
@@ -1594,11 +1594,6 @@ class TRM3(nn.Module):
             assert l_indices is not None
             z_L_pool = self.L_init.unsqueeze(-2).expand(-1, S, -1)  # [K_L, S, C]
             z_L = z_L_pool[l_indices].unsqueeze(0).expand(batch_size, -1, -1, -1)
-
-        a = cfg.anchor_seq_index
-        if a is not None:
-            z_H[..., a, :] = 0
-            z_L[..., a, :] = 0
 
         carry_count = torch.zeros(
             batch_size,
@@ -2301,27 +2296,23 @@ class TRM3(nn.Module):
         L_cycles = self.config.L_cycles
         alpha = self.config.core_damping
         a = self.config.anchor_seq_index
-        if a is not None:
-            z_H[..., a, :] = 0
-            z_L[..., a, :] = 0
-            input_emb[..., a, :] = 0
+        z_H_a = z_H[..., a, :].clone() if a is not None else z_H  # unused
+        z_L_a = z_L[..., a, :].clone() if a is not None else z_L  # unused
         c = z_H + input_emb
         if alpha > 0:
             for _ in range(L_cycles):
                 z_L = (1 - alpha) * z_L + alpha * self.reasoning(z_L + c, cos_sin)
                 if a is not None:
-                    z_L[..., a, :] = 0
+                    z_L[..., a, :] = z_L_a
             z_H = (1 - alpha) * z_H + alpha * self.reasoning(z_H + z_L, cos_sin)
-            if a is not None:
-                z_H[..., a, :] = 0
         else:
             for _ in range(L_cycles):
                 z_L = self.reasoning(z_L + c, cos_sin)
                 if a is not None:
-                    z_L[..., a, :] = 0
+                    z_L[..., a, :] = z_L_a
             z_H = self.reasoning(z_H + z_L, cos_sin)
-            if a is not None:
-                z_H[..., a, :] = 0
+        if a is not None:
+            z_H[..., a, :] = z_H_a
 
         logits = self.head(z_H)
         q_halt = self.q_head(z_H[:, self.config.q_halt_seq_index]).squeeze(-1)

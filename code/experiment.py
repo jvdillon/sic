@@ -1333,10 +1333,6 @@ class Experiment:
         total_seq_len = self.config.total_seq_len
         z_H = self.model.H_init[0].expand(batch_size, total_seq_len, -1).contiguous()
         z_L = self.model.L_init[0].expand(batch_size, total_seq_len, -1).contiguous()
-        a = self.config.anchor_seq_index
-        if a is not None:
-            z_H[:, a, :] = 0
-            z_L[:, a, :] = 0
         return z_H, z_L
 
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
