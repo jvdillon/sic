@@ -43,17 +43,16 @@ Data structure for Maze (1 task, 1000 instances, 8 augs each):
                               │  └─ start of instance 1
                               └─ start of instance 0
 
-Stratified sampling (one aug per instance per epoch):
+Sampling controlled by augmentation_random_bundle_max_size (k):
 
-    epoch 1:  [rand(0,8), rand(8,16), rand(16,24), ...]  → 1000 samples
-               ~~~~~~~~   ~~~~~~~~~   ~~~~~~~~~~
-               pick one   pick one    pick one
-               from       from        from
-               inst 0     inst 1      inst 2
+    For each instance, randomly partition its augs into groups
+    of at most k. Collect all groups, shuffle, fill batches
+    sequentially.
 
-    epoch 2:  [rand(0,8), rand(8,16), rand(16,24), ...]  → 1000 different samples
-
-Non-stratified: all 8000 samples each epoch.
+    k=1 (default): fully shuffled, all 8000 samples per epoch.
+    k=8 (= num_augs): all 8 augs of each instance are contiguous
+      in the batch stream. Epoch = 8000 samples, but each batch
+      of 128 contains 16 instances × 8 augs.
 """
 
 from __future__ import annotations
@@ -204,7 +203,12 @@ class PuzzleDataset:
         batch_size: Batch size.
         train: If True, load train split; else test.
         shuffle: If True, shuffle each epoch.
-        stratified: If True, sample one aug per instance per epoch.
+        augmentation_random_bundle_max_size: Max augmentations of the same instance kept
+            contiguous when filling batches. For each instance, augs are
+            randomly partitioned into groups of at most this size; groups
+            are shuffled then laid out sequentially. 1 = fully shuffled
+            (no aug grouping). Set to num_augs to pack all augs of an
+            instance together.
         gpu_cache: If True, keep data on GPU. Set False for large datasets (ARC).
         num_instances: Limit to first N instances (for ablations).
 
@@ -220,7 +224,7 @@ class PuzzleDataset:
         batch_size: int,
         train: bool = True,
         shuffle: bool = True,
-        stratified: bool = True,
+        augmentation_random_bundle_max_size: int = 1,
         gpu_cache: bool = True,
         num_instances: int | None = None,
     ):
@@ -259,49 +263,31 @@ class PuzzleDataset:
         self.n_instances = len(instance_bounds) - 1
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.stratified = stratified and train
-
-        # Check for uniform instance sizes.
-        # We don't really need this code stanza except to preserve the RNG
-        # access pattern of the existing implementation which was used for the
-        # Sudoku results.
-        if self.stratified:
-            instance_sizes = instance_bounds[1:] - instance_bounds[:-1]
-            if (instance_sizes == instance_sizes[0]).all():
-                self._uniform_instance_size: int | None = int(instance_sizes[0])
-            else:
-                self._uniform_instance_size = None
+        self.augmentation_random_bundle_max_size = (
+            augmentation_random_bundle_max_size if train else 1
+        )
 
     def __iter__(self) -> Iterator[tuple[Tensor, Tensor, Tensor, int]]:
         device = self.instance_bounds.device
+        starts = self.instance_bounds[:-1]
+        sizes = (self.instance_bounds[1:] - starts).long()
+        k = self.augmentation_random_bundle_max_size
 
-        if self.stratified:
-            starts = self.instance_bounds[:-1]
-            if self._uniform_instance_size is None:
-                # Variable instances: use rand * sizes
-                sizes = self.instance_bounds[1:] - starts
-                offsets = (torch.rand(self.n_instances, device=device) * sizes).long()
-            else:
-                # Uniform num instances case.
-                # We don't really need this case but it preserves the RNG
-                # access pattern of the existing implementation which was used
-                # for the Sudoku results.
-                offsets = torch.randint(
-                    0,
-                    self._uniform_instance_size,
-                    (self.n_instances,),
-                    device=device,
-                )
-            indices = starts + offsets
+        # For each instance, randomly partition its augs into groups of <= k.
+        groups: list[Tensor] = []
+        for i in range(self.n_instances):
+            s, n = int(starts[i]), int(sizes[i])
+            sample_indices = torch.arange(s, s + n, device=device)
             if self.shuffle:
-                indices = indices[torch.randperm(self.n_instances, device=device)]
-            n_samples = self.n_instances
-        else:
-            if self.shuffle:
-                indices = torch.randperm(self.n, device=device)
-            else:
-                indices = torch.arange(self.n, device=device)
-            n_samples = self.n
+                sample_indices = sample_indices[torch.randperm(n, device=device)]
+            groups.extend(sample_indices[j : j + k] for j in range(0, n, k))
+
+        # Shuffle groups, then flatten to get final sample order.
+        if self.shuffle:
+            perm = torch.randperm(len(groups), device=device)
+            groups = [groups[p] for p in perm.tolist()]
+        indices = torch.cat(groups)
+        n_samples = len(indices)
 
         for i in range(0, n_samples, self.batch_size):
             batch_idx = indices[i : i + self.batch_size]

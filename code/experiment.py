@@ -164,7 +164,9 @@ class Experiment:
     num_instances: int | None = (
         None  # Limit training to first N instances (for ablations)
     )
-    stratified: bool = True  # Use stratified sampling (1 sample per group per epoch)
+    augmentation_random_bundle_max_size: int = (
+        1  # Max augs of same instance kept contiguous in batch
+    )
     use_additive_puzzle_emb: bool = False  # If True, embed puzzle_id and add to z_H
     # Size of puzzle_id embedding table (set to 256 for ARC)
     max_puzzle_ids_per_batch: int = 1
@@ -310,7 +312,7 @@ class Experiment:
             device=self.device,
             batch_size=self.batch_size,
             train=True,
-            stratified=self.stratified,
+            augmentation_random_bundle_max_size=self.augmentation_random_bundle_max_size,
             num_instances=self.num_instances,
         )
 
@@ -1331,6 +1333,10 @@ class Experiment:
         total_seq_len = self.config.total_seq_len
         z_H = self.model.H_init[0].expand(batch_size, total_seq_len, -1).contiguous()
         z_L = self.model.L_init[0].expand(batch_size, total_seq_len, -1).contiguous()
+        a = self.config.anchor_seq_index
+        if a is not None:
+            z_H[:, a, :] = 0
+            z_L[:, a, :] = 0
         return z_H, z_L
 
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
