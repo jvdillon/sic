@@ -186,3 +186,5 @@ Step 13500  Test 99.32% / 79.60%  Train lm=0.6641±0.0018ϵ[0.6641,0.6875] n_hal
   saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/step14000.pt acc=99.15% (0.085s)
 Step 14000  Test 99.15% / 77.00%  Train lm=0.6641±0.0014ϵ[0.6641,0.6758] n_halted=108.9080±9.1226ϵ[38.0000,121.0000]  TrainAcc 99.99%/98.60%  (15.659s / 181.934s)
   n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=96.00%, exact_match=65.80%
+  eval_avg_halt_step: 1.41

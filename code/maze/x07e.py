@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar, cast
-
-import dataclasses
+from typing import TYPE_CHECKING, ClassVar
 
 from experiment import main
 from maze.x07 import Experiment as Experiment07
-from model import TRM3, TRM3ConfigProtocol
 from torch.utils.checkpoint import checkpoint
 
 
@@ -25,14 +22,10 @@ class Experiment(Experiment07):
         3000: (6, True),
     }
 
-    config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07.config),
-        use_rope=True,
-        rope_2d_grid_shape=(30, 30),
-        num_layers=2,
-        H_cycles=3,  # 3,
-        L_cycles=4,  # 4,
-    )
+    # config: TRM3ConfigProtocol = dataclasses.replace(
+    #     cast(TRM3.Config, Experiment07.config),
+    #     rope_2d_grid_shape=(30, 30),
+    # )
 
     def _run_h_cycles(
         self,
