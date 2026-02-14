@@ -1299,7 +1299,7 @@ class TRM3(nn.Module):
 
         # If False, head outputs vocab_size-1 classes (no PAD logit).
         # Labels must be shifted: labels-1 with ignore_index=-1.
-        loss_includes_pad_token: bool = True
+        label_smoothing_includes_pad_token: bool = True
 
         # Whether TRM3.__init__ casts all params/buffers to config.dtype via self.to().
         # Set False to keep RoPE buffers in float32 (needed for b4b match with reference).
@@ -1405,7 +1405,7 @@ class TRM3(nn.Module):
         )
         self.head = Linear(
             config.hidden_size,
-            config.vocab_size - (not config.loss_includes_pad_token),
+            config.vocab_size - (not config.label_smoothing_includes_pad_token),
             bias=config.head_bias,
             init_weight_fn=trunc_normal_init_,  # std = rsqrt(hidden_size)
             init_bias_fn=nn.init.zeros_,
@@ -1768,6 +1768,10 @@ class TRM3(nn.Module):
                 raise ValueError("puzzle_ids required when num_puzzle_id_tokens > 0")
             if self.puzzle_id_embed is None:
                 raise RuntimeError("puzzle_id_embed not initialized")
+            if (puzzle_ids >= cfg.num_puzzle_ids).any():
+                raise ValueError(
+                    f"puzzle_ids has values >= num_puzzle_ids ({cfg.num_puzzle_ids})"
+                )
             puzzle_emb = self.puzzle_id_embed(puzzle_ids, cfg.dtype)
             puzzle_emb = puzzle_emb.view(B, cfg.num_puzzle_id_tokens, cfg.hidden_size)
             puzzle_emb = self.embed_scale * puzzle_emb

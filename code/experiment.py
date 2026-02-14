@@ -258,9 +258,10 @@ class Experiment:
     grad_clip_max_norm: float | None = 1.0  # None = no clipping
 
     # If True (default), the PAD logit (class 0) participates in label smoothing
-    # at non-PAD positions. If False, slice it out before loss: ce(logits[...,1:],
-    # labels-1, ignore_index=-1) so smoothing only covers real tokens.
-    loss_includes_pad_token: bool = True
+    # at non-PAD positions. If False, head outputs vocab_size-1 logits (no PAD class)
+    # and loss uses ce(logits, labels-1, ignore_index=-1). Requires model config
+    # to also set label_smoothing_includes_pad_token=False so the head is built accordingly.
+    label_smoothing_includes_pad_token: bool = True
 
     # Loss normalization: if True, use sum + divide-by-batch_size (reference style)
     # instead of mean. Equivalent when all slots active, but matches reference pattern.
@@ -804,7 +805,7 @@ class Experiment:
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         logits = logits[:, n_prefix:, :]
 
-        if self.loss_includes_pad_token:
+        if self.label_smoothing_includes_pad_token:
             loss_labels = chain_labels.reshape(-1)
             loss_ignore = 0
         else:
@@ -938,7 +939,7 @@ class Experiment:
     def _preds(self, logits: Tensor) -> Tensor:
         """Convert logits to token predictions, accounting for head offset."""
         p = logits.argmax(dim=-1)
-        return p if self.loss_includes_pad_token else p + 1
+        return p if self.label_smoothing_includes_pad_token else p + 1
 
     def _eval_forward(
         self,
@@ -1256,13 +1257,6 @@ class Experiment:
                 z_H, z_L = self._init_z(B)
 
                 has_halted = torch.zeros(B, device=self.device, dtype=torch.bool)
-                halt_logits = torch.zeros(
-                    B,
-                    inputs.shape[1],
-                    self.model.head.c_out,
-                    device=self.device,
-                    dtype=self.dtype,
-                )
                 halt_step = torch.full(
                     (B,),
                     self.current_max_steps,
@@ -1277,16 +1271,11 @@ class Experiment:
                     z_H = out["z_H"]
                     z_L = out["z_L"]
                     q_halt = out["q_halt"]
-                    logits = out["logits"]
 
                     newly_halted = ~has_halted & (q_halt > 0)
                     if newly_halted.any():
-                        halt_logits[newly_halted] = logits[newly_halted]
                         halt_step[newly_halted] = step + 1
                         has_halted[newly_halted] = True
-
-                if not has_halted.all():
-                    halt_logits[~has_halted] = out["logits"][~has_halted]
 
                 total_halt_steps += halt_step[:valid_count].float().sum()
                 total_samples += valid_count

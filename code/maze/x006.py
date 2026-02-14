@@ -142,7 +142,7 @@ class Experiment(Experiment000l):
         assert self.device is not None
         B = len(halt_batch_indices)
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-            if self.loss_includes_pad_token:
+            if self.label_smoothing_includes_pad_token:
                 _loss_labels = labels.reshape(-1)
                 _loss_ignore = 0
             else:

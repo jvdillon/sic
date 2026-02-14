@@ -48,7 +48,7 @@ class Experiment(Experiment000l):
         batch_indices = state.batch_index.clamp(min=0)
         chain_labels = state.labels[batch_indices]
         # Recompute loss with regret weighting
-        if self.loss_includes_pad_token:
+        if self.label_smoothing_includes_pad_token:
             loss_labels = chain_labels.reshape(-1)
             loss_ignore = 0
         else:

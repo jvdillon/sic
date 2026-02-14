@@ -1,5 +1,7 @@
 """x07: x000l (standalone, no x000 inheritance)."""
 
+from typing import Literal
+
 import functools
 
 from experiment import (
@@ -30,8 +32,9 @@ class Experiment(ExperimentBase):
     lr_min_ratio: float = 1.0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
+    eval_method: Literal["standard", "fast", "wta"] = "fast"
     eval_path_valid: bool = True
-    loss_includes_pad_token: bool = False
+    label_smoothing_includes_pad_token: bool = False
 
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
@@ -53,7 +56,7 @@ class Experiment(ExperimentBase):
         register_tokens_learnable=False,
         q_halt_seq_index=0,
         cast_model_to_dtype=False,
-        loss_includes_pad_token=False,
+        label_smoothing_includes_pad_token=False,
         block_fn=functools.partial(
             TransformerBlock,
             multiple_of=128,
