@@ -51,8 +51,8 @@ class Experiment:
     augment_sudoku: bool = True
     """Apply all 8 dihedral symmetries + digit permutation."""
 
-    # Eval method: "standard", "fast", or "wta"
-    eval_method: Literal["standard", "fast", "wta"] = "standard"
+    # Eval method: "full", "fast", or "wta"
+    eval_method: Literal["full", "fast", "wta"] = "full"
     eval_batch_size: int | None = 384  # None = use batch_size
     eval_every_steps: int = 2_000
     max_eval_samples: int = 38_400  # 100 * 384; -1 = full test set

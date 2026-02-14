@@ -241,7 +241,7 @@ def test_fast_eval_streaming_replacement():
     """Test that fast_eval uses streaming replacement."""
 
     class FastEvalExp(Experiment):
-        eval_method: Literal["standard", "fast", "wta"] = "fast"
+        eval_method: Literal["full", "fast", "wta"] = "fast"
         batch_size: int = 2
         eval_batch_size: int | None = 2
         K: int = 1
@@ -285,7 +285,7 @@ def test_fast_eval_metrics_at_halt_time():
     """Test that fast_eval computes metrics at halt time per sample."""
 
     class FastEvalExp(Experiment):
-        eval_method: Literal["standard", "fast", "wta"] = "fast"
+        eval_method: Literal["full", "fast", "wta"] = "fast"
         batch_size: int = 2
         eval_batch_size: int | None = 2
         K: int = 1

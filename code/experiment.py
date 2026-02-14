@@ -221,7 +221,7 @@ class Experiment:
     max_puzzle_ids_per_batch: int = 1
 
     # Eval
-    eval_method: Literal["standard", "fast", "wta"] = "standard"
+    eval_method: Literal["full", "fast", "wta"] = "full"
     eval_batch_size: int | None = 768  # Must match train pool size for compile
     eval_every_steps: int = 2_000
     max_eval_samples: int = 38_400
@@ -1239,9 +1239,15 @@ class Experiment:
         return cell_acc, puzzle_acc
 
     def evaluate_act_full(self, loader: Any) -> tuple[float, float]:
-        """Full eval: run all steps with diagnostics."""
+        """Full eval: run all steps with diagnostics.
+
+        Reports both final-step accuracy (run all steps) and halt-time
+        accuracy (predictions at the step where q_halt first fires).
+        """
         correct = torch.tensor(0, device=self.device)
         puzzles_correct = torch.tensor(0, device=self.device)
+        halt_correct = torch.tensor(0, device=self.device)
+        halt_puzzles_correct = torch.tensor(0, device=self.device)
         total = 0
         total_halt_steps = torch.tensor(0.0, device=self.device)
         total_samples = 0
@@ -1251,6 +1257,8 @@ class Experiment:
         total_stuck = 0
         total_helped = 0
         samples_seen = 0
+
+        grid_len = self.config.num_puzzle_grid_tokens
 
         with torch.no_grad():
             for batch in loader:
@@ -1266,6 +1274,9 @@ class Experiment:
                 z_H, z_L = self._init_z(B)
 
                 has_halted = torch.zeros(B, device=self.device, dtype=torch.bool)
+                halt_preds = torch.zeros(
+                    B, grid_len, device=self.device, dtype=torch.int32
+                )
                 halt_step = torch.full(
                     (B,),
                     self.current_max_steps,
@@ -1283,8 +1294,15 @@ class Experiment:
 
                     newly_halted = ~has_halted & (q_halt > 0)
                     if newly_halted.any():
+                        halt_preds[newly_halted] = self._preds(
+                            out["logits"][newly_halted]
+                        )
                         halt_step[newly_halted] = step + 1
                         has_halted[newly_halted] = True
+
+                # Non-halted samples: use final-step preds as halt preds
+                if not has_halted.all():
+                    halt_preds[~has_halted] = self._preds(out["logits"][~has_halted])
 
                 total_halt_steps += halt_step[:valid_count].float().sum()
                 total_samples += valid_count
@@ -1325,9 +1343,14 @@ class Experiment:
                         preds[stuck_idx] = retry_preds
 
                 preds_valid = preds[:valid_count]
+                halt_preds_valid = halt_preds[:valid_count]
                 labels_valid = labels[:valid_count]
                 correct += (preds_valid == labels_valid).sum()
                 puzzles_correct += (preds_valid == labels_valid).all(dim=-1).sum()
+                halt_correct += (halt_preds_valid == labels_valid).sum()
+                halt_puzzles_correct += (
+                    (halt_preds_valid == labels_valid).all(dim=-1).sum()
+                )
                 total += labels_valid.numel()
 
                 if self.eval_path_valid:
@@ -1338,12 +1361,16 @@ class Experiment:
 
         cell_acc = 100 * correct.item() / total
         exact_acc = 100 * puzzles_correct.item() / total_samples
+        halt_cell_acc = 100 * halt_correct.item() / total
+        halt_exact_acc = 100 * halt_puzzles_correct.item() / total_samples
         puzzle_acc = exact_acc
         if self.eval_path_valid and total_samples > 0:
             pv = 100 * total_path_valid / total_samples
             po = 100 * total_path_optimal / total_samples
             puzzle_acc = po
             print(f"  path_valid={pv:.2f}%, exact_match={exact_acc:.2f}%")
+
+        print(f"  halt_acc: cell={halt_cell_acc:.2f}%, puzzle={halt_exact_acc:.2f}%")
 
         if total_samples > 0:
             print(

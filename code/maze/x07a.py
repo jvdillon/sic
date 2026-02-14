@@ -1,7 +1,7 @@
 """x07: x000l (standalone, no x000 inheritance).
 
 x07.log is eval_method="fast".
-x07.log.1 is eval_method="standard".
+x07.log.1 is eval_method="full".
 """
 
 from typing import Literal
@@ -35,7 +35,7 @@ class Experiment(ExperimentBase):
     lr_min_ratio: float = 1.0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
-    eval_method: Literal["standard", "fast", "wta"] = "fast"
+    eval_method: Literal["full", "fast", "wta"] = "fast"
     eval_path_valid: bool = True
     label_smoothing_includes_pad_token: bool = False
 
