@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import dataclasses
 
 from experiment import main
-from maze.x07 import Experiment as Experiment07
+from maze.x07b import Experiment as Experiment07b
 from model import TRM3, TRM3ConfigProtocol
 from torch.utils.checkpoint import checkpoint
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from torch import Tensor
 
 
-class Experiment(Experiment07):
+class Experiment(Experiment07b):
     augmentation_random_bundle_max_size: int = 8
 
     max_steps_schedule: ClassVar[dict[int, tuple[int, bool]]] = {  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -28,7 +28,7 @@ class Experiment(Experiment07):
     }
 
     config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07.config),
+        cast(TRM3.Config, Experiment07b.config),
         use_rope=True,
         rope_2d_grid_shape=(30, 30),
         num_layers=2,

@@ -7,15 +7,15 @@ from typing import cast
 import dataclasses
 
 from experiment import main
-from maze.x07 import Experiment as Experiment07
+from maze.x07b import Experiment as Experiment07b
 from model import TRM3, TRM3ConfigProtocol
 
 
-class Experiment(Experiment07):
+class Experiment(Experiment07b):
     augmentation_random_bundle_max_size: int = 8
 
     config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07.config),
+        cast(TRM3.Config, Experiment07b.config),
         use_rope=True,
         rope_theta=1000.0,
         num_layers=2,
