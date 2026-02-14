@@ -1,5 +1,6 @@
 """TRM experiment framework."""
 
+from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
@@ -31,6 +32,51 @@ from data import PuzzleDataset, augment_sudoku
 
 
 warnings.filterwarnings("ignore", message=".*TF32.*")
+
+
+def check_maze_paths(
+    preds: Tensor, labels: Tensor, H: int, W: int,
+) -> tuple[int, int]:
+    """BFS check: does predicted solution connect start→goal?
+
+    Returns (num_valid, num_optimal).
+    Tokens: 1=wall, 2=empty, 3=start, 4=goal, 5=solution.
+    """
+    B = preds.shape[0]
+    preds_np = preds.cpu().numpy().reshape(B, H, W)
+    labels_np = labels.cpu().numpy().reshape(B, H, W)
+    n_valid = 0
+    n_optimal = 0
+    for b in range(B):
+        pred = preds_np[b]
+        label = labels_np[b]
+        starts = list(zip(*np.where(label == 3)))
+        goals = list(zip(*np.where(label == 4)))
+        if not starts or not goals:
+            continue
+        path = (pred == 5) | (pred == 3) | (pred == 4)
+        visited = np.zeros((H, W), dtype=bool)
+        q: deque[tuple[int, int]] = deque()
+        for r, c in starts:
+            if path[r, c]:
+                visited[r, c] = True
+                q.append((r, c))
+        reached_goal = False
+        while q:
+            r, c = q.popleft()
+            if label[r, c] == 4:
+                reached_goal = True
+                break
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < H and 0 <= nc < W and not visited[nr, nc] and path[nr, nc]:
+                    visited[nr, nc] = True
+                    q.append((nr, nc))
+        if reached_goal:
+            n_valid += 1
+            if int((pred == 5).sum()) <= int((label == 5).sum()):
+                n_optimal += 1
+    return n_valid, n_optimal
 
 
 @dataclass
@@ -180,6 +226,8 @@ class Experiment:
     checkpoint_steps: list[int] = list(range(0, 75_000, 500))  # noqa: RUF012
     enable_reset_retry: bool = False
     reset_threshold: float = 0.0
+    eval_path_valid: bool = False  # Maze: BFS check predicted path connects start→goal
+    eval_grid_shape: tuple[int, int] = (30, 30)  # Grid dims for path validity check
 
     # Regularization
     label_smoothing: float = 0.2
@@ -905,6 +953,8 @@ class Experiment:
         total_cell_correct = 0
         total_cells = 0
         total_steps = 0
+        total_path_valid = 0
+        total_path_optimal = 0
         halt_histogram = [0] * self.current_max_steps
 
         grid_len = self.config.num_puzzle_grid_tokens
@@ -959,6 +1009,12 @@ class Experiment:
                     total_cells += grid_len * n_halted
                     total_steps += steps[halted].sum().item()
 
+                    if self.eval_path_valid:
+                        H, W = self.eval_grid_shape
+                        nv, no = check_maze_paths(preds[halted], labels[halted], H, W)
+                        total_path_valid += nv
+                        total_path_optimal += no
+
                     halted_steps = steps[halted].cpu().tolist()
                     for s in halted_steps:
                         if 1 <= s <= len(halt_histogram):
@@ -985,6 +1041,10 @@ class Experiment:
         print(f"  cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
         if total_puzzles > 0:
             print(f"  eval_avg_halt_step: {total_steps / total_puzzles:.2f}")
+        if self.eval_path_valid and total_puzzles > 0:
+            pv = 100 * total_path_valid / total_puzzles
+            po = 100 * total_path_optimal / total_puzzles
+            print(f"  path_valid={pv:.2f}%, path_optimal={po:.2f}%")
         return cell_acc, puzzle_acc
 
     def evaluate_act_haltfast_wta(
@@ -1161,6 +1221,8 @@ class Experiment:
         total = 0
         total_halt_steps = torch.tensor(0.0, device=self.device)
         total_samples = 0
+        total_path_valid = 0
+        total_path_optimal = 0
         last_batch = None
         total_stuck = 0
         total_helped = 0
@@ -1256,6 +1318,12 @@ class Experiment:
                 puzzles_correct += (preds_valid == labels_valid).all(dim=-1).sum()
                 total += labels_valid.numel()
 
+                if self.eval_path_valid:
+                    H, W = self.eval_grid_shape
+                    nv, no = check_maze_paths(preds_valid, labels_valid, H, W)
+                    total_path_valid += nv
+                    total_path_optimal += no
+
         cell_acc = 100 * correct.item() / total
         puzzle_acc = 100 * puzzles_correct.item() / total_samples
         print(f"  cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
@@ -1264,6 +1332,11 @@ class Experiment:
             print(
                 f"  eval_avg_halt_step: {total_halt_steps.item() / total_samples:.2f}"
             )
+
+        if self.eval_path_valid and total_samples > 0:
+            pv = 100 * total_path_valid / total_samples
+            po = 100 * total_path_optimal / total_samples
+            print(f"  path_valid={pv:.2f}%, path_optimal={po:.2f}%")
 
         if self.enable_reset_retry and total_stuck > 0:
             print(
