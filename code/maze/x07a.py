@@ -1,5 +1,7 @@
 """x07: x000l (standalone, no x000 inheritance)."""
 
+from typing import Literal
+
 import functools
 
 from experiment import (
@@ -30,6 +32,7 @@ class Experiment(ExperimentBase):
     lr_min_ratio: float = 1.0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
+    eval_method: Literal["standard", "fast", "wta"] = "fast"
     eval_path_valid: bool = True
     label_smoothing_includes_pad_token: bool = False
 
