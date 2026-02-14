@@ -12,7 +12,7 @@ from model import TRM3, TRM3ConfigProtocol
 
 
 class Experiment(Experiment07):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k-aug"
+    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
 
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07.config),

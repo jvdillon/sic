@@ -1,3 +1,10 @@
 Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias', 'puzzle_id_embed.weight')
 Muon 2D params: ('reasoning.0.attn.o_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.o_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
 Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasoning.1.attn.qkv_proj.weight')
+  path_valid=0.00%, exact_match=0.00%
+  eval_avg_halt_step: 16.00
+  eval_avg_halt_step: 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/step00500.pt acc=88.38% (0.088s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/best.pt acc=88.38% (0.169s)
+Step   500  Test 88.38% /  0.00%  Train lm=0.8633±0.1455ϵ[0.7969,2.8438] n_halted=7.9360±30.8988ϵ[0.0000,128.0000]  TrainAcc 88.36%/ 0.00%  (69.454s / 189.503s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
