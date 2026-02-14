@@ -31,6 +31,7 @@ class Experiment(ExperimentBase):
     loss_ignore_index: int | None = 0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
+    eval_path_valid: bool = True
 
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,

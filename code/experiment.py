@@ -886,10 +886,13 @@ class Experiment:
 
             train_cell_acc, train_puzzle_acc = 0.0, 0.0
             if train_loader is not None:
-                saved = self.max_eval_samples
+                saved_samples = self.max_eval_samples
+                saved_path = self.eval_path_valid
                 self.max_eval_samples = self.max_eval_samples_train
+                self.eval_path_valid = False
                 train_cell_acc, train_puzzle_acc = self.evaluate_act(train_loader)
-                self.max_eval_samples = saved
+                self.max_eval_samples = saved_samples
+                self.eval_path_valid = saved_path
 
             ckpt_start = time.perf_counter()
             script_path = pathlib.Path(sys.argv[0]).resolve()
@@ -1037,14 +1040,15 @@ class Experiment:
                             valid[idx] = False
 
         cell_acc = 100 * total_cell_correct / total_cells if total_cells > 0 else 0.0
-        puzzle_acc = 100 * total_correct / total_puzzles if total_puzzles > 0 else 0.0
-        print(f"  cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
-        if total_puzzles > 0:
-            print(f"  eval_avg_halt_step: {total_steps / total_puzzles:.2f}")
+        exact_acc = 100 * total_correct / total_puzzles if total_puzzles > 0 else 0.0
+        puzzle_acc = exact_acc
         if self.eval_path_valid and total_puzzles > 0:
             pv = 100 * total_path_valid / total_puzzles
             po = 100 * total_path_optimal / total_puzzles
-            print(f"  path_valid={pv:.2f}%, path_optimal={po:.2f}%")
+            puzzle_acc = po
+            print(f"  path_valid={pv:.2f}%, exact_match={exact_acc:.2f}%")
+        if total_puzzles > 0:
+            print(f"  eval_avg_halt_step: {total_steps / total_puzzles:.2f}")
         return cell_acc, puzzle_acc
 
     def evaluate_act_haltfast_wta(
@@ -1325,18 +1329,18 @@ class Experiment:
                     total_path_optimal += no
 
         cell_acc = 100 * correct.item() / total
-        puzzle_acc = 100 * puzzles_correct.item() / total_samples
-        print(f"  cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
+        exact_acc = 100 * puzzles_correct.item() / total_samples
+        puzzle_acc = exact_acc
+        if self.eval_path_valid and total_samples > 0:
+            pv = 100 * total_path_valid / total_samples
+            po = 100 * total_path_optimal / total_samples
+            puzzle_acc = po
+            print(f"  path_valid={pv:.2f}%, exact_match={exact_acc:.2f}%")
 
         if total_samples > 0:
             print(
                 f"  eval_avg_halt_step: {total_halt_steps.item() / total_samples:.2f}"
             )
-
-        if self.eval_path_valid and total_samples > 0:
-            pv = 100 * total_path_valid / total_samples
-            po = 100 * total_path_optimal / total_samples
-            print(f"  path_valid={pv:.2f}%, path_optimal={po:.2f}%")
 
         if self.enable_reset_retry and total_stuck > 0:
             print(
