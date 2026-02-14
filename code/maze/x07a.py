@@ -1,4 +1,8 @@
-"""x07: x000l (standalone, no x000 inheritance)."""
+"""x07: x000l (standalone, no x000 inheritance).
+
+x07.log is eval_method="fast".
+x07.log.1 is eval_method="standard".
+"""
 
 from typing import Literal
 
