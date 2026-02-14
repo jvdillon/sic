@@ -18,8 +18,6 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
-
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07.config),
         use_rope=False,

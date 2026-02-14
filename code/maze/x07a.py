@@ -20,7 +20,6 @@ _CFG = get_puzzle_config("maze")
 class Experiment(ExperimentBase):
     batch_size: int = 128
 
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
     augment_sudoku: bool = False
     eval_every_steps: int = 500
     eval_batch_size: int | None = 256

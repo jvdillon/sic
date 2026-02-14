@@ -15,8 +15,6 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
-
     def _run_h_cycles(
         self,
         core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],

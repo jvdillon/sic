@@ -12,8 +12,6 @@ from model import TRM3, TRM3ConfigProtocol
 
 
 class Experiment(Experiment07):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
-
     augmentation_random_bundle_max_size: int = 8
 
     config: TRM3ConfigProtocol = dataclasses.replace(

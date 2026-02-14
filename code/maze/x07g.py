@@ -18,8 +18,6 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07):
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
-
     max_steps_schedule: ClassVar[dict[int, tuple[int, bool]]] = {  # pyright: ignore[reportIncompatibleVariableOverride]
         0: (1, False),
         1000: (2, False),
