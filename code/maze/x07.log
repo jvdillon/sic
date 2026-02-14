@@ -49,3 +49,9 @@ Step  3000  Test 98.86% / 70.10%  Train lm=0.6719±0.0024ϵ[0.6680,0.6836] n_hal
   saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07/step03500.pt acc=98.73% (0.086s)
 Step  3500  Test 98.73% / 68.10%  Train lm=0.6680±0.0018ϵ[0.6641,0.6758] n_halted=74.0680±10.9720ϵ[35.0000,103.0000]  TrainAcc 99.89%/89.70%  (19.926s / 179.872s)
   n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=86.50%, exact_match=60.80%
+  eval_avg_halt_step: 2.94
+  eval_avg_halt_step: 1.47
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07/step04000.pt acc=98.79% (0.085s)
+Step  4000  Test 98.79% / 71.70%  Train lm=0.6680±0.0021ϵ[0.6641,0.6758] n_halted=82.5580±11.6279ϵ[45.0000,105.0000]  TrainAcc 99.91%/89.10%  (17.143s / 179.969s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]

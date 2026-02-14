@@ -8,3 +8,12 @@ Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasonin
   saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/best.pt acc=88.38% (0.169s)
 Step   500  Test 88.38% /  0.00%  Train lm=0.8633±0.1455ϵ[0.7969,2.8438] n_halted=7.9360±30.8988ϵ[0.0000,128.0000]  TrainAcc 88.36%/ 0.00%  (69.454s / 189.503s)
   n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=5.90%, exact_match=0.50%
+  eval_avg_halt_step: 16.00
+  eval_avg_halt_step: 16.00
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/step01000.pt acc=94.31% (0.088s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/best.pt acc=94.31% (0.170s)
+Step  1000  Test 94.31% /  1.50%  Train lm=0.7617±0.0330ϵ[0.6992,0.9180] n_halted=7.9680±30.8936ϵ[0.0000,128.0000]  TrainAcc 95.24%/ 2.90%  (51.555s / 180.586s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=49.90%, exact_match=22.90%
+  eval_avg_halt_step: 11.08
