@@ -329,6 +329,16 @@ class Experiment:
                 f"({self.config.num_effective_heads} = K_H * K_L)",
             )
 
+        if (
+            self.label_smoothing_includes_pad_token
+            != self.config.label_smoothing_includes_pad_token
+        ):
+            raise ValueError(
+                f"label_smoothing_includes_pad_token mismatch: "
+                f"experiment={self.label_smoothing_includes_pad_token}, "
+                f"model config={self.config.label_smoothing_includes_pad_token}",
+            )
+
         # Validate that both puzzle embedding modes aren't enabled simultaneously
         if self.use_additive_puzzle_emb and self.config.num_puzzle_id_tokens > 0:
             raise ValueError(
@@ -742,8 +752,7 @@ class Experiment:
                     and self.model.puzzle_id_embed is not None
                 ):
                     chain_puzzle_ids = state.puzzle_ids[batch_indices]
-                    local_ids = chain_puzzle_ids % cfg.num_puzzle_ids
-                    puzzle_emb = self.model.puzzle_id_embed(local_ids, cfg.dtype)
+                    puzzle_emb = self.model.puzzle_id_embed(chain_puzzle_ids, cfg.dtype)
                     puzzle_emb = puzzle_emb.view(
                         B,
                         cfg.num_puzzle_id_tokens,

@@ -17,3 +17,22 @@ Step  1000  Test 94.31% /  1.50%  Train lm=0.7617±0.0330ϵ[0.6992,0.9180] n_hal
   n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
   path_valid=49.90%, exact_match=22.90%
   eval_avg_halt_step: 11.08
+  eval_avg_halt_step: 9.84
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/step01500.pt acc=97.25% (0.085s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/best.pt acc=97.25% (0.167s)
+Step  1500  Test 97.25% / 29.60%  Train lm=0.7109±0.0089ϵ[0.6914,0.7812] n_halted=14.3620±12.5399ϵ[0.0000,87.0000]  TrainAcc 98.29%/36.40%  (40.463s / 181.306s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=75.10%, exact_match=40.40%
+  eval_avg_halt_step: 4.99
+  eval_avg_halt_step: 3.14
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/step02000.pt acc=97.75% (0.085s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/best.pt acc=97.75% (0.167s)
+Step  2000  Test 97.75% / 46.50%  Train lm=0.6914±0.0090ϵ[0.6719,0.7148] n_halted=36.5480±15.6177ϵ[4.0000,81.0000]  TrainAcc 99.44%/78.40%  (22.460s / 180.964s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=79.90%, exact_match=49.30%
+  eval_avg_halt_step: 4.91
+  eval_avg_halt_step: 2.24
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/step02500.pt acc=98.27% (0.086s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07a/best.pt acc=98.27% (0.167s)
+Step  2500  Test 98.27% / 59.70%  Train lm=0.6719±0.0035ϵ[0.6680,0.6875] n_halted=60.6400±11.6272ϵ[27.0000,88.0000]  TrainAcc 99.83%/89.50%  (21.274s / 180.983s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]

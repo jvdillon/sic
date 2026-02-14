@@ -122,6 +122,7 @@ class TRM3ConfigProtocol(Protocol):
     ]
     core_damping: float
     anchor_seq_index: int | None
+    label_smoothing_includes_pad_token: bool
 
     @property
     def total_seq_len(self) -> int: ...
