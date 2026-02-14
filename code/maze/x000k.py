@@ -12,7 +12,6 @@ Changes from x000f (keeping our Muon+AdamW optimizer and standard CE loss):
   - seed: 42 -> 0 (reference seed)
   - num_puzzle_id_tokens: 0 -> 1, num_register_tokens: 0 -> 15 (reference puzzle_emb_len=16)
   - register_token_init_std: 1.0 -> 0.0 (reference uses zero-init)
-  - loss_ignore_index: None -> 0 (reference ignores label=0 positions)
   - vocab_size: 12 -> 6 (reference charset "# SGo" + pad = 6)
   - register_tokens_learnable: True -> False (reference uses fixed zero-padding)
   - loss_sum_normalize: False -> True (reference uses sum then /global_batch_size)
@@ -80,7 +79,6 @@ class Experiment(Experiment000):
     lr_warmup_steps: int = 2000
     lr_min_ratio: float = 1.0
     grad_clip_max_norm: float | None = None
-    loss_ignore_index: int | None = 0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
 

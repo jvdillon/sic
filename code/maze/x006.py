@@ -138,22 +138,24 @@ class Experiment(Experiment000l):
 
         state = self._state
         labels = torch.stack([state.labels[i] for i in halt_batch_indices])
-        ignore_index = (
-            self.loss_ignore_index if self.loss_ignore_index is not None else -100
-        )
-
         logits, _z_H_out, _z_L_out = self._core_forward(tokens, z_H_in, z_L_in)
         assert self.device is not None
         B = len(halt_batch_indices)
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
+            if self.loss_includes_pad_token:
+                _loss_labels = labels.reshape(-1)
+                _loss_ignore = 0
+            else:
+                _loss_labels = (labels - 1).reshape(-1)
+                _loss_ignore = -1
             loss_per_token = nn.functional.cross_entropy(
                 logits.reshape(-1, logits.shape[-1]),
-                labels.reshape(-1),
+                _loss_labels,
                 label_smoothing=self.label_smoothing,
-                ignore_index=ignore_index,
+                ignore_index=_loss_ignore,
                 reduction="none",
             ).reshape(B, -1)
-            loss_count = (labels != ignore_index).sum(dim=-1).clamp(min=1)
+            loss_count = (labels != 0).sum(dim=-1).clamp(min=1)
             loss = (loss_per_token.sum(dim=-1) / loss_count).sum() / self.batch_size
         loss.backward()
 

@@ -15,7 +15,6 @@ class Experiment(Experiment000):
     use_ema: bool = False
     lr_warmup_steps: int = 0
     lr_min_ratio: float = 1.0
-    loss_ignore_index: int | None = 0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
 

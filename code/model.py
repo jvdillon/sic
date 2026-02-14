@@ -335,6 +335,8 @@ class Linear(nn.Module):
         dtype: torch.dtype | None = None,
     ):
         super().__init__()
+        self.c_in = c_in
+        self.c_out = c_out
         self.weight = nn.Parameter(
             init_weight_fn(
                 torch.empty(
@@ -1295,6 +1297,10 @@ class TRM3(nn.Module):
         num_puzzle_ids: int = 0  # Size of puzzle ID embedding table
         q_halt_seq_index: int = 0  # Sequence position from which q_head reads
 
+        # If False, head outputs vocab_size-1 classes (no PAD logit).
+        # Labels must be shifted: labels-1 with ignore_index=-1.
+        loss_includes_pad_token: bool = True
+
         # Whether TRM3.__init__ casts all params/buffers to config.dtype via self.to().
         # Set False to keep RoPE buffers in float32 (needed for b4b match with reference).
         cast_model_to_dtype: bool = True
@@ -1399,7 +1405,7 @@ class TRM3(nn.Module):
         )
         self.head = Linear(
             config.hidden_size,
-            config.vocab_size,
+            config.vocab_size - (not config.loss_includes_pad_token),
             bias=config.head_bias,
             init_weight_fn=trunc_normal_init_,  # std = rsqrt(hidden_size)
             init_bias_fn=nn.init.zeros_,

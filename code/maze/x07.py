@@ -28,10 +28,10 @@ class Experiment(ExperimentBase):
     use_ema: bool = False
     lr_warmup_steps: int = 0
     lr_min_ratio: float = 1.0
-    loss_ignore_index: int | None = 0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
     eval_path_valid: bool = True
+    loss_includes_pad_token: bool = False
 
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
@@ -53,6 +53,7 @@ class Experiment(ExperimentBase):
         register_tokens_learnable=False,
         q_halt_seq_index=0,
         cast_model_to_dtype=False,
+        loss_includes_pad_token=False,
         block_fn=functools.partial(
             TransformerBlock,
             multiple_of=128,

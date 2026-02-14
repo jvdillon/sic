@@ -79,15 +79,14 @@ class PuzzleData(TypedDict):
     labels: Tensor
     puzzle_identifiers: Tensor | None
     group_indices: Tensor
-    vocab_size: int
+    vocab_size: int  # Ie, size of embeddingtable. Includes pad.
     seq_len: int
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class PuzzleConfig:
     grid_shape: tuple[int, ...]  # (9, 9) for sudoku, (30, 30) for maze, (900,) for ARC
-    vocab_size: int
-    mask_token: int | None = None
+    vocab_size: int  # Total tokens including PAD=0
 
     @property
     def grid_len(self) -> int:
@@ -95,9 +94,13 @@ class PuzzleConfig:
 
 
 _PUZZLE_CONFIGS: dict[PuzzleType, PuzzleConfig] = {
-    "sudoku": PuzzleConfig(grid_shape=(9, 9), vocab_size=12, mask_token=10),
-    "maze": PuzzleConfig(grid_shape=(30, 30), vocab_size=6),  # values 1-5 + padding 0
-    "arc": PuzzleConfig(grid_shape=(900,), vocab_size=12),
+    "sudoku": PuzzleConfig(
+        grid_shape=(9, 9), vocab_size=11
+    ),  # 0=pad 1=mask 2-10=digits
+    "maze": PuzzleConfig(
+        grid_shape=(30, 30), vocab_size=6
+    ),  # 0=pad 1=wall 2=empty 3=start 4=goal 5=solution
+    "arc": PuzzleConfig(grid_shape=(900,), vocab_size=12),  # 0=pad 1=eos 2-11=colors
 }
 
 
@@ -156,6 +159,7 @@ def load_puzzle_dataset(data_dir: str, split: str) -> PuzzleData:
     """Load puzzle data from disk.
 
     Returns dict with: inputs, labels, puzzle_identifiers, group_indices, vocab_size, seq_len.
+    Token 0 is always PAD across all puzzle types.
     """
     data_path = pathlib.Path(data_dir).expanduser() / split
 

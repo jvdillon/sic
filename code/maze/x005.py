@@ -47,28 +47,27 @@ class Experiment(Experiment000l):
 
         batch_indices = state.batch_index.clamp(min=0)
         chain_labels = state.labels[batch_indices]
-        ignore_index = (
-            self.loss_ignore_index if self.loss_ignore_index is not None else -100
-        )
-
         # Recompute loss with regret weighting
+        if self.loss_includes_pad_token:
+            loss_labels = chain_labels.reshape(-1)
+            loss_ignore = 0
+        else:
+            loss_labels = (chain_labels - 1).reshape(-1)
+            loss_ignore = -1
         loss_per_token = nn.functional.cross_entropy(
             result["logits"].reshape(-1, result["logits"].shape[-1]),
-            chain_labels.reshape(-1),
+            loss_labels,
             label_smoothing=self.label_smoothing,
-            ignore_index=ignore_index,
+            ignore_index=loss_ignore,
             reduction="none",
         ).reshape(state.num_chains, -1)
 
         weight = 1.0 + self.regret_alpha * self._wrong_count[batch_indices]
         loss_per_token = loss_per_token * weight
 
-        if self.loss_ignore_index is not None:
-            valid_mask = chain_labels != ignore_index
-            weight_sum = (weight * valid_mask).sum(dim=-1).clamp(min=1)
-            loss = loss_per_token.sum(dim=-1) / weight_sum
-        else:
-            loss = loss_per_token.mean(dim=-1)
+        valid_mask = chain_labels != 0
+        weight_sum = (weight * valid_mask).sum(dim=-1).clamp(min=1)
+        loss = loss_per_token.sum(dim=-1) / weight_sum
         result["losses"] = torch.where(
             chain_active,
             loss,
@@ -80,7 +79,7 @@ class Experiment(Experiment000l):
             preds = result["logits"][chain_active].detach().argmax(dim=-1)
             active_batch = batch_indices[chain_active]
             active_labels = state.labels[active_batch]
-            wrong = (preds != active_labels) & (active_labels != ignore_index)
+            wrong = (preds != active_labels) & (active_labels != 0)
             self._wrong_count[active_batch] += wrong.float()
 
         return result

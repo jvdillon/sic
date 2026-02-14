@@ -21,7 +21,6 @@ class Experiment(Experiment000):
     lr_warmup_steps: int = 0  # 2000
     lr_min_ratio: float = 1.0
     # grad_clip_max_norm: float | None = None
-    loss_ignore_index: int | None = 0
     cast_model_to_dtype: bool = False
     loss_sum_normalize: bool = True
 

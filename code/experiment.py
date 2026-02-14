@@ -35,7 +35,10 @@ warnings.filterwarnings("ignore", message=".*TF32.*")
 
 
 def check_maze_paths(
-    preds: Tensor, labels: Tensor, H: int, W: int,
+    preds: Tensor,
+    labels: Tensor,
+    H: int,
+    W: int,
 ) -> tuple[int, int]:
     """BFS check: does predicted solution connect start→goal?
 
@@ -50,8 +53,8 @@ def check_maze_paths(
     for b in range(B):
         pred = preds_np[b]
         label = labels_np[b]
-        starts = list(zip(*np.where(label == 3)))
-        goals = list(zip(*np.where(label == 4)))
+        starts = list(zip(*np.where(label == 3), strict=False))
+        goals = list(zip(*np.where(label == 4), strict=False))
         if not starts or not goals:
             continue
         path = (pred == 5) | (pred == 3) | (pred == 4)
@@ -231,9 +234,6 @@ class Experiment:
 
     # Regularization
     label_smoothing: float = 0.2
-    loss_ignore_index: int | None = (
-        None  # Token ID to exclude from loss (None = no masking)
-    )
 
     # EMA
     use_ema: bool = True
@@ -256,6 +256,11 @@ class Experiment:
 
     # Gradient clipping
     grad_clip_max_norm: float | None = 1.0  # None = no clipping
+
+    # If True (default), the PAD logit (class 0) participates in label smoothing
+    # at non-PAD positions. If False, slice it out before loss: ce(logits[...,1:],
+    # labels-1, ignore_index=-1) so smoothing only covers real tokens.
+    loss_includes_pad_token: bool = True
 
     # Loss normalization: if True, use sum + divide-by-batch_size (reference style)
     # instead of mean. Equivalent when all slots active, but matches reference pattern.
@@ -436,9 +441,9 @@ class Experiment:
                     loss = forward_result["losses"][winner_chains].sum()
                     if train_q_halt:
                         with torch.no_grad():
-                            predictions = forward_result["logits"][
-                                winner_chains
-                            ].argmax(dim=-1)
+                            predictions = self._preds(
+                                forward_result["logits"][winner_chains]
+                            )
                             correct = (
                                 (predictions == state.labels[active_samples])
                                 .all(dim=-1)
@@ -458,9 +463,9 @@ class Experiment:
                     loss = forward_result["losses"][winner_chains].mean()
                     if train_q_halt:
                         with torch.no_grad():
-                            predictions = forward_result["logits"][
-                                winner_chains
-                            ].argmax(dim=-1)
+                            predictions = self._preds(
+                                forward_result["logits"][winner_chains]
+                            )
                             correct = (
                                 (predictions == state.labels[active_samples])
                                 .all(dim=-1)
@@ -699,7 +704,7 @@ class Experiment:
                 logits=torch.zeros(
                     num_chains,
                     cfg.num_puzzle_grid_tokens,
-                    cfg.vocab_size,
+                    self.model.head.c_out,
                     device=state.device,
                     dtype=self.dtype,
                 ),
@@ -799,21 +804,21 @@ class Experiment:
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         logits = logits[:, n_prefix:, :]
 
-        ignore_index = (
-            self.loss_ignore_index if self.loss_ignore_index is not None else -100
-        )
+        if self.loss_includes_pad_token:
+            loss_labels = chain_labels.reshape(-1)
+            loss_ignore = 0
+        else:
+            loss_labels = (chain_labels - 1).reshape(-1)
+            loss_ignore = -1
         loss_per_token = nn.functional.cross_entropy(
             logits.reshape(-1, logits.shape[-1]),
-            chain_labels.reshape(-1),
+            loss_labels,
             label_smoothing=self.label_smoothing,
-            ignore_index=ignore_index,
+            ignore_index=loss_ignore,
             reduction="none",
         ).reshape(num_chains, -1)
-        if self.loss_ignore_index is not None:
-            loss_count = (chain_labels != ignore_index).sum(dim=-1).clamp(min=1)
-            loss = loss_per_token.sum(dim=-1) / loss_count
-        else:
-            loss = loss_per_token.mean(dim=-1)
+        loss_count = (chain_labels != 0).sum(dim=-1).clamp(min=1)
+        loss = loss_per_token.sum(dim=-1) / loss_count
         loss = torch.where(
             active,
             loss,
@@ -930,6 +935,11 @@ class Experiment:
             return self.evaluate_act_haltfast(loader)
         return self.evaluate_act_full(loader)
 
+    def _preds(self, logits: Tensor) -> Tensor:
+        """Convert logits to token predictions, accounting for head offset."""
+        p = logits.argmax(dim=-1)
+        return p if self.loss_includes_pad_token else p + 1
+
     def _eval_forward(
         self,
         input_ids: Tensor,
@@ -996,7 +1006,7 @@ class Experiment:
                 logits = out["logits"]
                 q_halt = out["q_halt"]
 
-                preds = logits.argmax(dim=-1)
+                preds = self._preds(logits)
                 steps += valid.int()
                 halted = valid & ((q_halt > 0) | (steps >= self.current_max_steps))
 
@@ -1085,7 +1095,7 @@ class Experiment:
         winner_logits = torch.zeros(
             B,
             grid_len,
-            self.model.config.vocab_size,
+            self.model.head.c_out,
             device=self.device,
             dtype=self.dtype,
         )
@@ -1174,7 +1184,7 @@ class Experiment:
                     done_idx = done.nonzero(as_tuple=True)[0]
                     for idx_tensor in done_idx:
                         idx = int(idx_tensor.item())
-                        preds = winner_logits[idx].argmax(dim=-1)
+                        preds = self._preds(winner_logits[idx])
                         correct = (preds == labels[idx]).sum().item()
                         total_cells_correct += correct
                         total_cells += grid_len
@@ -1249,7 +1259,7 @@ class Experiment:
                 halt_logits = torch.zeros(
                     B,
                     inputs.shape[1],
-                    self.model.config.vocab_size,
+                    self.model.head.c_out,
                     device=self.device,
                     dtype=self.dtype,
                 )
@@ -1282,7 +1292,7 @@ class Experiment:
                 total_samples += valid_count
                 samples_seen += valid_count
 
-                preds = out["logits"].argmax(dim=-1)
+                preds = self._preds(out["logits"])
 
                 if self.enable_reset_retry:
                     stuck_mask = ~has_halted
@@ -1311,7 +1321,7 @@ class Experiment:
                             z_H_retry = out_retry["z_H"]
                             z_L_retry = out_retry["z_L"]
 
-                        retry_preds = out_retry["logits"].argmax(dim=-1)
+                        retry_preds = self._preds(out_retry["logits"])
                         now_correct = (retry_preds == labels_stuck).all(dim=-1)
                         total_helped += (was_wrong & now_correct).sum().item()
                         preds[stuck_idx] = retry_preds
@@ -1380,7 +1390,7 @@ class Experiment:
                 cell_accs = []
                 puzzle_accs = []
                 for lg in step_logits:
-                    preds = lg[:diag_valid].argmax(dim=-1)
+                    preds = self._preds(lg[:diag_valid])
                     labels_v = sample_labels[:diag_valid]
                     cell_accs.append((preds == labels_v).float().mean().item() * 100)
                     puzzle_accs.append(
