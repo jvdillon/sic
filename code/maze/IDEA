@@ -1,9 +1,0 @@
-the issue with current design is that there is no mechanism for ACT steps to learn how to help their
-future self out.  TRM however _does_ have this ability because at least some of the recurrence is backpropped.
-
-to address this:
-
-carry[t] = f(carry[t-1])
-carrt[t+1] = f(carry[t])
-
-push: carry[t+1] and carry[t]
