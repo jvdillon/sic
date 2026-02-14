@@ -176,6 +176,7 @@ class Experiment:
     eval_batch_size: int | None = 768  # Must match train pool size for compile
     eval_every_steps: int = 2_000
     max_eval_samples: int = 38_400
+    max_eval_samples_train: int = 1_000
     checkpoint_steps: list[int] = list(range(0, 75_000, 500))  # noqa: RUF012
     enable_reset_retry: bool = False
     reset_threshold: float = 0.0
@@ -820,7 +821,11 @@ class Experiment:
     # NOTE: These eval methods don't pass puzzle_ids, so they're incompatible with
     # num_puzzle_id_tokens > 0. The model will raise a clear error in that case.
 
-    def evaluate(self, loader: Any) -> tuple[float, float]:
+    def evaluate(
+        self,
+        loader: Any,
+        train_loader: Any | None = None,
+    ) -> tuple[float, float, float, float]:
         ema = self.ema  # Local var for type narrowing
         use_ema = ema is not None and self.current_step >= self.ema_warmup_steps
         if use_ema:
@@ -830,6 +835,13 @@ class Experiment:
         try:
             self.model.eval()
             cell_acc, puzzle_acc = self.evaluate_act(loader)
+
+            train_cell_acc, train_puzzle_acc = 0.0, 0.0
+            if train_loader is not None:
+                saved = self.max_eval_samples
+                self.max_eval_samples = self.max_eval_samples_train
+                train_cell_acc, train_puzzle_acc = self.evaluate_act(train_loader)
+                self.max_eval_samples = saved
 
             ckpt_start = time.perf_counter()
             script_path = pathlib.Path(sys.argv[0]).resolve()
@@ -853,7 +865,7 @@ class Experiment:
                 ckpt_elapsed = time.perf_counter() - ckpt_start
                 print(f"  saved: {path} acc={cell_acc:.2f}% ({ckpt_elapsed:5.3f}s)")
 
-            return cell_acc, puzzle_acc
+            return cell_acc, puzzle_acc, train_cell_acc, train_puzzle_acc
         finally:
             self.model.train()
             if use_ema:
@@ -1565,7 +1577,12 @@ def train(experiment: Experiment):
         nonlocal epoch_losses
         eval_start = time.perf_counter()
 
-        cell_acc, puzzle_acc = experiment.evaluate(iter(testloader))
+        train_eval_loader = (
+            iter(trainloader) if experiment.max_eval_samples_train > 0 else None
+        )
+        cell_acc, puzzle_acc, tr_cell, tr_puz = experiment.evaluate(
+            iter(testloader), train_loader=train_eval_loader
+        )
 
         eval_time = time.perf_counter() - eval_start
         epoch_elapsed = eval_start - epoch_start
@@ -1595,8 +1612,14 @@ def train(experiment: Experiment):
                 train_loss = f"  Train {losses.mean():.4f}±{losses.std():.4f} [{losses.min():.4f}, {losses.max():.4f}]"
             epoch_losses = []
 
+        train_acc_str = ""
+        if experiment.max_eval_samples_train > 0:
+            train_acc_str = f"  TrainAcc {tr_cell:5.2f}%/{tr_puz:5.2f}%"
+
         step = f"Step{experiment.current_step:6d}"
-        acc_str = f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%{train_loss}"
+        acc_str = (
+            f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%{train_loss}{train_acc_str}"
+        )
         timing = f"  ({eval_time:5.3f}s / {epoch_elapsed:6.3f}s)"
 
         print(f"{step}{acc_str}{timing}{extra_stats}", flush=True)

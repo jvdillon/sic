@@ -67,7 +67,7 @@ prev_snapshot = None
 prev_step = None
 
 for _ in range(SCAN_START, SCAN_END + 1):
-    cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+    cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
     print(f"Step {exp.current_step:6d}  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%")
 
     if prev_puzzle_acc is not None:

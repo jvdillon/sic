@@ -85,13 +85,13 @@ for n, pre_p in pre_params.items():
 
 # PRE baseline
 restore_model_only(exp, snap)
-cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
 print(f"\nPRE:  cell={cell_acc:.2f}% puzzle={puzzle_acc:.2f}%")
 
 # POST baseline
 for n, p in exp.model.named_parameters():
     p.data.copy_(post_params[n])
-cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
 print(f"POST: cell={cell_acc:.2f}% puzzle={puzzle_acc:.2f}%")
 
 # Ablation: apply all deltas EXCEPT one param at a time
@@ -105,7 +105,7 @@ for skip_name in pre_params:
             p.data.copy_(pre_params[n])  # keep PRE value
         else:
             p.data.copy_(post_params[n])  # use POST value
-    cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+    cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
     print(f"  skip {skip_name:50s}  cell={cell_acc:.2f}% puzzle={puzzle_acc:.2f}%")
 
 # Ablation: apply ONLY one param's delta at a time
@@ -119,7 +119,7 @@ for apply_name in pre_params:
             p.data.copy_(post_params[n])  # use POST value
         else:
             p.data.copy_(pre_params[n])  # keep PRE value
-    cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+    cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
     print(f"  only {apply_name:50s}  cell={cell_acc:.2f}% puzzle={puzzle_acc:.2f}%")
 
 # Skip both qkv_proj weights
@@ -127,5 +127,5 @@ print("\n=== SKIP BOTH QKV ===")
 both_qkv = {"reasoning.0.attn.qkv_proj.weight", "reasoning.1.attn.qkv_proj.weight"}
 for n, p in exp.model.named_parameters():
     p.data.copy_(pre_params[n] if n in both_qkv else post_params[n])
-cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
 print(f"  skip both qkv:  cell={cell_acc:.2f}% puzzle={puzzle_acc:.2f}%")

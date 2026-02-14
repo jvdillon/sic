@@ -61,7 +61,7 @@ restore_training_state(exp, snap)
 restore_rng(snap)
 
 # Pre-step eval
-cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
 print(f"Step {exp.current_step:6d}  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%  (PRE)")
 
 # Restore RNG again (eval consumed it)
@@ -266,6 +266,6 @@ state.expunge(
 exp._fill_pending()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
 # Post-step eval
-cell_acc, puzzle_acc = exp.evaluate(iter(exp.make_test_loader()))
+cell_acc, puzzle_acc, *_ = exp.evaluate(iter(exp.make_test_loader()))
 print(f"\n{'=' * 80}")
 print(f"Step {exp.current_step:6d}  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%  (POST)")
