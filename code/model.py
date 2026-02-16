@@ -667,6 +667,13 @@ class RoPEMixed(RoPE):
                 freqs.append(nn.Parameter(torch.empty(0), requires_grad=False))
         self._inv_freqs: nn.ParameterList = nn.ParameterList(freqs)  # pyright: ignore[reportIncompatibleVariableOverride]
 
+    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
+        freqs = [f.data.clone() for f in self._inv_freqs]
+        nn.Module._apply(self, fn, recurse)  # noqa: SLF001
+        for i, f in enumerate(freqs):
+            self._inv_freqs[i].data = f.to(device=self._dtype.device)
+        return self
+
 
 class Linear(nn.Module):
     """Linear with configurable init."""

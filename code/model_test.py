@@ -290,12 +290,11 @@ class TestRoPEMixed:
 
     # --- dtype preservation through .to() --------------------------------
 
-    def test_output_f32_after_cast(self):
-        """Forward computes in float32 regardless of parameter dtype."""
-        rope = RoPEMixed(dim=32, num_heads=4, learnable=True).to(torch.bfloat16)
-        cos, sin = rope(torch.arange(10).unsqueeze(-1))
-        assert cos.dtype == torch.bfloat16
-        assert sin.dtype == torch.bfloat16
+    def test_dtype_preserved_after_cast(self):
+        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
+        rope = rope.to(torch.bfloat16)
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert all(f.dtype == torch.float32 for f in inv if f.numel())
 
     def test_output_dtype_matches_model(self):
         rope = RoPEMixed(dim=32, num_heads=4).to(torch.bfloat16)
