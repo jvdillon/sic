@@ -473,7 +473,7 @@ class RoPE(nn.Module):
         rows = []
         offset = 0
         for b, c in zip(self._bases, self._dims, strict=False):
-            row = torch.zeros(total)
+            row = torch.zeros(total, dtype=torch.float32)  # device="cpu"
             row[offset : offset + c // 2] = self._make_inv_freqs(b, c)
             offset += c // 2
             rows.append(row)
@@ -519,10 +519,10 @@ class RoPE(nn.Module):
                 emb.sin().to(dtype=self.dtype, device=self.device),
             )
 
-    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
-        super()._apply(fn, recurse)
-        self._inv_freqs = self._inv_freqs.to(device=self._dtype.device)
-        return self
+    # def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
+    #     super()._apply(fn, recurse)
+    #     self._inv_freqs = self._inv_freqs.to(device=self._dtype.device)
+    #     return self
 
     @classmethod
     def smallest_recommended_base(
@@ -670,7 +670,7 @@ class RoPEMixed(RoPE):
     def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
         inv_freqs = self._inv_freqs.data.clone()
         nn.Module._apply(self, fn, recurse)  # noqa: SLF001
-        self._inv_freqs.data = inv_freqs.to(device=self._dtype.device)
+        self._inv_freqs.data = inv_freqs  # .to(device=self._dtype.device)
         return self
 
 
