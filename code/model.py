@@ -60,12 +60,12 @@ class TRM1ConfigProtocol(Protocol):
     H_cycles: int
     L_cycles: int
     state_noise: float
-    rope_theta: float
     head_bias: bool
     act: bool
     act_q_head_bias_init: float
     block_fn: Callable[[int], nn.Module]
     use_rope: bool
+    rope_kwargs: dict[str, Any]
     causal: bool
     no_grad_inner: bool
     head_init_weight_fn: InitFn
@@ -82,7 +82,7 @@ class TRM1ConfigProtocol(Protocol):
 class TRM3ConfigProtocol(Protocol):
     """Minimal config protocol for TRM3 models (duck typing for callers)."""
 
-    num_puzzle_grid_tokens: int
+    puzzle_grid_shape: tuple[int, ...]
     hidden_size: int
     vocab_size: int
     dtype: torch.dtype | None
@@ -102,7 +102,7 @@ class TRM3ConfigProtocol(Protocol):
     num_puzzle_ids: int
     q_halt_seq_index: int
     use_rope: bool
-    rope_theta: float
+    rope_kwargs: dict[str, Any]
     num_heads: int
     carry_H: Literal[
         "top1",
@@ -123,6 +123,9 @@ class TRM3ConfigProtocol(Protocol):
     core_damping: float
     anchor_seq_index: int | None
     label_smoothing_includes_pad_token: bool
+
+    @property
+    def num_puzzle_grid_tokens(self) -> int: ...
 
     @property
     def total_seq_len(self) -> int: ...
@@ -451,10 +454,12 @@ class RoPE(nn.Module):
         dim: int | Iterable[int],
         *,
         base: float | Iterable[float] = 10e3,
+        legacy: bool = False,
     ):
         super().__init__()
         dims, bases = self._broadcast_args(dim, base)
         self.dims = dims
+        self._legacy = legacy
         self._active_axes = [i for i, c in enumerate(dims) if c > 0]
         if not self._active_axes:
             raise ValueError(f"At least one dim must be nonzero, got {dims}.")
@@ -471,7 +476,7 @@ class RoPE(nn.Module):
         offset = 0
         for b, c in zip(self._bases, self._dims, strict=False):
             row = torch.zeros(total)
-            row[offset : offset + c // 2] = self._make_inv_freqs(b, c)
+            row[offset : offset + c // 2] = self._make_inv_freqs(b, c, legacy=legacy)
             offset += c // 2
             rows.append(row)
         self._inv_freqs = torch.stack(rows).unsqueeze(-2)
@@ -497,17 +502,26 @@ class RoPE(nn.Module):
           sin: Same shape as cos.
 
         """
-        positions = positions.to(device=self.device, dtype=torch.float32)
         if positions.ndim == 1:
             positions = positions.unsqueeze(-1)
-        inv_freqs = self._inv_freqs.float()
+        if self._legacy:
+            # Old RotaryEmbedding precomputed cos/sin on CPU at init.
+            # CPU and GPU trig differ by 1 ULP; replicate CPU path.
+            positions = positions.to(dtype=torch.float32, device="cpu")
+            inv_freqs = self._inv_freqs.detach().float().cpu()
+        else:
+            positions = positions.to(device=self.device, dtype=torch.float32)
+            inv_freqs = self._inv_freqs.float()
         # [..., S, N] @ [N, H, D] -> [..., S, H, D].
         emb = torch.einsum(
             "...n,nhd->...hd",
             positions[..., self._active_axes],
             inv_freqs,
         )
-        return emb.cos().to(self.dtype), emb.sin().to(self.dtype)
+        return (
+            emb.cos().to(device=self.device, dtype=self.dtype),
+            emb.sin().to(device=self.device, dtype=self.dtype),
+        )
 
     def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
         super()._apply(fn, recurse)
@@ -554,8 +568,10 @@ class RoPE(nn.Module):
         return bases[0] if len(bases) == 1 else tuple(bases)
 
     @classmethod
-    def _make_inv_freqs(cls, base: float, dim: int) -> Tensor:
+    def _make_inv_freqs(cls, base: float, dim: int, *, legacy: bool = False) -> Tensor:
         """Inverse frequencies: base^linspace(0, -1+2/c, c//2)."""
+        if legacy:
+            return 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
         return (
             torch.linspace(
                 0,
@@ -628,8 +644,9 @@ class RoPEMixed(RoPE):
         base: float | Iterable[float] = 10e3,
         axial: bool = False,
         learnable: bool = False,
+        legacy: bool = False,
     ):
-        super().__init__(dim, base=base)
+        super().__init__(dim, base=base, legacy=legacy)
         if axial:
             inv_freqs = self._inv_freqs
         else:
@@ -637,21 +654,20 @@ class RoPEMixed(RoPE):
                 raise ValueError(f"Sum mode requires uniform dims, got {self._dims}.")
             inv_freqs = torch.stack(
                 [
-                    self._make_inv_freqs(b, c)
+                    self._make_inv_freqs(b, c, legacy=legacy)
                     for b, c in zip(self._bases, self._dims, strict=False)
                 ]
             ).unsqueeze(-2)
-        directions = nn.functional.normalize(
-            trunc_normal_init_(
-                torch.empty(len(self._active_axes), num_heads, 1),
-                std=1.0,
-            ),
-            dim=0,
-        )
-        self._inv_freqs = nn.Parameter(
-            inv_freqs * directions,
-            requires_grad=learnable,
-        )
+        if num_heads > 1:
+            directions = nn.functional.normalize(
+                trunc_normal_init_(
+                    torch.empty(len(self._active_axes), num_heads, 1),
+                    std=1.0,
+                ),
+                dim=0,
+            )
+            inv_freqs = inv_freqs * directions
+        self._inv_freqs = nn.Parameter(inv_freqs, requires_grad=learnable)
 
     def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
         inv_freqs = self._inv_freqs.data.clone()
@@ -778,25 +794,37 @@ class Embedding(nn.Module):
 
 
 def make_grid_positions(
-    grid_shape: tuple[int, int],
+    grid_shape: tuple[int, ...],
     num_prefix_tokens: int,
     device: torch.device | str = "cpu",
+    legacy: bool = False,
 ) -> Tensor:
-    """Build [S, 2] position tensor for a 2D grid with prefix tokens.
+    """Build [S, N] position tensor for an N-D grid with prefix tokens.
 
-    Prefix tokens: row=0, col=0..num_prefix_tokens-1.
-    Grid tokens: row=1..H, col=1..W (raster order).
+    Prefix tokens get sequential positions along the last axis (other axes 0).
+    Grid tokens get 1-offset on axis 0 only (so prefix and grid never collide).
+    For N=1 this is equivalent to arange(num_prefix + prod(grid_shape)).
+
+    When legacy=True, uses the old convention (1-offset on ALL axes).
     """
-    H, W = grid_shape
-    total_len = num_prefix_tokens + H * W
-    positions = torch.zeros(total_len, 2, dtype=torch.long, device=device)
-    for j in range(num_prefix_tokens):
-        positions[j, 1] = j
-    grid_start = num_prefix_tokens
-    for i in range(H * W):
-        positions[grid_start + i, 0] = 1 + i // W
-        positions[grid_start + i, 1] = 1 + i % W
-    return positions
+    n = len(grid_shape)
+    grid = torch.meshgrid(
+        *(torch.arange(s, device=device) for s in grid_shape),
+        indexing="ij",
+    )
+    grid_pos = torch.stack([g.reshape(-1) for g in grid], dim=-1)
+    if legacy:
+        grid_pos = 1 + grid_pos
+    else:
+        grid_pos[:, 0] += num_prefix_tokens
+    prefix = torch.zeros(
+        num_prefix_tokens,
+        n,
+        dtype=torch.long,
+        device=device,
+    )
+    prefix[:, -1] = torch.arange(num_prefix_tokens, device=device)
+    return torch.cat([prefix, grid_pos])
 
 
 class Attention(nn.Module):
@@ -1173,7 +1201,14 @@ class TRM(nn.Module):
         L_cycles: int = 9
         state_noise: float = 0.0
 
-        rope_theta: float = 10e3
+        rope_kwargs: dict[str, Any] = dataclasses.field(
+            default_factory=lambda: {
+                "base": 10e3,
+                "axial": True,
+                "learnable": False,
+                "legacy": True,
+            }
+        )
         dtype: torch.dtype | None = torch.bfloat16
         head_bias: bool = True
         act: bool = True
@@ -1226,9 +1261,9 @@ class TRM(nn.Module):
 
         # RoPE (only for attention blocks)
         if config.use_rope:
-            self.rope: RoPE | None = RoPE(
-                dim=config.hidden_size // config.num_heads,
-                base=config.rope_theta,
+            self.rope = RoPEMixed(
+                config.hidden_size // config.num_heads,
+                **config.rope_kwargs,
             )
         else:
             self.rope = None
@@ -1470,7 +1505,7 @@ class TRM3(nn.Module):
     @dataclasses.dataclass(slots=True, kw_only=True)
     class Config:
         vocab_size: int = 10 + 1 + 1  # values + unknown + halt
-        num_puzzle_grid_tokens: int = 9 * 9  # puzzle grid tokens (no HALT)
+        puzzle_grid_shape: tuple[int, ...] = (9, 9)
         hidden_size: int = 512
         num_layers: int = 2
         H_cycles: int = 6
@@ -1481,11 +1516,11 @@ class TRM3(nn.Module):
         device: torch.device | str | None = "cuda"
 
         head_bias: bool = True
-        # NOTE: Default uses class-level num_puzzle_grid_tokens (81) at definition time.
-        # If you change num_puzzle_grid_tokens, you must also provide a compatible block_fn.
+        # NOTE: Default uses class-level puzzle_grid_shape (81) at definition time.
+        # If you change puzzle_grid_shape, you must also provide a compatible block_fn.
         block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
             MLPMixerBlock,
-            seq_len=num_puzzle_grid_tokens + 1,  # grid + 1 register (default)
+            seq_len=9 * 9 + 1,
             init_weight_fn=trunc_normal_init_,
         )
         block_kwargs_by_layer: dict[int, dict[str, Any]] = dataclasses.field(
@@ -1545,11 +1580,15 @@ class TRM3(nn.Module):
         z_H_random_init: bool = False
         z_L_random_init: bool = False
 
-        # RoPE (Rotary Position Embedding) - use for attention blocks
-        # Warning: This basically has to be true because our model is bias free.
         use_rope: bool = False
-        rope_theta: float = 10000.0
-        rope_2d_grid_shape: tuple[int, int] | None = None  # If set, use 2D RoPE
+        rope_kwargs: dict[str, Any] = dataclasses.field(
+            default_factory=lambda: {
+                "base": 10e3,
+                "axial": True,
+                "learnable": False,
+                "legacy": True,
+            }
+        )
         num_heads: int = 8  # Only used for RoPE dim calculation
 
         # Prefix tokens: prepend before puzzle_grid
@@ -1585,6 +1624,10 @@ class TRM3(nn.Module):
         # reasoning() call in core(). Fixed reference point for RoPE-based
         # position recovery. None = off.
         anchor_seq_index: int | None = None
+
+        @property
+        def num_puzzle_grid_tokens(self) -> int:
+            return math.prod(self.puzzle_grid_shape)
 
         @property
         def total_seq_len(self) -> int:
@@ -1730,19 +1773,11 @@ class TRM3(nn.Module):
         else:
             self.register_tokens = None
 
-        # RoPE (only for attention blocks)
         if config.use_rope:
-            if config.rope_2d_grid_shape is not None:
-                head_dim = config.hidden_size // config.num_heads
-                self.rope: RoPE | None = RoPE(
-                    dim=(head_dim // 2, head_dim // 2),
-                    base=config.rope_theta,
-                )
-            else:
-                self.rope = RoPE(
-                    dim=config.hidden_size // config.num_heads,
-                    base=config.rope_theta,
-                )
+            self.rope = RoPEMixed(
+                config.hidden_size // config.num_heads,
+                **config.rope_kwargs,
+            )
         else:
             self.rope = None
 
@@ -2008,14 +2043,15 @@ class TRM3(nn.Module):
         if self.rope is None:
             return None
         cfg = self.config
-        if cfg.rope_2d_grid_shape is not None:
+        if len(self.rope.dims) == 1:
+            positions = torch.arange(cfg.total_seq_len, device=device)
+        else:
             positions = make_grid_positions(
-                cfg.rope_2d_grid_shape,
+                cfg.puzzle_grid_shape,
                 cfg.num_puzzle_id_tokens + cfg.num_register_tokens,
                 device=device,
+                legacy=self.rope._legacy,  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
             )
-        else:
-            positions = torch.arange(cfg.total_seq_len, device=device)
         return self.rope(positions)
 
     def _prepend_prefix(

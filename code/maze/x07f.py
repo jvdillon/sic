@@ -14,11 +14,7 @@ from model import TRM3, TRM3ConfigProtocol
 class Experiment(Experiment07):
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07.config),
-        use_rope=True,
-        rope_2d_grid_shape=(30, 30),
-        num_layers=2,
-        H_cycles=3,  # 3,
-        L_cycles=4,  # 4,
+        # rope_kwargs={"base": (512, 512)},
     )
 
 

@@ -14,7 +14,7 @@ from model import TRM3, TRM3ConfigProtocol
 class Experiment(Experiment07):
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07.config),
-        rope_theta=1000.0,
+        rope_kwargs={"base": 1e3},
         register_token_init_std=1.0,
     )
 

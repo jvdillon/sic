@@ -42,7 +42,7 @@ class Experiment(ExperimentBase):
 
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
-        num_puzzle_grid_tokens=_CFG.grid_len,
+        puzzle_grid_shape=_CFG.grid_shape,
         num_layers=2,
         H_cycles=3,
         L_cycles=4,

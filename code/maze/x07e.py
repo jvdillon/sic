@@ -19,7 +19,7 @@ class Experiment(Experiment07):
 
 #     config: TRM3ConfigProtocol = dataclasses.replace(
 #         cast(TRM3.Config, Experiment07.config),
-#         rope_2d_grid_shape=(30, 30),
+#         rope_kwargs={"base": (512, 512)},
 #     )
 
 #     def _run_h_cycles(

@@ -34,7 +34,7 @@ def test_compute_diversity_loss():
 def _test_config() -> TRM3.Config:
     return TRM3.Config(
         vocab_size=12,
-        num_puzzle_grid_tokens=81,
+        puzzle_grid_shape=(9, 9),
         hidden_size=64,
         num_heads=4,
         num_layers=1,
@@ -433,7 +433,7 @@ def test_wta_batched_vs_sequential():
 
     config = TRM3.Config(
         vocab_size=12,
-        num_puzzle_grid_tokens=81,
+        puzzle_grid_shape=(9, 9),
         hidden_size=64,
         num_heads=4,
         num_layers=2,

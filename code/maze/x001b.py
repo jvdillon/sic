@@ -37,7 +37,7 @@ class Experiment(ExperimentBase):
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, ExperimentBase.config),
         vocab_size=_CFG.vocab_size,
-        num_puzzle_grid_tokens=_CFG.grid_len,
+        puzzle_grid_shape=_CFG.grid_shape,
         H_cycles=3,
         L_cycles=4,
         K_H=1,

@@ -14,7 +14,7 @@ class Experiment(Experiment000):
     use_ema: bool = False
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment000.config),
-        rope_2d_grid_shape=(30, 30),
+        rope_kwargs={"base": (10e3, 10e3)},
         block_fn=functools.partial(
             TransformerBlock,
             multiple_of=128,
