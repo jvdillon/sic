@@ -42,7 +42,6 @@ class Experiment(Experiment000l):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-        cos_sin_detach: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         n_prefix = self.config.num_puzzle_id_tokens + self.config.num_register_tokens
         base_emb = embeddings
@@ -52,7 +51,7 @@ class Experiment(Experiment000l):
                     embeddings.detach(),
                     z_H.detach(),
                     z_L.detach(),
-                    cos_sin_detach,
+                    cos_sin,
                 )
             if self.feedback_preserves_emb_grad:
                 embeddings = self._pred_feedback(base_emb, logits, n_prefix)
@@ -73,7 +72,7 @@ class Experiment(Experiment000l):
         cfg = m.config
         input_emb = m.embed_scale * m.embed_tokens(input_ids, cfg.dtype)
         input_emb = m._prepend_prefix(input_emb, puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        cos_sin = None if m.rope is None else m.rope()
+        cos_sin = m._get_cos_sin(input_emb.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
         core = m.core_compiled if cfg.compile_core else m.core
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         base_emb = input_emb

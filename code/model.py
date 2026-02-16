@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Literal, Protocol, Self, TypedDict
 
 import dataclasses
@@ -302,24 +302,362 @@ def _find_multiple(a: int, b: int) -> int:
     return (-(a // -b)) * b
 
 
-def _rotate_half(x: Tensor) -> Tensor:
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat([-x2, x1], dim=-1)
-
-
-def _apply_rotary_pos_emb(
+def apply_rope(
     q: Tensor,
     k: Tensor,
     cos: Tensor,
     sin: Tensor,
+    interleave: bool = False,
 ) -> tuple[Tensor, Tensor]:
-    orig_dtype = q.dtype
-    q = q.to(cos.dtype)
-    k = k.to(cos.dtype)
-    q_embed = (q * cos.unsqueeze(-2)) + (_rotate_half(q) * sin.unsqueeze(-2))
-    k_embed = (k * cos.unsqueeze(-2)) + (_rotate_half(k) * sin.unsqueeze(-2))
-    return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
+    """Apply rotary position embedding to query and key tensors.
+
+    cos/sin are half-dim (D//2). Splits q/k into pairs, applies a 2D
+    rotation, and recombines. No replication needed — half the memory
+    vs full-dim cos/sin approaches.
+
+    The ``interleave`` flag selects the dimension pairing convention:
+
+    - ``False`` (default): GPT-NeoX / HuggingFace half-split. Pairs
+      dim i with dim i+D/2. This is the convention in all HuggingFace
+      Transformers models (LLaMA, Mistral, Gemma, Qwen, etc.). Default
+      because most pretrained checkpoints use HF.
+    - ``True``: RoFormer / Meta LLaMA interleave. Pairs dim 2i with
+      dim 2i+1 (consecutive). This matches the original paper's math
+      and Meta's official LLaMA code.
+
+    Both conventions are mathematically equivalent up to a permutation
+    of embedding dimensions. HuggingFace applies a weight permutation
+    during checkpoint conversion (``convert_llama_weights_to_hf.py``)
+    to reconcile the two. For bit-for-bit reproduction, match the
+    convention used during training.
+
+    When q/k have more sequence positions than cos/sin (e.g. from
+    padding), cos/sin are right-padded with identity values (cos=1,
+    sin=0) so extra positions are unrotated.
+
+    References:
+      - Su et al., RoFormer (arXiv:2104.09864), Eq. 34.
+      - HuggingFace transformers ``rotate_half``:
+        https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py
+      - Meta LLaMA ``apply_rotary_emb``:
+        https://github.com/meta-llama/llama/blob/main/llama/model.py
+
+    Args:
+      q: [..., S, H, D].
+      k: [..., S, H, D].
+      cos: [..., S', H, D//2] where H=1 (fixed) or num_heads
+          (learnable). S' <= S; right-padded to S if smaller.
+      sin: Same shape as cos.
+      interleave: Pairing convention (see above).
+
+    Returns:
+      q_embed: Rotated queries, same shape as q.
+      k_embed: Rotated keys, same shape as k.
+
+    """
+    # Pad cos/sin to match q/k sequence length if needed.
+    seq_dim = -3
+    seq_len = q.shape[seq_dim]
+    rope_len = cos.shape[seq_dim]
+    if rope_len < seq_len:
+        pad_shape = list(cos.shape)
+        pad_shape[seq_dim] = seq_len - rope_len
+        cos = torch.cat(
+            [cos, torch.ones(pad_shape, dtype=cos.dtype, device=cos.device)],
+            dim=seq_dim,
+        )
+        sin = torch.cat(
+            [sin, torch.zeros(pad_shape, dtype=sin.dtype, device=sin.device)],
+            dim=seq_dim,
+        )
+    return (
+        _rope_rotate(q, cos, sin, interleave),
+        _rope_rotate(k, cos, sin, interleave),
+    )
+
+
+def _rope_rotate(x: Tensor, cos: Tensor, sin: Tensor, interleave: bool) -> Tensor:
+    """Apply 2D rotation to a single tensor using half-dim cos/sin."""
+    dtype = x.dtype
+    shape = x.shape
+    # float32 rotation math → input dtype.
+    if interleave:
+        split_dim = -1
+        x = x.float().reshape(*shape[:-1], -1, 2)
+    else:
+        split_dim = -2
+        x = x.float().reshape(*shape[:-1], 2, -1)
+    x0, x1 = x.moveaxis(split_dim, 0)
+    return (
+        torch.stack(
+            [x0 * cos - x1 * sin, x1 * cos + x0 * sin],
+            dim=split_dim,
+        )
+        .reshape(shape)
+        .to(dtype)
+    )
+
+
+class RoPE(nn.Module):
+    """N-dimensional Rotary Position Embedding with fixed frequencies.
+
+    Number of axes inferred from ``dim``: scalar for 1D, iterable for ND.
+    Per-axis channel counts can be unequal (e.g. ``dim=[44, 42, 42]``
+    allocates 44 frequencies to the first axis and 42 each to the other
+    two). Each nonzero count must be even and >= 4; use 0 to skip an
+    axis (e.g. ``dim=[128, 0]`` encodes only the first axis).
+
+    Returns half-dim cos/sin (shape ``[..., S, 1, dim//2]``). Pair
+    with ``apply_rope`` which splits q/k, applies the 2D rotation, and
+    recombines — no replication needed. The ``interleave`` flag on
+    ``apply_rope`` selects the dimension pairing convention:
+    GPT-NeoX / HuggingFace half-split (LLaMA, Mistral, Gemma, Qwen)
+    vs RoFormer / Meta LLaMA interleave. See ``apply_rope`` docstring
+    for details.
+
+    ``smallest_recommended_base(dim, max_positions)`` reference:
+
+        len      c=16    c=32    c=64   c=128   c=256
+        ----------------------------------------------------
+           16       3       3       2       2       2
+           32       6       5       5       5       5
+           64      14      12      11      10      10
+          128      31      25      22      21      21
+          256      69      52      46      43      42
+          512     152     109      94      87      84
+        1,024     337     229     192     177     169
+        2,048     745     479     393     357     341
+        4,096   1,645   1,004     803     722     686
+        8,192   3,632   2,103   1,643   1,461   1,379
+       16,384   8,021   4,405   3,361   2,954   2,774
+       32,768  17,713   9,227   6,873   5,974   5,579
+       65,536  39,114  19,328  14,058  12,080  11,218
+      131,072  86,372  40,484  28,751  24,428  22,560
+
+    Args:
+      dim: Channel count per axis. Scalar for 1D (e.g. 128), iterable
+          for ND. Each nonzero value must be even and >= 4. Use 0 to
+          skip an axis.
+      base: Frequency base(s). Scalar (shared across axes) or iterable
+          (one per axis). Controls the longest wavelength: the lowest
+          frequency has period ``2*pi*base^((c-2)/c)`` where c is the
+          per-axis channel count. Use ``smallest_recommended_base`` to
+          compute from max position counts.
+
+    """
+
+    def __init__(
+        self,
+        dim: int | Iterable[int],
+        *,
+        base: float | Iterable[float] = 10e3,
+    ):
+        super().__init__()
+        dims, bases = self._broadcast_args(dim, base)
+        self.dims = dims
+        self._active_axes = [i for i, c in enumerate(dims) if c > 0]
+        if not self._active_axes:
+            raise ValueError(f"At least one dim must be nonzero, got {dims}.")
+        self._bases, self._dims = zip(
+            *((b, c) for b, c in zip(bases, dims, strict=True) if c > 0),
+            strict=False,
+        )
+        for c in self._dims:
+            self._validate_c(c)
+        # Block-diagonal [N_axes, 1, total_half_dim]: each axis's
+        # freqs occupy separate channels (zeros elsewhere).
+        total = sum(c // 2 for c in self._dims)
+        rows = []
+        offset = 0
+        for b, c in zip(self._bases, self._dims, strict=False):
+            row = torch.zeros(total)
+            row[offset : offset + c // 2] = self._make_inv_freqs(b, c)
+            offset += c // 2
+            rows.append(row)
+        self._inv_freqs = torch.stack(rows).unsqueeze(-2)
+        self._dtype = nn.Buffer(torch.empty(0), persistent=False)
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self._dtype.dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._dtype.device
+
+    def forward(self, positions: Tensor) -> tuple[Tensor, Tensor]:
+        """Encode positions to half-dim (cos, sin) embeddings.
+
+        Args:
+          positions: [..., S, num_axes] or [..., S] when num_axes=1.
+
+        Returns:
+          cos: [..., S, H, dim // 2] where H=1 for fixed, num_heads
+              for per-head variants.
+          sin: Same shape as cos.
+
+        """
+        positions = positions.to(device=self.device, dtype=torch.float32)
+        if positions.ndim == 1:
+            positions = positions.unsqueeze(-1)
+        inv_freqs = self._inv_freqs.float()
+        # [..., S, N] @ [N, H, D] -> [..., S, H, D].
+        emb = torch.einsum(
+            "...n,nhd->...hd",
+            positions[..., self._active_axes],
+            inv_freqs,
+        )
+        return emb.cos().to(self.dtype), emb.sin().to(self.dtype)
+
+    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
+        super()._apply(fn, recurse)
+        self._inv_freqs = self._inv_freqs.to(device=self._dtype.device)
+        return self
+
+    @classmethod
+    def smallest_recommended_base(
+        cls,
+        dim: int | Iterable[int],
+        max_positions: int | Iterable[int],
+    ) -> float | tuple[float, ...]:
+        """Return the smallest reasonable base for given position range(s).
+
+        The lowest frequency has period 2pi*base^((c-2)/c). Setting this
+        >= max_positions gives::
+
+          base = ((max_pos - 1) / (2pi))^(c / (c - 2))
+
+        To dump the reference table:
+
+        >>> for c in [64, 128, 256]:
+        ...     for length in [16, 256, 1024, 16384, 131072]:
+        ...         b = RoPE.smallest_recommended_base(c, length)
+        ...         print(f"  c={c} len={length}: {b:.1f}")
+
+        Args:
+          dim: Per-axis channel count(s) (same as __init__).
+          max_positions: Max position count per axis. Scalar or iterable.
+              Broadcast against dim.
+
+        Returns:
+          base: Float (1D) or tuple of floats (ND).
+
+        """
+        dims, maxpos = cls._broadcast_args(dim, max_positions)
+        bases = []
+        for c, m in zip(dims, maxpos, strict=True):
+            if c == 0:
+                bases.append(0.0)
+                continue
+            cls._validate_c(c)
+            bases.append(((m - 1) / (2 * math.pi)) ** (c / (c - 2)))
+        return bases[0] if len(bases) == 1 else tuple(bases)
+
+    @classmethod
+    def _make_inv_freqs(cls, base: float, dim: int) -> Tensor:
+        """Inverse frequencies: base^linspace(0, -1+2/c, c//2)."""
+        return (
+            torch.linspace(
+                0,
+                math.log(base) * (-1 + 2 / dim),
+                dim // 2,
+                dtype=torch.float64,
+            )
+            .exp()
+            .float()
+        )
+
+    @classmethod
+    def _validate_c(cls, c: int) -> None:
+        """Validate a single per-axis channel count."""
+        if c < 4 or c % 2 != 0:
+            raise ValueError(f"Per-axis dim {c} must be even and >= 4.")
+
+    @classmethod
+    def _broadcast_args(
+        cls,
+        dim: int | Iterable[int],
+        other: float | Iterable[float] | Iterable[int],
+    ) -> tuple[tuple[int, ...], tuple[float, ...]]:
+        """Broadcast dim and other to equal-length tuples."""
+        dims = (int(dim),) if isinstance(dim, int) else tuple(int(d) for d in dim)
+        others = (
+            (float(other),)
+            if isinstance(other, (int, float))
+            else tuple(float(o) for o in other)
+        )
+        if len(dims) == 1 and len(others) > 1:
+            dims = dims * len(others)
+        if len(others) == 1:
+            others = others * len(dims)
+        if len(dims) != len(others):
+            raise ValueError(
+                f"len(dim)={len(dims)} must equal len(other)={len(others)}."
+            )
+        return dims, others
+
+
+class RoPEMixed(RoPE):
+    """N-dimensional RoPE with per-head frequencies.
+
+    Extends ``RoPE`` with per-head frequency scaling via random
+    directions on the N-sphere.
+
+    When ``axial=True`` (default), per-axis channels stay separate
+    (learned axial RoPE). When ``axial=False``, all axes share
+    channels (summed) — this is RoPE-Mixed from
+    [Heo et al., ECCV 2024](https://arxiv.org/abs/2403.13298).
+
+    Returns half-dim cos/sin (shape ``[..., S, H, dim//2]``). Pair
+    with ``apply_rope``.
+
+    Args:
+      dim: Channel count per axis (same semantics as ``RoPE``).
+      num_heads: Number of attention heads.
+      base: Frequency base(s) (same semantics as ``RoPE``).
+      axial: If True, axial (cat). If False (default), sum.
+      learnable: If True, frequencies are learnable. Default False.
+
+    """
+
+    def __init__(
+        self,
+        dim: int | Iterable[int],
+        *,
+        num_heads: int = 1,
+        base: float | Iterable[float] = 10e3,
+        axial: bool = False,
+        learnable: bool = False,
+    ):
+        super().__init__(dim, base=base)
+        if axial:
+            inv_freqs = self._inv_freqs
+        else:
+            if len(set(self._dims)) > 1:
+                raise ValueError(f"Sum mode requires uniform dims, got {self._dims}.")
+            inv_freqs = torch.stack(
+                [
+                    self._make_inv_freqs(b, c)
+                    for b, c in zip(self._bases, self._dims, strict=False)
+                ]
+            ).unsqueeze(-2)
+        directions = nn.functional.normalize(
+            trunc_normal_init_(
+                torch.empty(len(self._active_axes), num_heads, 1),
+                std=1.0,
+            ),
+            dim=0,
+        )
+        self._inv_freqs = nn.Parameter(
+            inv_freqs * directions,
+            requires_grad=learnable,
+        )
+
+    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
+        inv_freqs = self._inv_freqs.data.clone()
+        nn.Module._apply(self, fn, recurse)  # noqa: SLF001
+        self._inv_freqs.data = inv_freqs.to(device=self._dtype.device)
+        return self
 
 
 class Linear(nn.Module):
@@ -439,94 +777,26 @@ class Embedding(nn.Module):
         return nn.functional.embedding(x, self.weight.to(dtype))
 
 
-class RotaryEmbedding(nn.Module):
-    """RoPE positional encoding. Buffers always stay float32."""
+def make_grid_positions(
+    grid_shape: tuple[int, int],
+    num_prefix_tokens: int,
+    device: torch.device | str = "cpu",
+) -> Tensor:
+    """Build [S, 2] position tensor for a 2D grid with prefix tokens.
 
-    def __init__(
-        self,
-        dim: int,
-        max_position_embeddings: int,
-        base: float,
-    ):
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
-        t = torch.arange(max_position_embeddings, dtype=torch.float32)
-        freqs = torch.outer(t, inv_freq)
-        emb = torch.cat([freqs, freqs], dim=-1)
-        self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
-        self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
-
-    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> RotaryEmbedding:
-        # Preserve float32 cos/sin through .to(dtype=...) calls.
-        cos, sin = self.cos_cached.clone(), self.sin_cached.clone()
-        super()._apply(fn, recurse=recurse)
-        self.cos_cached = cos.to(device=self.cos_cached.device)
-        self.sin_cached = sin.to(device=self.sin_cached.device)
-        return self
-
-    def forward(self) -> tuple[Tensor, Tensor]:
-        return self.cos_cached, self.sin_cached
-
-
-class RotaryEmbedding2D(nn.Module):
-    """2D RoPE for grid-structured data (e.g., 30x30 maze).
-
-    Splits head_dim in half: first half encodes row, second half encodes column.
-    Grid cells are placed at positions (1..H, 1..W), reserving row 0 for prefix
-    tokens (puzzle_id, registers). Caller passes the raw grid shape (e.g. (30,30)).
+    Prefix tokens: row=0, col=0..num_prefix_tokens-1.
+    Grid tokens: row=1..H, col=1..W (raster order).
     """
-
-    def __init__(
-        self,
-        dim: int,
-        grid_shape: tuple[int, int],
-        num_prefix_tokens: int,
-        base: float,
-    ):
-        super().__init__()
-        H, W = grid_shape
-        if num_prefix_tokens > W:
-            raise ValueError(
-                f"num_prefix_tokens ({num_prefix_tokens}) > grid width ({W});"
-                " prefix columns would exceed grid column range"
-            )
-        half_dim = dim // 2
-
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, half_dim, 2, dtype=torch.float32) / half_dim)
-        )
-
-        total_len = num_prefix_tokens + H * W
-        row_pos = torch.zeros(total_len, dtype=torch.float32)
-        col_pos = torch.zeros(total_len, dtype=torch.float32)
-
-        # Prefix tokens: row 0, unique columns
-        for j in range(num_prefix_tokens):
-            col_pos[j] = j
-
-        # Grid tokens: (1..H, 1..W)
-        grid_start = num_prefix_tokens
-        for i in range(H * W):
-            row_pos[grid_start + i] = 1 + i // W
-            col_pos[grid_start + i] = 1 + i % W
-
-        freqs_row = torch.outer(row_pos, inv_freq)
-        freqs_col = torch.outer(col_pos, inv_freq)
-
-        emb = torch.cat([freqs_row, freqs_row, freqs_col, freqs_col], dim=-1)
-
-        self.cos_cached = nn.Buffer(emb.cos(), persistent=False)
-        self.sin_cached = nn.Buffer(emb.sin(), persistent=False)
-
-    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> RotaryEmbedding2D:
-        cos, sin = self.cos_cached.clone(), self.sin_cached.clone()
-        super()._apply(fn, recurse=recurse)
-        self.cos_cached = cos.to(device=self.cos_cached.device)
-        self.sin_cached = sin.to(device=self.sin_cached.device)
-        return self
-
-    def forward(self) -> tuple[Tensor, Tensor]:
-        return self.cos_cached, self.sin_cached
+    H, W = grid_shape
+    total_len = num_prefix_tokens + H * W
+    positions = torch.zeros(total_len, 2, dtype=torch.long, device=device)
+    for j in range(num_prefix_tokens):
+        positions[j, 1] = j
+    grid_start = num_prefix_tokens
+    for i in range(H * W):
+        positions[grid_start + i, 0] = 1 + i // W
+        positions[grid_start + i, 1] = 1 + i % W
+    return positions
 
 
 class Attention(nn.Module):
@@ -593,7 +863,7 @@ class Attention(nn.Module):
 
         if cos_sin is not None:
             cos, sin = cos_sin
-            q, k = _apply_rotary_pos_emb(q, k, cos, sin)
+            q, k = apply_rope(q, k, cos, sin)
 
         q, k, v = (t.transpose(-2, -3) for t in (q, k, v))  # S H D -> H S D
         out = nn.functional.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
@@ -835,8 +1105,8 @@ class BatchNorm(nn.BatchNorm1d):
     def __init__(self, num_features: int, momentum: float = 0.4, eps: float = 1e-12):
         super().__init__(num_features, momentum=momentum, eps=eps, affine=False)
 
-    def forward(self, x: Tensor) -> Tensor:
-        return super().forward(x.reshape(-1, x.shape[-1])).reshape(*x.shape)
+    def forward(self, input: Tensor) -> Tensor:
+        return super().forward(input.reshape(-1, input.shape[-1])).reshape(*input.shape)
 
 
 class GroupNorm(nn.GroupNorm):
@@ -845,8 +1115,8 @@ class GroupNorm(nn.GroupNorm):
     def __init__(self, num_features: int, num_groups: int = 8, eps: float = 1e-5):
         super().__init__(num_groups, num_features, eps=eps, affine=False)
 
-    def forward(self, x: Tensor) -> Tensor:
-        return super().forward(x.transpose(-2, -1)).transpose(-1, -2)
+    def forward(self, input: Tensor) -> Tensor:
+        return super().forward(input.transpose(-2, -1)).transpose(-1, -2)
 
 
 class Sequential(nn.Sequential):
@@ -956,9 +1226,8 @@ class TRM(nn.Module):
 
         # RoPE (only for attention blocks)
         if config.use_rope:
-            self.rope = RotaryEmbedding(
+            self.rope: RoPE | None = RoPE(
                 dim=config.hidden_size // config.num_heads,
-                max_position_embeddings=config.seq_len,
                 base=config.rope_theta,
             )
         else:
@@ -1079,7 +1348,11 @@ class TRM(nn.Module):
 
         """
         input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
-        cos_sin = None if self.rope is None else self.rope()
+        cos_sin = (
+            None
+            if self.rope is None
+            else self.rope(torch.arange(input_ids.shape[-1], device=input_ids.device))
+        )
         core = self.core_compiled if self.config.compile_core else self.core
         logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
         return {
@@ -1114,7 +1387,11 @@ class TRM(nn.Module):
         """
         H_cycles = self.config.H_cycles
         input_emb = self.embed_scale * self.embed_tokens(input_ids, self.config.dtype)
-        cos_sin = None if self.rope is None else self.rope()
+        cos_sin = (
+            None
+            if self.rope is None
+            else self.rope(torch.arange(input_ids.shape[-1], device=input_ids.device))
+        )
 
         all_logits = []
         all_z_H = []
@@ -1122,20 +1399,13 @@ class TRM(nn.Module):
         core = self.core_compiled if self.config.compile_core else self.core
 
         if self.config.no_grad_inner:
-            # We ensure to detach all inputs to avoid graph recompilation with eval
-            # (which does everything under no_grad).
-            cos_sin_detach = (
-                (cos_sin[0].detach(), cos_sin[1].detach())
-                if cos_sin is not None
-                else None
-            )
             with torch.no_grad():
                 for _ in range(H_cycles - 1):
                     logits, q_halt, z_H, z_L = core(
                         input_emb.detach(),
                         z_H.detach(),
                         z_L.detach(),
-                        cos_sin_detach,
+                        cos_sin,
                     )
                     all_logits.append(logits)
                     all_z_H.append(z_H)
@@ -1463,19 +1733,14 @@ class TRM3(nn.Module):
         # RoPE (only for attention blocks)
         if config.use_rope:
             if config.rope_2d_grid_shape is not None:
-                self.rope: RotaryEmbedding | RotaryEmbedding2D | None = (
-                    RotaryEmbedding2D(
-                        dim=config.hidden_size // config.num_heads,
-                        grid_shape=config.rope_2d_grid_shape,
-                        num_prefix_tokens=config.num_puzzle_id_tokens
-                        + config.num_register_tokens,
-                        base=config.rope_theta,
-                    )
+                head_dim = config.hidden_size // config.num_heads
+                self.rope: RoPE | None = RoPE(
+                    dim=(head_dim // 2, head_dim // 2),
+                    base=config.rope_theta,
                 )
             else:
-                self.rope = RotaryEmbedding(
+                self.rope = RoPE(
                     dim=config.hidden_size // config.num_heads,
-                    max_position_embeddings=config.total_seq_len,
                     base=config.rope_theta,
                 )
         else:
@@ -1739,6 +2004,20 @@ class TRM3(nn.Module):
             "l_indices": l_indices,
         }
 
+    def _get_cos_sin(self, device: torch.device | str) -> tuple[Tensor, Tensor] | None:
+        if self.rope is None:
+            return None
+        cfg = self.config
+        if cfg.rope_2d_grid_shape is not None:
+            positions = make_grid_positions(
+                cfg.rope_2d_grid_shape,
+                cfg.num_puzzle_id_tokens + cfg.num_register_tokens,
+                device=device,
+            )
+        else:
+            positions = torch.arange(cfg.total_seq_len, device=device)
+        return self.rope(positions)
+
     def _prepend_prefix(
         self,
         input_emb: Tensor,
@@ -1830,7 +2109,7 @@ class TRM3(nn.Module):
         input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
         input_emb = self._prepend_prefix(input_emb, puzzle_ids)
 
-        cos_sin = None if self.rope is None else self.rope()
+        cos_sin = self._get_cos_sin(input_emb.device)
         core = self.core_compiled if cfg.compile_core else self.core
         logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
 
@@ -2123,18 +2402,18 @@ class TRM3(nn.Module):
         input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
         input_emb = self._prepend_prefix(input_emb, puzzle_ids)
 
-        cos_sin = None if self.rope is None else self.rope()
+        cos_sin = self._get_cos_sin(input_emb.device)
         core = self.core_compiled if cfg.compile_core else self.core
 
         H_cycles = cfg.H_cycles
         all_logits = []
         all_z_H = []
 
-        # Detach cos_sin for no_grad iterations to avoid graph issues
+        # Detach cos_sin for no_grad iterations to avoid retaining the
+        # gradient graph when inv_freqs is a learnable Parameter.
         cos_sin_detach = (
             (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
         )
-
         with torch.no_grad():
             for _ in range(H_cycles - 1):
                 logits, q_halt, z_H, z_L = core(
@@ -2188,12 +2467,18 @@ class TRM3(nn.Module):
         input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
         input_emb = self._prepend_prefix(input_emb, puzzle_ids)
 
-        cos_sin = None if self.rope is None else self.rope()
+        cos_sin = self._get_cos_sin(input_emb.device)
         core = self.core_compiled if cfg.compile_core else self.core
 
         H_cycles = cfg.H_cycles
         all_logits = []
         all_z_H = []
+
+        # Detach cos_sin for no_grad iterations to avoid retaining the
+        # gradient graph when inv_freqs is a learnable Parameter.
+        cos_sin_detach = (
+            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+        )
 
         # z_H/z_L are [B*N, S, C], need to build matching init tensors
         BN, S, C = z_H.shape
@@ -2218,11 +2503,6 @@ class TRM3(nn.Module):
         # Track delta = z - init throughout
         z_H_delta = z_H - z_H_init.detach()
         z_L_delta = z_L - z_L_init.detach()
-
-        # Detach cos_sin for no_grad iterations
-        cos_sin_detach = (
-            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
-        )
 
         with torch.no_grad():
             for _ in range(H_cycles - 1):

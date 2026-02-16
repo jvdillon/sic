@@ -56,7 +56,6 @@ class Experiment(Experiment002):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-        cos_sin_detach: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         n_prefix = self.config.num_puzzle_id_tokens + self.config.num_register_tokens
         labels = getattr(self, "_train_labels", None)
@@ -67,7 +66,7 @@ class Experiment(Experiment002):
                     embeddings.detach(),
                     z_H.detach(),
                     z_L.detach(),
-                    cos_sin_detach,
+                    cos_sin,
                 )
             embeddings = self._pred_feedback(base_emb, logits, n_prefix, labels)
         return core(embeddings, z_H, z_L, cos_sin)

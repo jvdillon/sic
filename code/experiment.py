@@ -688,8 +688,12 @@ class Experiment:
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-        cos_sin_detach: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        # Detach cos_sin for no_grad iterations to avoid retaining the
+        # gradient graph when inv_freqs is a learnable Parameter.
+        cos_sin_detach = (
+            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+        )
         for _ in range(self.model.config.H_cycles - 1):
             with torch.no_grad():
                 _logits, _q_halt, z_H, z_L = core(
@@ -792,20 +796,13 @@ class Experiment:
                 else self.model.core
             )
             z_L = state.z_L
-            # Get RoPE cos_sin if available
-            cos_sin = None if self.model.rope is None else self.model.rope()
-            cos_sin_detach = (
-                (cos_sin[0].detach(), cos_sin[1].detach())
-                if cos_sin is not None
-                else None
-            )
+            cos_sin = self.model._get_cos_sin(embeddings.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
             logits, q_halt, z_H, z_L = self._run_h_cycles(
                 core,
                 embeddings,
                 z_H,
                 z_L,
                 cos_sin,
-                cos_sin_detach,
             )
 
         # Slice output to exclude prefix positions
@@ -888,7 +885,7 @@ class Experiment:
         self,
         loader: Any,
         train_loader: Any | None = None,
-    ) -> tuple[float, float, float, float]:
+    ) -> tuple[float, float, float, float, float, float, float, float]:
         ema = self.ema  # Local var for type narrowing
         use_ema = ema is not None and self.current_step >= self.ema_warmup_steps
         if use_ema:
@@ -897,15 +894,18 @@ class Experiment:
 
         try:
             self.model.eval()
-            cell_acc, puzzle_acc = self.evaluate_act(loader)
+            cell_acc, puzzle_acc, halt_cell, halt_puz = self.evaluate_act(loader)
 
             train_cell_acc, train_puzzle_acc = 0.0, 0.0
+            train_halt_cell, train_halt_puz = 0.0, 0.0
             if train_loader is not None:
                 saved_samples = self.max_eval_samples
                 saved_path = self.eval_path_valid
                 self.max_eval_samples = self.max_eval_samples_train
                 self.eval_path_valid = False
-                train_cell_acc, train_puzzle_acc = self.evaluate_act(train_loader)
+                train_cell_acc, train_puzzle_acc, train_halt_cell, train_halt_puz = (
+                    self.evaluate_act(train_loader)
+                )
                 self.max_eval_samples = saved_samples
                 self.eval_path_valid = saved_path
 
@@ -931,14 +931,24 @@ class Experiment:
                 ckpt_elapsed = time.perf_counter() - ckpt_start
                 print(f"  saved: {path} acc={cell_acc:.2f}% ({ckpt_elapsed:5.3f}s)")
 
-            return cell_acc, puzzle_acc, train_cell_acc, train_puzzle_acc
+            return (
+                cell_acc,
+                puzzle_acc,
+                halt_cell,
+                halt_puz,
+                train_cell_acc,
+                train_puzzle_acc,
+                train_halt_cell,
+                train_halt_puz,
+            )
         finally:
             self.model.train()
             if use_ema:
                 assert ema is not None  # Type guard
                 ema.restore(self.model)
 
-    def evaluate_act(self, loader: Any) -> tuple[float, float]:
+    def evaluate_act(self, loader: Any) -> tuple[float, float, float, float]:
+        """Returns (cell_acc, puzzle_acc, halt_cell_acc, halt_puzzle_acc)."""
         if self.eval_method == "wta":
             return self.evaluate_act_haltfast_wta(loader)
         if self.eval_method == "fast":
@@ -962,7 +972,7 @@ class Experiment:
             return self.model(input_ids, z_H, z_L, puzzle_ids)
         return self.model(input_ids, z_H, z_L)
 
-    def evaluate_act_haltfast(self, loader: Any) -> tuple[float, float]:
+    def evaluate_act_haltfast(self, loader: Any) -> tuple[float, float, float, float]:
         """Fast eval: streaming replacement when q_halt > 0, fixed batch size."""
         bs = (
             self.eval_batch_size
@@ -1004,7 +1014,7 @@ class Experiment:
 
         if not valid.any():
             print("  cell_acc=0.00%, puzzle_acc=0.00%")
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0
 
         with torch.no_grad():
             while valid.any():
@@ -1069,11 +1079,12 @@ class Experiment:
             print(f"  path_valid={pv:.2f}%, exact_match={exact_acc:.2f}%")
         if total_puzzles > 0:
             print(f"  eval_avg_halt_step: {total_steps / total_puzzles:.2f}")
-        return cell_acc, puzzle_acc
+        # halt_acc == final_acc: this method already evaluates at halt time.
+        return cell_acc, puzzle_acc, cell_acc, puzzle_acc
 
     def evaluate_act_haltfast_wta(
         self, loader: Any, progress: bool = False
-    ) -> tuple[float, float]:
+    ) -> tuple[float, float, float, float]:
         """WTA eval: run K heads, first to halt wins. Streaming replacement."""
         start_time = time.perf_counter()
         seq_len = self._get_seq_len()
@@ -1147,7 +1158,7 @@ class Experiment:
 
         if not valid.any():
             print("  cell_acc=0.00%, puzzle_acc=0.00%")
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0
 
         with torch.no_grad():
             while valid.any():
@@ -1236,9 +1247,10 @@ class Experiment:
         cell_acc = 100 * total_cells_correct / total_cells if total_cells > 0 else 0.0
         puzzle_acc = 100 * total_correct / total_puzzles if total_puzzles > 0 else 0.0
         print(f"  cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
-        return cell_acc, puzzle_acc
+        # halt_acc == final_acc: this method already evaluates at halt time.
+        return cell_acc, puzzle_acc, cell_acc, puzzle_acc
 
-    def evaluate_act_full(self, loader: Any) -> tuple[float, float]:
+    def evaluate_act_full(self, loader: Any) -> tuple[float, float, float, float]:
         """Full eval: run all steps with diagnostics.
 
         Reports both final-step accuracy (run all steps) and halt-time
@@ -1275,7 +1287,7 @@ class Experiment:
 
                 has_halted = torch.zeros(B, device=self.device, dtype=torch.bool)
                 halt_preds = torch.zeros(
-                    B, grid_len, device=self.device, dtype=torch.int32
+                    B, grid_len, device=self.device, dtype=torch.long
                 )
                 halt_step = torch.full(
                     (B,),
@@ -1370,8 +1382,6 @@ class Experiment:
             puzzle_acc = po
             print(f"  path_valid={pv:.2f}%, exact_match={exact_acc:.2f}%")
 
-        print(f"  halt_acc: cell={halt_cell_acc:.2f}%, puzzle={halt_exact_acc:.2f}%")
-
         if total_samples > 0:
             print(
                 f"  eval_avg_halt_step: {total_halt_steps.item() / total_samples:.2f}"
@@ -1448,7 +1458,7 @@ class Experiment:
                         f"  Avg ACT steps (last 100): {sum(recent) / len(recent):.2f}"
                     )
 
-        return cell_acc, puzzle_acc
+        return cell_acc, puzzle_acc, halt_cell_acc, halt_exact_acc
 
     def _get_seq_len(self) -> int:
         return self.config.total_seq_len
@@ -1692,9 +1702,16 @@ def train(experiment: Experiment):
         train_eval_loader = (
             iter(trainloader) if experiment.max_eval_samples_train > 0 else None
         )
-        cell_acc, puzzle_acc, tr_cell, tr_puz = experiment.evaluate(
-            iter(testloader), train_loader=train_eval_loader
-        )
+        (
+            cell_acc,
+            puzzle_acc,
+            halt_cell,
+            halt_puz,
+            tr_cell,
+            tr_puz,
+            tr_halt_cell,
+            tr_halt_puz,
+        ) = experiment.evaluate(iter(testloader), train_loader=train_eval_loader)
 
         eval_time = time.perf_counter() - eval_start
         epoch_elapsed = eval_start - epoch_start
@@ -1726,11 +1743,12 @@ def train(experiment: Experiment):
 
         train_acc_str = ""
         if experiment.max_eval_samples_train > 0:
-            train_acc_str = f"  TrainAcc {tr_cell:5.2f}%/{tr_puz:5.2f}%"
+            train_acc_str = f"  TrainAcc {tr_cell:5.2f}%/{tr_puz:5.2f}% (halt: {tr_halt_cell:5.2f}%/{tr_halt_puz:5.2f}%)"
 
         step = f"Step{experiment.current_step:6d}"
         acc_str = (
-            f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}%{train_loss}{train_acc_str}"
+            f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}% (halt: {halt_cell:5.2f}%/{halt_puz:5.2f}%)"
+            f"{train_loss}{train_acc_str}"
         )
         timing = f"  ({eval_time:5.3f}s / {epoch_elapsed:6.3f}s)"
 

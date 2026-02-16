@@ -16,7 +16,8 @@ from model import (
     GroupNorm,
     Linear,
     MLPMixerBlock,
-    RotaryEmbedding,
+    RoPE,
+    RoPEMixed,
     Sequential,
     SwiGLU,
     TransformerBlock,
@@ -84,18 +85,211 @@ class TestEmbedding:
         assert y.dtype == torch.float16
 
 
-class TestRotaryEmbedding:
-    def test_forward(self):
-        rope = RotaryEmbedding(dim=32, max_position_embeddings=128, base=10000.0)
-        cos, sin = rope()
-        assert cos.shape == (128, 32)
-        assert sin.shape == (128, 32)
+class TestRoPE:
+    # --- Shape tests -----------------------------------------------------
+
+    @pytest.mark.parametrize(
+        ("kwargs", "pos_shape", "expected_shape"),
+        [
+            # 1D.
+            ({"dim": 32}, (128,), (128, 1, 16)),
+            ({"dim": 16}, (64,), (64, 1, 8)),
+            # 2D axial (iterable dim).
+            ({"dim": [64, 64]}, (16, 2), (16, 1, 64)),
+            # 3D axial (explicit per-axis dims).
+            ({"dim": [44, 42, 42]}, (8, 3), (8, 1, 64)),
+            # 3D axial (scalar dim replicated).
+            ({"dim": 128, "base": [100.0, 100.0, 100.0]}, (8, 3), (8, 1, 192)),
+            # Batched positions.
+            ({"dim": 32}, (4, 10, 1), (4, 10, 1, 16)),
+        ],
+    )
+    def test_shape(
+        self,
+        kwargs: dict[str, Any],
+        pos_shape: tuple[int, ...],
+        expected_shape: tuple[int, ...],
+    ):
+        rope = RoPE(**kwargs)
+        positions = torch.arange(torch.tensor(pos_shape).prod().item()).float()
+        positions = positions.reshape(pos_shape)
+        cos, sin = rope(positions)
+        assert cos.shape == expected_shape
+        assert sin.shape == expected_shape
+
+    # --- Value tests -----------------------------------------------------
 
     def test_values_bounded(self):
-        rope = RotaryEmbedding(dim=16, max_position_embeddings=64, base=10000.0)
-        cos, sin = rope()
+        rope = RoPE(dim=16, base=10_000.0)
+        cos, sin = rope(torch.arange(64))
         assert cos.abs().max() <= 1.0
         assert sin.abs().max() <= 1.0
+
+    def test_pythagorean_identity(self):
+        rope = RoPE(dim=32)
+        cos, sin = rope(torch.arange(20))
+        torch.testing.assert_close(cos**2 + sin**2, torch.ones_like(cos))
+
+    def test_zero_position_is_identity(self):
+        rope = RoPE(dim=32, base=10_000.0)
+        cos, sin = rope(torch.zeros(1))
+        torch.testing.assert_close(cos, torch.ones_like(cos))
+        torch.testing.assert_close(sin, torch.zeros_like(sin))
+
+    # --- Dim replication -------------------------------------------------
+
+    def test_scalar_dim_replicated_by_bases(self):
+        rope = RoPE(dim=128, base=[10_000.0, 10_000.0, 10_000.0])
+        assert rope.dims == (128, 128, 128)
+
+    def test_scalar_dim_replicated_2(self):
+        rope = RoPE(dim=128, base=[10_000.0, 10_000.0])
+        assert rope.dims == (128, 128)
+
+    def test_odd_dim_raises(self):
+        with pytest.raises(ValueError, match="even"):
+            RoPE(dim=3, base=[10_000.0, 10_000.0])
+
+    # --- Block-diagonal structure ----------------------------------------
+
+    def test_axial_block_diagonal(self):
+        rope = RoPE(dim=[16, 16])
+        inv = rope._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert (inv[0, 0, 8:] == 0).all()
+        assert (inv[1, 0, :8] == 0).all()
+
+    # --- dtype preservation through .to() --------------------------------
+
+    def test_no_grad(self):
+        rope = RoPE(dim=32)
+        assert not rope._inv_freqs.requires_grad  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    def test_dtype_preserved_after_cast(self):
+        rope = RoPE(dim=32)
+        rope = rope.to(torch.bfloat16)
+        assert rope._inv_freqs.dtype == torch.float32  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    def test_output_dtype_matches_model(self):
+        rope = RoPE(dim=32).to(torch.bfloat16)
+        cos, _sin = rope(torch.arange(10))
+        assert cos.dtype == torch.bfloat16
+
+    # --- different bases -------------------------------------------------
+
+    def test_different_base_changes_freqs(self):
+        r1 = RoPE(dim=32, base=100.0)
+        r2 = RoPE(dim=32, base=10_000.0)
+        d1 = r1._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        d2 = r2._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert not torch.equal(d1, d2)
+
+
+class TestRoPEMixed:
+    # --- Shape tests -----------------------------------------------------
+
+    @pytest.mark.parametrize(
+        ("kwargs", "pos_shape", "expected_shape"),
+        [
+            # 1D multi-head axial.
+            ({"dim": 32, "num_heads": 4}, (10,), (10, 4, 16)),
+            # 1D learnable axial.
+            ({"dim": 32, "num_heads": 4, "learnable": True}, (10,), (10, 4, 16)),
+            # 2D multi-head axial.
+            (
+                {"dim": [64, 64], "num_heads": 4, "axial": True},
+                (16, 2),
+                (16, 4, 64),
+            ),
+            # 2D sum (non-axial): dim=64 replicated, each axis has 32.
+            (
+                {"dim": 64, "num_heads": 8, "base": [100.0, 100.0], "axial": False},
+                (16, 2),
+                (16, 8, 32),
+            ),
+            # 2D learnable sum (RoPE-Mixed).
+            (
+                {
+                    "dim": 64,
+                    "num_heads": 8,
+                    "base": [100.0, 100.0],
+                    "axial": False,
+                    "learnable": True,
+                },
+                (16, 2),
+                (16, 8, 32),
+            ),
+            # 3D multi-head axial (explicit per-axis dims).
+            (
+                {
+                    "dim": [44, 42, 42],
+                    "num_heads": 4,
+                    "axial": True,
+                },
+                (8, 3),
+                (8, 4, 64),
+            ),
+        ],
+    )
+    def test_shape(
+        self,
+        kwargs: dict[str, Any],
+        pos_shape: tuple[int, ...],
+        expected_shape: tuple[int, ...],
+    ):
+        rope = RoPEMixed(**kwargs)
+        positions = torch.arange(torch.tensor(pos_shape).prod().item()).float()
+        positions = positions.reshape(pos_shape)
+        cos, sin = rope(positions)
+        assert cos.shape == expected_shape
+        assert sin.shape == expected_shape
+
+    # --- Value tests -----------------------------------------------------
+
+    def test_values_bounded(self):
+        rope = RoPEMixed(dim=16, num_heads=4, base=10_000.0)
+        cos, sin = rope(torch.arange(64))
+        assert cos.abs().max() <= 1.0
+        assert sin.abs().max() <= 1.0
+
+    def test_pythagorean_identity(self):
+        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
+        cos, sin = rope(torch.arange(20))
+        torch.testing.assert_close(cos**2 + sin**2, torch.ones_like(cos))
+
+    # --- Sum: dense structure --------------------------------------------
+
+    def test_sum_dense(self):
+        rope = RoPEMixed(dim=16, num_heads=4, base=[100.0, 100.0], axial=False)
+        inv = rope._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        # All axes touch all channels (no block-diagonal zeros).
+        assert inv.shape[0] == 2  # 2 axes
+        assert inv.shape[1] == 4  # 4 heads
+
+    def test_axial_false_unequal_dims_raises(self):
+        with pytest.raises(ValueError, match="uniform"):
+            RoPEMixed(dim=[44, 42], num_heads=4, axial=False)
+
+    # --- learnable / requires_grad ---------------------------------------
+
+    def test_learnable_has_grad(self):
+        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
+        assert rope._inv_freqs.requires_grad  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    def test_fixed_no_grad(self):
+        rope = RoPEMixed(dim=32, num_heads=4, learnable=False)
+        assert not rope._inv_freqs.requires_grad  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    # --- dtype preservation through .to() --------------------------------
+
+    def test_dtype_preserved_after_cast(self):
+        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
+        rope = rope.to(torch.bfloat16)
+        assert rope._inv_freqs.dtype == torch.float32  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    def test_output_dtype_matches_model(self):
+        rope = RoPEMixed(dim=32, num_heads=4).to(torch.bfloat16)
+        cos, _sin = rope(torch.arange(10))
+        assert cos.dtype == torch.bfloat16
 
 
 class TestAttention:
@@ -107,10 +301,10 @@ class TestAttention:
 
     def test_forward_with_rope(self):
         attn = Attention(64, num_heads=4)
-        rope = RotaryEmbedding(dim=16, max_position_embeddings=32, base=10000.0)
+        rope = RoPE(dim=16, base=10000.0)
         x = torch.randn(2, 10, 64)
-        cos, sin = rope()
-        y = attn(x, cos_sin=(cos[:10], sin[:10]))
+        cos, sin = rope(torch.arange(10))
+        y = attn(x, cos_sin=(cos, sin))
         assert y.shape == (2, 10, 64)
 
     def test_causal(self):
@@ -157,10 +351,10 @@ class TestTransformerBlock:
 
     def test_with_rope(self):
         block = TransformerBlock(64, num_heads=4)
-        rope = RotaryEmbedding(dim=16, max_position_embeddings=32, base=10000.0)
+        rope = RoPE(dim=16, base=10000.0)
         x = torch.randn(2, 10, 64)
-        cos, sin = rope()
-        y = block(x, cos_sin=(cos[:10], sin[:10]))
+        cos, sin = rope(torch.arange(10))
+        y = block(x, cos_sin=(cos, sin))
         assert y.shape == (2, 10, 64)
 
 

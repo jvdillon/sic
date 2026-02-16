@@ -276,7 +276,7 @@ def test_fast_eval_streaming_replacement():
         for inp, lab in zip(all_inputs, all_labels, strict=False):
             yield (inp, lab, torch.zeros(2, dtype=torch.int32), 2)
 
-    _, _ = exp.evaluate_act_haltfast(fake_loader())
+    _, _, _, _ = exp.evaluate_act_haltfast(fake_loader())
 
     assert step_count == 6, f"Expected 6 steps for 6 puzzles but got {step_count}"
 
@@ -326,7 +326,7 @@ def test_fast_eval_metrics_at_halt_time():
     def fake_loader():
         yield (inputs, labels, torch.zeros(B, dtype=torch.int32), B)
 
-    cell_acc, puzzle_acc = exp.evaluate_act_haltfast(fake_loader())
+    cell_acc, puzzle_acc, _, _ = exp.evaluate_act_haltfast(fake_loader())
 
     assert cell_acc == 100.0, f"Expected 100% cell acc but got {cell_acc}%"
     assert puzzle_acc == 100.0, f"Expected 100% puzzle acc but got {puzzle_acc}%"
@@ -409,17 +409,17 @@ def test_eval_methods_consistent_k1():
 
     exp_full = EvalTestExp()
     torch.manual_seed(0)
-    cell_full, puzzle_full = exp_full.evaluate_act_full(make_loader())
+    cell_full, puzzle_full, _, _ = exp_full.evaluate_act_full(make_loader())
 
     exp_fast = EvalTestExp()
     torch.manual_seed(0)
-    cell_fast, puzzle_fast = exp_fast.evaluate_act_haltfast(make_loader())
+    cell_fast, puzzle_fast, _, _ = exp_fast.evaluate_act_haltfast(make_loader())
 
     exp_wta = EvalTestExp()
     exp_wta.eval_method = "wta"
     exp_wta.K = 1
     torch.manual_seed(0)
-    cell_wta, puzzle_wta = exp_wta.evaluate_act_haltfast_wta(make_loader())
+    cell_wta, puzzle_wta, _, _ = exp_wta.evaluate_act_haltfast_wta(make_loader())
 
     assert cell_full == cell_fast, f"full={cell_full} vs fast={cell_fast}"
     assert cell_full == cell_wta, f"full={cell_full} vs wta={cell_wta}"

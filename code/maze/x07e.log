@@ -295,3 +295,462 @@ Step  5000  Test 98.65% / 53.10%  Train lm=0.6680±0.0023ϵ[0.6641,0.6758] n_hal
   saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=98.89% (0.156s)
 Step  5500  Test 98.89% / 73.40%  Train lm=0.6680±0.0023ϵ[0.6641,0.6797] n_halted=101.4840±13.6180ϵ[13.0000,119.0000]  TrainAcc 99.94%/95.70%  (21.471s / 180.915s)
   n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=95.60%, exact_match=68.10%
+  eval_avg_halt_step: 1.58
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.742', '0.879']
+  z_H_delta: ['25.125', '22.375']
+  cells: fixed=[15, 0] broken=[83, 26]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=89.1%', 'H3=98.5%', 'H4=98.8%', 'H5=98.8%', 'H6=98.8%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=31.9%', 'H4=59.5%', 'H5=64.7%', 'H6=66.8%']
+  mean_sigmoid_q_halt: ['0.023', '0.494', '0.527', '0.832', '0.902', '0.949']
+  halt_rates: ['0.00', '0.49', '0.49', '0.85', '0.92', '0.96']
+  halt_histogram %: [69.1, 22.6, 1.2, 6.4, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.25
+  eval_avg_halt_step: 1.11
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.742', '0.871']
+  z_H_delta: ['25.125', '22.500']
+  cells: fixed=[8, 0] broken=[32, 10]
+  per_ACT_cell_acc: ['H1=87.2%', 'H2=89.2%', 'H3=99.8%', 'H4=99.9%', 'H5=99.9%', 'H6=99.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=82.7%', 'H4=94.2%', 'H5=96.2%', 'H6=97.1%']
+  mean_sigmoid_q_halt: ['0.024', '0.504', '0.828', '0.965', '0.984', '0.992']
+  halt_rates: ['0.00', '0.51', '0.82', '0.98', '0.99', '1.00']
+  halt_histogram %: [69.1, 22.6, 1.2, 6.4, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.25
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step06000.pt acc=98.94% (0.074s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=98.94% (0.153s)
+Step  6000  Test 98.94% / 78.50%  Train lm=0.6680±0.0030ϵ[0.6641,0.7148] n_halted=101.4920±8.0384ϵ[56.0000,117.0000]  TrainAcc 99.96%/95.40%  (21.464s / 180.746s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=95.40%, exact_match=72.50%
+  eval_avg_halt_step: 1.78
+  per_H_acc: ['H0=0.1%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.887', '0.902']
+  z_H_delta: ['23.125', '23.875']
+  cells: fixed=[56, 0] broken=[134, 56]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=89.1%', 'H3=98.4%', 'H4=98.8%', 'H5=98.9%', 'H6=99.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=32.3%', 'H4=56.5%', 'H5=63.8%', 'H6=68.1%']
+  mean_sigmoid_q_halt: ['0.271', '0.346', '0.416', '0.680', '0.789', '0.867']
+  halt_rates: ['0.00', '0.05', '0.40', '0.69', '0.81', '0.90']
+  halt_histogram %: [70.0, 22.2, 1.3, 5.8, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.25
+  eval_avg_halt_step: 1.26
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.887', '0.898']
+  z_H_delta: ['23.250', '24.000']
+  cells: fixed=[25, 0] broken=[1, 25]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=89.5%', 'H3=99.8%', 'H4=99.9%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=75.0%', 'H4=91.3%', 'H5=94.2%', 'H6=97.1%']
+  mean_sigmoid_q_halt: ['0.273', '0.336', '0.727', '0.918', '0.945', '0.957']
+  halt_rates: ['0.00', '0.02', '0.76', '0.94', '0.98', '0.97']
+  halt_histogram %: [70.0, 22.2, 1.3, 5.8, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.25
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step06500.pt acc=99.07% (0.077s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=99.07% (0.160s)
+Step  6500  Test 99.07% / 81.90%  Train lm=0.6641±0.0023ϵ[0.6641,0.6836] n_halted=102.0780±8.6135ϵ[52.0000,120.0000]  TrainAcc 99.95%/96.40%  (21.471s / 180.851s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=98.50%, exact_match=73.50%
+  eval_avg_halt_step: 1.38
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.859', '0.906']
+  z_H_delta: ['25.750', '21.875']
+  cells: fixed=[0, 0] broken=[89, 0]
+  per_ACT_cell_acc: ['H1=85.6%', 'H2=93.3%', 'H3=98.8%', 'H4=98.9%', 'H5=99.0%', 'H6=99.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=52.6%', 'H4=67.7%', 'H5=72.8%', 'H6=73.3%']
+  mean_sigmoid_q_halt: ['0.473', '0.369', '0.641', '0.871', '0.934', '0.969']
+  halt_rates: ['0.27', '0.03', '0.63', '0.88', '0.95', '0.98']
+  halt_histogram %: [70.9, 21.7, 1.4, 5.4, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.21
+  eval_avg_halt_step: 1.08
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.863', '0.906']
+  z_H_delta: ['25.625', '22.125']
+  cells: fixed=[0, 0] broken=[23, 0]
+  per_ACT_cell_acc: ['H1=85.5%', 'H2=94.0%', 'H3=100.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=94.2%', 'H4=99.0%', 'H5=100.0%', 'H6=100.0%']
+  mean_sigmoid_q_halt: ['0.475', '0.377', '0.945', '0.977', '0.988', '0.992']
+  halt_rates: ['0.19', '0.01', '0.95', '0.98', '1.00', '1.00']
+  halt_histogram %: [70.9, 21.7, 1.4, 5.4, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.21
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step07000.pt acc=99.09% (0.075s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=99.09% (0.156s)
+Step  7000  Test 99.09% / 82.60%  Train lm=0.6641±0.0021ϵ[0.6641,0.6719] n_halted=104.7940±6.9001ϵ[71.0000,121.0000]  TrainAcc 99.96%/98.30%  (21.479s / 180.780s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=97.90%, exact_match=75.40%
+  eval_avg_halt_step: 1.41
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.785', '0.891']
+  z_H_delta: ['22.875', '22.875']
+  cells: fixed=[0, 0] broken=[0, 0]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=90.9%', 'H3=98.8%', 'H4=99.0%', 'H5=99.1%', 'H6=99.1%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=50.9%', 'H4=66.4%', 'H5=71.1%', 'H6=72.0%']
+  mean_sigmoid_q_halt: ['0.066', '0.133', '0.660', '0.828', '0.895', '0.930']
+  halt_rates: ['0.00', '0.00', '0.63', '0.84', '0.91', '0.94']
+  halt_histogram %: [71.3, 21.7, 1.4, 5.0, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.24
+  eval_avg_halt_step: 1.06
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.785', '0.883']
+  z_H_delta: ['22.875', '23.375']
+  cells: fixed=[0, 0] broken=[0, 0]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=91.1%', 'H3=99.9%', 'H4=99.9%', 'H5=99.9%', 'H6=99.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=89.4%', 'H4=96.2%', 'H5=97.1%', 'H6=97.1%']
+  mean_sigmoid_q_halt: ['0.065', '0.130', '0.898', '0.961', '0.984', '0.984']
+  halt_rates: ['0.00', '0.00', '0.89', '0.97', '1.00', '1.00']
+  halt_histogram %: [71.3, 21.7, 1.4, 5.0, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.24
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step07500.pt acc=99.21% (0.076s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=99.21% (0.159s)
+Step  7500  Test 99.21% / 84.90%  Train lm=0.6641±0.0022ϵ[0.6641,0.6719] n_halted=100.1420±12.3432ϵ[38.0000,119.0000]  TrainAcc 99.95%/97.40%  (21.360s / 180.839s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=96.20%, exact_match=74.30%
+  eval_avg_halt_step: 1.41
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.793', '0.906']
+  z_H_delta: ['25.875', '22.000']
+  cells: fixed=[0, 0] broken=[20, 0]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=93.4%', 'H3=98.8%', 'H4=99.0%', 'H5=99.0%', 'H6=99.1%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=50.9%', 'H4=66.4%', 'H5=72.0%', 'H6=72.4%']
+  mean_sigmoid_q_halt: ['0.707', '0.174', '0.691', '0.852', '0.918', '0.949']
+  halt_rates: ['1.00', '0.00', '0.69', '0.87', '0.94', '0.97']
+  halt_histogram %: [71.9, 21.3, 1.5, 4.7, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.16
+  eval_avg_halt_step: 1.05
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.793', '0.902']
+  z_H_delta: ['25.875', '22.500']
+  cells: fixed=[0, 0] broken=[5, 0]
+  per_ACT_cell_acc: ['H1=87.2%', 'H2=94.1%', 'H3=99.9%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=94.2%', 'H4=97.1%', 'H5=99.0%', 'H6=99.0%']
+  mean_sigmoid_q_halt: ['0.707', '0.179', '0.953', '0.973', '0.984', '0.988']
+  halt_rates: ['1.00', '0.00', '0.96', '0.98', '1.00', '1.00']
+  halt_histogram %: [71.9, 21.3, 1.5, 4.7, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.16
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step08000.pt acc=99.07% (0.074s)
+Step  8000  Test 99.07% / 83.70%  Train lm=0.6680±0.0033ϵ[0.6641,0.6836] n_halted=97.2140±21.1584ϵ[7.0000,121.0000]  TrainAcc 99.97%/98.50%  (21.355s / 180.337s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=95.30%, exact_match=70.70%
+  eval_avg_halt_step: 1.50
+  per_H_acc: ['H0=37.2%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.754', '0.906']
+  z_H_delta: ['24.375', '22.125']
+  cells: fixed=[12, 0] broken=[77662, 12]
+  per_ACT_cell_acc: ['H1=45.1%', 'H2=91.5%', 'H3=98.7%', 'H4=98.8%', 'H5=98.8%', 'H6=98.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=54.3%', 'H4=61.6%', 'H5=62.5%', 'H6=67.2%']
+  mean_sigmoid_q_halt: ['0.547', '0.357', '0.672', '0.824', '0.812', '0.855']
+  halt_rates: ['1.00', '0.07', '0.66', '0.84', '0.83', '0.87']
+  halt_histogram %: [72.6, 20.9, 1.5, 4.4, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.22
+  eval_avg_halt_step: 1.11
+  per_H_acc: ['H0=36.8%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.750', '0.902']
+  z_H_delta: ['24.250', '22.250']
+  cells: fixed=[2, 0] broken=[34489, 3]
+  per_ACT_cell_acc: ['H1=45.2%', 'H2=92.2%', 'H3=99.8%', 'H4=99.8%', 'H5=99.9%', 'H6=99.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=86.5%', 'H4=89.4%', 'H5=92.3%', 'H6=94.2%']
+  mean_sigmoid_q_halt: ['0.543', '0.369', '0.855', '0.930', '0.949', '0.949']
+  halt_rates: ['0.99', '0.08', '0.87', '0.93', '0.97', '0.96']
+  halt_histogram %: [72.6, 20.9, 1.5, 4.4, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.22
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step08500.pt acc=99.20% (0.075s)
+Step  8500  Test 99.20% / 82.20%  Train lm=0.6641±0.0020ϵ[0.6641,0.6758] n_halted=105.5280±7.1065ϵ[62.0000,121.0000]  TrainAcc 99.91%/91.20%  (21.340s / 180.394s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=96.30%, exact_match=78.70%
+  eval_avg_halt_step: 2.14
+  per_H_acc: ['H0=37.2%', 'H1=0.2%', 'H2=0.0%']
+  H_cos: ['0.785', '0.742']
+  z_H_delta: ['20.750', '25.625']
+  cells: fixed=[0, 0] broken=[77216, 450]
+  per_ACT_cell_acc: ['H1=50.1%', 'H2=87.2%', 'H3=98.4%', 'H4=99.2%', 'H5=99.3%', 'H6=99.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=21.6%', 'H4=58.6%', 'H5=69.8%', 'H6=74.1%']
+  mean_sigmoid_q_halt: ['0.254', '0.344', '0.266', '0.574', '0.723', '0.801']
+  halt_rates: ['0.00', '0.00', '0.19', '0.59', '0.74', '0.82']
+  halt_histogram %: [73.0, 20.7, 1.5, 4.1, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.41
+  eval_avg_halt_step: 1.50
+  per_H_acc: ['H0=37.2%', 'H1=0.2%', 'H2=0.0%']
+  H_cos: ['0.785', '0.734']
+  z_H_delta: ['20.750', '25.750']
+  cells: fixed=[0, 0] broken=[34658, 195]
+  per_ACT_cell_acc: ['H1=50.1%', 'H2=87.2%', 'H3=99.7%', 'H4=100.0%', 'H5=99.9%', 'H6=99.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=61.5%', 'H4=94.2%', 'H5=97.1%', 'H6=98.1%']
+  mean_sigmoid_q_halt: ['0.252', '0.344', '0.512', '0.855', '0.922', '0.957']
+  halt_rates: ['0.00', '0.00', '0.51', '0.90', '0.96', '0.99']
+  halt_histogram %: [73.0, 20.7, 1.5, 4.1, 0.1, 0.6]
+  Avg ACT steps (last 100): 1.41
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step09000.pt acc=99.36% (0.075s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=99.36% (0.156s)
+Step  9000  Test 99.36% / 85.60%  Train lm=0.6641±0.0025ϵ[0.6641,0.6914] n_halted=102.4800±12.1318ϵ[16.0000,120.0000]  TrainAcc 99.97%/98.80%  (21.418s / 180.293s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=97.70%, exact_match=75.10%
+  eval_avg_halt_step: 1.36
+  per_H_acc: ['H0=3.7%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.613', '0.922']
+  z_H_delta: ['26.000', '20.125']
+  cells: fixed=[18, 0] broken=[7755, 52]
+  per_ACT_cell_acc: ['H1=74.8%', 'H2=92.7%', 'H3=99.0%', 'H4=99.0%', 'H5=99.1%', 'H6=99.1%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=58.2%', 'H4=69.4%', 'H5=71.6%', 'H6=74.6%']
+  mean_sigmoid_q_halt: ['0.523', '0.287', '0.727', '0.832', '0.898', '0.938']
+  halt_rates: ['0.80', '0.03', '0.73', '0.83', '0.92', '0.97']
+  halt_histogram %: [73.6, 20.4, 1.5, 3.9, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.23
+  eval_avg_halt_step: 1.04
+  per_H_acc: ['H0=3.5%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.617', '0.922']
+  z_H_delta: ['26.000', '20.375']
+  cells: fixed=[9, 0] broken=[3254, 21]
+  per_ACT_cell_acc: ['H1=75.4%', 'H2=93.2%', 'H3=100.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=99.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  mean_sigmoid_q_halt: ['0.523', '0.285', '0.961', '0.980', '0.988', '0.992']
+  halt_rates: ['0.86', '0.00', '0.97', '0.99', '1.00', '1.00']
+  halt_histogram %: [73.6, 20.4, 1.5, 3.9, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.23
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step09500.pt acc=99.22% (0.075s)
+Step  9500  Test 99.22% / 86.50%  Train lm=0.6641±0.0017ϵ[0.6641,0.6758] n_halted=106.8580±8.2393ϵ[39.0000,120.0000]  TrainAcc 99.95%/95.20%  (21.350s / 180.442s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=96.80%, exact_match=75.40%
+  eval_avg_halt_step: 1.36
+  per_H_acc: ['H0=34.8%', 'H1=0.2%', 'H2=0.0%']
+  H_cos: ['0.789', '0.906']
+  z_H_delta: ['25.125', '20.625']
+  cells: fixed=[1, 0] broken=[72240, 444]
+  per_ACT_cell_acc: ['H1=50.7%', 'H2=92.7%', 'H3=99.0%', 'H4=99.1%', 'H5=99.2%', 'H6=99.2%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=59.9%', 'H4=69.4%', 'H5=74.1%', 'H6=76.3%']
+  mean_sigmoid_q_halt: ['0.324', '0.232', '0.711', '0.812', '0.871', '0.910']
+  halt_rates: ['0.00', '0.01', '0.72', '0.82', '0.89', '0.94']
+  halt_histogram %: [74.2, 20.0, 1.5, 3.7, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.21
+  eval_avg_halt_step: 1.05
+  per_H_acc: ['H0=34.9%', 'H1=0.2%', 'H2=0.0%']
+  H_cos: ['0.789', '0.906']
+  z_H_delta: ['25.125', '20.875']
+  cells: fixed=[4, 0] broken=[32433, 195]
+  per_ACT_cell_acc: ['H1=50.8%', 'H2=93.6%', 'H3=100.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=97.1%', 'H4=98.1%', 'H5=99.0%', 'H6=99.0%']
+  mean_sigmoid_q_halt: ['0.322', '0.239', '0.977', '0.969', '0.980', '0.980']
+  halt_rates: ['0.00', '0.00', '0.98', '0.97', '0.99', '0.99']
+  halt_histogram %: [74.2, 20.0, 1.5, 3.7, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.21
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step10000.pt acc=99.28% (0.074s)
+Step 10000  Test 99.28% / 86.00%  Train lm=0.6641±0.0016ϵ[0.6641,0.6797] n_halted=107.8360±6.5815ϵ[64.0000,123.0000]  TrainAcc 99.94%/93.40%  (21.351s / 180.365s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=96.80%, exact_match=78.80%
+  eval_avg_halt_step: 1.45
+  per_H_acc: ['H0=37.1%', 'H1=0.5%', 'H2=0.0%']
+  H_cos: ['0.770', '0.875']
+  z_H_delta: ['25.750', '22.250']
+  cells: fixed=[0, 0] broken=[76263, 1130]
+  per_ACT_cell_acc: ['H1=50.0%', 'H2=90.5%', 'H3=98.9%', 'H4=99.2%', 'H5=99.3%', 'H6=99.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=46.1%', 'H4=67.7%', 'H5=72.0%', 'H6=74.6%']
+  mean_sigmoid_q_halt: ['0.543', '0.213', '0.621', '0.785', '0.855', '0.887']
+  halt_rates: ['0.85', '0.01', '0.59', '0.80', '0.88', '0.91']
+  halt_histogram %: [74.7, 19.7, 1.5, 3.5, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.18
+  eval_avg_halt_step: 1.08
+  per_H_acc: ['H0=36.5%', 'H1=0.5%', 'H2=0.0%']
+  H_cos: ['0.770', '0.867']
+  z_H_delta: ['25.750', '22.750']
+  cells: fixed=[1, 0] broken=[33614, 505]
+  per_ACT_cell_acc: ['H1=50.6%', 'H2=90.5%', 'H3=99.9%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=92.3%', 'H4=98.1%', 'H5=99.0%', 'H6=99.0%']
+  mean_sigmoid_q_halt: ['0.535', '0.192', '0.914', '0.965', '0.977', '0.988']
+  halt_rates: ['0.82', '0.00', '0.92', '0.98', '0.99', '1.00']
+  halt_histogram %: [74.7, 19.7, 1.5, 3.5, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.18
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step10500.pt acc=99.32% (0.076s)
+Step 10500  Test 99.32% / 84.90%  Train lm=0.6641±0.0023ϵ[0.6641,0.6797] n_halted=106.0600±13.7253ϵ[16.0000,120.0000]  TrainAcc 99.98%/96.10%  (21.357s / 180.427s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=98.40%, exact_match=79.10%
+  eval_avg_halt_step: 1.22
+  per_H_acc: ['H0=35.3%', 'H1=1.7%', 'H2=0.0%']
+  H_cos: ['0.863', '0.895']
+  z_H_delta: ['24.000', '22.000']
+  cells: fixed=[16, 0] broken=[70200, 3610]
+  per_ACT_cell_acc: ['H1=50.3%', 'H2=89.6%', 'H3=99.2%', 'H4=99.3%', 'H5=99.3%', 'H6=99.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=59.9%', 'H4=74.6%', 'H5=76.3%', 'H6=77.6%']
+  mean_sigmoid_q_halt: ['0.777', '0.645', '0.785', '0.875', '0.938', '0.965']
+  halt_rates: ['1.00', '0.98', '0.79', '0.89', '0.95', '0.97']
+  halt_histogram %: [75.1, 19.5, 1.5, 3.3, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.22
+  eval_avg_halt_step: 1.03
+  per_H_acc: ['H0=35.4%', 'H1=1.9%', 'H2=0.0%']
+  H_cos: ['0.863', '0.891']
+  z_H_delta: ['24.000', '22.375']
+  cells: fixed=[4, 0] broken=[31448, 1735]
+  per_ACT_cell_acc: ['H1=50.1%', 'H2=89.6%', 'H3=100.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=95.2%', 'H4=99.0%', 'H5=100.0%', 'H6=100.0%']
+  mean_sigmoid_q_halt: ['0.777', '0.645', '0.977', '0.988', '0.992', '0.992']
+  halt_rates: ['1.00', '0.97', '0.98', '0.99', '1.00', '1.00']
+  halt_histogram %: [75.1, 19.5, 1.5, 3.3, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.22
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step11000.pt acc=99.31% (0.075s)
+Step 11000  Test 99.31% / 88.50%  Train lm=0.6641±0.0019ϵ[0.6641,0.6797] n_halted=106.0600±9.1459ϵ[38.0000,119.0000]  TrainAcc 99.99%/99.40%  (21.355s / 180.395s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=87.00%, exact_match=67.70%
+  eval_avg_halt_step: 1.25
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.727', '0.898']
+  z_H_delta: ['26.125', '22.500']
+  cells: fixed=[3, 0] broken=[28, 3]
+  per_ACT_cell_acc: ['H1=47.1%', 'H2=92.5%', 'H3=99.1%', 'H4=99.3%', 'H5=99.3%', 'H6=99.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=58.2%', 'H4=72.4%', 'H5=74.1%', 'H6=73.3%']
+  mean_sigmoid_q_halt: ['0.773', '0.480', '0.785', '0.891', '0.938', '0.945']
+  halt_rates: ['1.00', '0.39', '0.80', '0.91', '0.94', '0.95']
+  halt_histogram %: [75.5, 19.2, 1.5, 3.2, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.11
+  eval_avg_halt_step: 1.04
+  per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.727', '0.902']
+  z_H_delta: ['26.125', '22.500']
+  cells: fixed=[0, 0] broken=[6, 0]
+  per_ACT_cell_acc: ['H1=47.1%', 'H2=93.1%', 'H3=99.9%', 'H4=99.9%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=94.2%', 'H4=97.1%', 'H5=98.1%', 'H6=98.1%']
+  mean_sigmoid_q_halt: ['0.777', '0.492', '0.973', '0.980', '0.988', '0.992']
+  halt_rates: ['1.00', '0.39', '0.97', '0.99', '1.00', '1.00']
+  halt_histogram %: [75.5, 19.2, 1.5, 3.2, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.11
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step11500.pt acc=99.22% (0.076s)
+Step 11500  Test 99.22% / 73.40%  Train lm=0.6641±0.0033ϵ[0.6641,0.6953] n_halted=105.1700±17.1377ϵ[1.0000,121.0000]  TrainAcc 99.87%/83.20%  (21.355s / 180.376s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=99.10%, exact_match=49.30%
+  eval_avg_halt_step: 1.31
+  per_H_acc: ['H0=22.1%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.680', '0.930']
+  z_H_delta: ['26.375', '19.000']
+  cells: fixed=[0, 0] broken=[46230, 0]
+  per_ACT_cell_acc: ['H1=61.0%', 'H2=92.5%', 'H3=99.0%', 'H4=99.2%', 'H5=99.2%', 'H6=99.2%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=57.3%', 'H4=65.5%', 'H5=72.0%', 'H6=74.1%']
+  mean_sigmoid_q_halt: ['0.590', '0.781', '0.707', '0.828', '0.906', '0.945']
+  halt_rates: ['1.00', '1.00', '0.70', '0.86', '0.94', '0.96']
+  halt_histogram %: [75.9, 19.0, 1.5, 3.0, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.14
+  eval_avg_halt_step: 1.04
+  per_H_acc: ['H0=22.8%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.680', '0.926']
+  z_H_delta: ['26.375', '19.250']
+  cells: fixed=[0, 0] broken=[21298, 0]
+  per_ACT_cell_acc: ['H1=60.5%', 'H2=93.1%', 'H3=100.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=95.2%', 'H4=98.1%', 'H5=99.0%', 'H6=100.0%']
+  mean_sigmoid_q_halt: ['0.590', '0.781', '0.957', '0.969', '0.980', '0.988']
+  halt_rates: ['1.00', '1.00', '0.96', '0.97', '0.99', '1.00']
+  halt_histogram %: [75.9, 19.0, 1.5, 3.0, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.14
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step12000.pt acc=99.26% (0.074s)
+Step 12000  Test 99.26% / 86.20%  Train lm=0.6641±0.0022ϵ[0.6641,0.6836] n_halted=105.3740±14.5953ϵ[0.0000,121.0000]  TrainAcc 99.90%/60.10%  (21.356s / 180.586s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=98.40%, exact_match=82.30%
+  eval_avg_halt_step: 1.51
+  per_H_acc: ['H0=34.6%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.773', '0.934']
+  z_H_delta: ['23.875', '18.500']
+  cells: fixed=[2, 0] broken=[72222, 2]
+  per_ACT_cell_acc: ['H1=35.0%', 'H2=91.4%', 'H3=99.0%', 'H4=99.3%', 'H5=99.4%', 'H6=99.4%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=48.7%', 'H4=73.3%', 'H5=79.3%', 'H6=80.2%']
+  mean_sigmoid_q_halt: ['0.746', '0.387', '0.570', '0.848', '0.941', '0.961']
+  halt_rates: ['1.00', '0.07', '0.56', '0.85', '0.96', '0.97']
+  halt_histogram %: [76.2, 18.7, 1.5, 2.9, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.24
+  eval_avg_halt_step: 1.12
+  per_H_acc: ['H0=34.4%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.777', '0.930']
+  z_H_delta: ['23.875', '18.750']
+  cells: fixed=[0, 0] broken=[32176, 0]
+  per_ACT_cell_acc: ['H1=35.0%', 'H2=91.9%', 'H3=99.8%', 'H4=99.9%', 'H5=100.0%', 'H6=99.9%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=87.5%', 'H4=96.2%', 'H5=97.1%', 'H6=98.1%']
+  mean_sigmoid_q_halt: ['0.746', '0.379', '0.848', '0.961', '0.973', '0.977']
+  halt_rates: ['1.00', '0.02', '0.85', '0.96', '0.98', '0.98']
+  halt_histogram %: [76.2, 18.7, 1.5, 2.9, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.24
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step12500.pt acc=99.42% (0.075s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/best.pt acc=99.42% (0.159s)
+Step 12500  Test 99.42% / 90.20%  Train lm=0.6641±0.0017ϵ[0.6641,0.6758] n_halted=108.2080±7.4820ϵ[47.0000,122.0000]  TrainAcc 99.98%/99.20%  (21.446s / 180.513s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=98.00%, exact_match=81.40%
+  eval_avg_halt_step: 1.31
+  per_H_acc: ['H0=37.1%', 'H1=0.2%', 'H2=0.0%']
+  H_cos: ['0.703', '0.918']
+  z_H_delta: ['25.875', '20.375']
+  cells: fixed=[1, 0] broken=[77059, 428]
+  per_ACT_cell_acc: ['H1=24.6%', 'H2=90.0%', 'H3=99.2%', 'H4=99.4%', 'H5=99.4%', 'H6=99.4%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=62.1%', 'H4=76.3%', 'H5=78.4%', 'H6=80.2%']
+  mean_sigmoid_q_halt: ['0.863', '0.828', '0.715', '0.895', '0.934', '0.961']
+  halt_rates: ['1.00', '1.00', '0.71', '0.91', '0.96', '0.98']
+  halt_histogram %: [76.5, 18.6, 1.5, 2.8, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.20
+  eval_avg_halt_step: 1.04
+  per_H_acc: ['H0=37.4%', 'H1=0.2%', 'H2=0.0%']
+  H_cos: ['0.707', '0.918']
+  z_H_delta: ['25.875', '20.625']
+  cells: fixed=[1, 0] broken=[34784, 184]
+  per_ACT_cell_acc: ['H1=24.9%', 'H2=90.4%', 'H3=100.0%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=98.1%', 'H4=99.0%', 'H5=98.1%', 'H6=99.0%']
+  mean_sigmoid_q_halt: ['0.863', '0.828', '0.973', '0.988', '0.984', '0.977']
+  halt_rates: ['1.00', '1.00', '0.99', '0.99', '0.99', '0.99']
+  halt_histogram %: [76.5, 18.6, 1.5, 2.8, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.20
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step13000.pt acc=99.38% (0.075s)
+Step 13000  Test 99.38% / 88.10%  Train lm=0.6641±0.0018ϵ[0.6641,0.6758] n_halted=105.4420±9.1010ϵ[19.0000,120.0000]  TrainAcc 99.96%/97.90%  (21.358s / 180.388s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=96.80%, exact_match=79.70%
+  eval_avg_halt_step: 1.70
+  per_H_acc: ['H0=37.2%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.793', '0.941']
+  z_H_delta: ['25.625', '19.000']
+  cells: fixed=[18, 0] broken=[77643, 21]
+  per_ACT_cell_acc: ['H1=48.4%', 'H2=93.1%', 'H3=99.0%', 'H4=99.2%', 'H5=99.2%', 'H6=99.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=52.2%', 'H4=69.0%', 'H5=74.6%', 'H6=77.2%']
+  mean_sigmoid_q_halt: ['0.906', '0.730', '0.562', '0.750', '0.832', '0.887']
+  halt_rates: ['1.00', '1.00', '0.54', '0.77', '0.84', '0.90']
+  halt_histogram %: [76.9, 18.4, 1.5, 2.7, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.31
+  eval_avg_halt_step: 1.16
+  per_H_acc: ['H0=37.1%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.793', '0.938']
+  z_H_delta: ['25.625', '19.375']
+  cells: fixed=[2, 0] broken=[34700, 5]
+  per_ACT_cell_acc: ['H1=48.5%', 'H2=93.5%', 'H3=99.9%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=85.6%', 'H4=95.2%', 'H5=98.1%', 'H6=99.0%']
+  mean_sigmoid_q_halt: ['0.906', '0.730', '0.844', '0.926', '0.953', '0.961']
+  halt_rates: ['1.00', '1.00', '0.87', '0.92', '0.96', '0.96']
+  halt_histogram %: [76.9, 18.4, 1.5, 2.7, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.31
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step13500.pt acc=99.35% (0.074s)
+Step 13500  Test 99.35% / 86.50%  Train lm=0.6641±0.0018ϵ[0.6641,0.6797] n_halted=108.1020±12.7298ϵ[4.0000,122.0000]  TrainAcc 99.99%/98.90%  (21.346s / 180.484s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+  path_valid=94.50%, exact_match=77.40%
+  eval_avg_halt_step: 1.48
+  per_H_acc: ['H0=37.2%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.727', '0.934']
+  z_H_delta: ['27.000', '18.125']
+  cells: fixed=[92, 0] broken=[77666, 92]
+  per_ACT_cell_acc: ['H1=49.8%', 'H2=89.7%', 'H3=99.0%', 'H4=99.3%', 'H5=99.3%', 'H6=99.3%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=47.8%', 'H4=69.0%', 'H5=75.9%', 'H6=76.3%']
+  mean_sigmoid_q_halt: ['0.887', '0.621', '0.605', '0.820', '0.879', '0.918']
+  halt_rates: ['1.00', '0.98', '0.60', '0.84', '0.90', '0.93']
+  halt_histogram %: [77.0, 18.3, 1.5, 2.6, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.16
+  eval_avg_halt_step: 1.09
+  per_H_acc: ['H0=37.4%', 'H1=0.0%', 'H2=0.0%']
+  H_cos: ['0.727', '0.934']
+  z_H_delta: ['27.000', '18.250']
+  cells: fixed=[39, 0] broken=[34962, 39]
+  per_ACT_cell_acc: ['H1=49.7%', 'H2=89.7%', 'H3=99.9%', 'H4=100.0%', 'H5=100.0%', 'H6=100.0%']
+  per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=86.5%', 'H4=99.0%', 'H5=98.1%', 'H6=98.1%']
+  mean_sigmoid_q_halt: ['0.891', '0.625', '0.906', '0.977', '0.984', '0.984']
+  halt_rates: ['1.00', '0.99', '0.95', '0.99', '0.99', '0.99']
+  halt_histogram %: [77.0, 18.3, 1.5, 2.6, 0.1, 0.5]
+  Avg ACT steps (last 100): 1.16
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07e/step14000.pt acc=99.34% (0.075s)
+Step 14000  Test 99.34% / 86.70%  Train lm=0.6641±0.0018ϵ[0.6641,0.6797] n_halted=105.1880±9.1665ϵ[42.0000,120.0000]  TrainAcc 99.95%/95.30%  (21.346s / 180.385s)
+  n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
+Traceback (most recent call last):
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 1757, in main
+    epoch_losses.append({k: v.detach() for k, v in loss.items()})
+       ^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 1726, in train
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 445, in step
+    active_samples, winner_chains = state.select_winners(forward_result["losses"])
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jvdillon/projects/sic/code/experiment.py", line 1566, in select_winners
+    return 0
+KeyboardInterrupt

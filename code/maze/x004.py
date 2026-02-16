@@ -28,9 +28,7 @@ class Experiment(Experiment000l):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-        cos_sin_detach: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        del cos_sin_detach
         for _ in range(self.model.config.H_cycles - 1):
             result = checkpoint(
                 core,

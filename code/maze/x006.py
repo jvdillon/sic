@@ -66,9 +66,7 @@ class Experiment(Experiment000l):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-        cos_sin_detach: tuple[Tensor, Tensor] | None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        del cos_sin_detach
         for _ in range(self.model.config.H_cycles - 1):
             result = checkpoint(
                 core,
@@ -102,19 +100,13 @@ class Experiment(Experiment000l):
             )
             emb = m._prepend_prefix(emb, puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
             core = m.core_compiled if cfg.compile_core else m.core
-            cos_sin = None if m.rope is None else m.rope()
-            cos_sin_detach = (
-                (cos_sin[0].detach(), cos_sin[1].detach())
-                if cos_sin is not None
-                else None
-            )
+            cos_sin = m._get_cos_sin(emb.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
             logits, _q_halt, z_H_out, z_L_out = self._run_h_cycles(
                 core,
                 emb,
                 z_H,
                 z_L,
                 cos_sin,
-                cos_sin_detach,
             )
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         return logits[:, n_prefix:], z_H_out, z_L_out

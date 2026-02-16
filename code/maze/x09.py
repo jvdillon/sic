@@ -2,11 +2,8 @@
 
 import functools
 
-from experiment import (
-    Experiment as ExperimentBase,
-    main,
-    setup_muon_optimizers,
-)
+from experiment import main
+from maze.x07 import Experiment as Experiment07
 from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
 
 from data import get_puzzle_config
@@ -15,22 +12,7 @@ from data import get_puzzle_config
 _CFG = get_puzzle_config("maze")
 
 
-class Experiment(ExperimentBase):
-    batch_size: int = 128
-
-    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
-    augment_sudoku: bool = False
-    eval_every_steps: int = 500
-    eval_batch_size: int | None = 256
-    K: int = 1
-    q_halt_weight: float = 0.05
-    total_train_steps: int = 16_000
-    use_ema: bool = False
-    lr_warmup_steps: int = 0
-    lr_min_ratio: float = 1.0
-    cast_model_to_dtype: bool = False
-    loss_sum_normalize: bool = True
-
+class Experiment(Experiment07):
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,
         num_puzzle_grid_tokens=_CFG.grid_len,
@@ -51,6 +33,7 @@ class Experiment(ExperimentBase):
         register_tokens_learnable=False,
         q_halt_seq_index=0,
         cast_model_to_dtype=False,
+        label_smoothing_includes_pad_token=False,
         block_fn=functools.partial(
             TransformerBlock,
             multiple_of=128,
@@ -64,12 +47,6 @@ class Experiment(ExperimentBase):
         ),
         block_kwargs_by_layer={0: {"checkpoint": True}},
     )
-
-    def setup_optimizers(self) -> None:
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
-            self.model,
-            muon_lr=0.005,
-        )
 
 
 if __name__ == "__main__":

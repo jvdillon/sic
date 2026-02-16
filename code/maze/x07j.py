@@ -7,27 +7,14 @@ from typing import cast
 import dataclasses
 
 from experiment import main
-from maze.x07b import Experiment as Experiment07b
+from maze.x07 import Experiment as Experiment07
 from model import TRM3, TRM3ConfigProtocol
 
 
-class Experiment(Experiment07b):
-    augmentation_random_bundle_max_size: int = 8
-
+class Experiment(Experiment07):
     config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07b.config),
-        use_rope=True,
-        num_layers=2,
-        H_cycles=3,  # 3,
-        L_cycles=4,  # 4,
-        #
-        # anchor_seq_index=1,
-        num_puzzle_id_tokens=1,
-        num_puzzle_ids=1,
-        num_register_tokens=15,
+        cast(TRM3.Config, Experiment07.config),
         register_token_init_std=1.0,
-        register_tokens_learnable=False,
-        q_halt_seq_index=0,
     )
 
 
