@@ -476,7 +476,7 @@ class RoPE(nn.Module):
         offset = 0
         for b, c in zip(self._bases, self._dims, strict=False):
             row = torch.zeros(total)
-            row[offset : offset + c // 2] = self._make_inv_freqs(b, c, legacy=legacy)
+            row[offset : offset + c // 2] = self._make_inv_freqs(b, c)
             offset += c // 2
             rows.append(row)
         self._inv_freqs = torch.stack(rows).unsqueeze(-2)
@@ -504,14 +504,17 @@ class RoPE(nn.Module):
         """
         if positions.ndim == 1:
             positions = positions.unsqueeze(-1)
+
         if self._legacy:
             # Old RotaryEmbedding precomputed cos/sin on CPU at init.
             # CPU and GPU trig differ by 1 ULP; replicate CPU path.
-            positions = positions.to(dtype=torch.float32, device="cpu")
-            inv_freqs = self._inv_freqs.detach().float().cpu()
+            device = "cpu"
         else:
-            positions = positions.to(device=self.device, dtype=torch.float32)
-            inv_freqs = self._inv_freqs.float()
+            device = self.device
+
+        positions = positions.to(dtype=torch.float32, device=device)
+        inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=device)
+
         # [..., S, N] @ [N, H, D] -> [..., S, H, D].
         emb = torch.einsum(
             "...n,nhd->...hd",
@@ -519,8 +522,8 @@ class RoPE(nn.Module):
             inv_freqs,
         )
         return (
-            emb.cos().to(device=self.device, dtype=self.dtype),
-            emb.sin().to(device=self.device, dtype=self.dtype),
+            emb.cos().to(dtype=self.dtype, device=self.device),
+            emb.sin().to(dtype=self.dtype, device=self.device),
         )
 
     def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
@@ -568,10 +571,13 @@ class RoPE(nn.Module):
         return bases[0] if len(bases) == 1 else tuple(bases)
 
     @classmethod
-    def _make_inv_freqs(cls, base: float, dim: int, *, legacy: bool = False) -> Tensor:
-        """Inverse frequencies: base^linspace(0, -1+2/c, c//2)."""
-        if legacy:
-            return 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
+    def _make_inv_freqs(cls, base: float, dim: int) -> Tensor:
+        """Inverse frequencies: base^linspace(0, -1+2/c, c//2).
+
+        Often this code is written like:
+
+            1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
+        """
         return (
             torch.linspace(
                 0,
@@ -654,7 +660,7 @@ class RoPEMixed(RoPE):
                 raise ValueError(f"Sum mode requires uniform dims, got {self._dims}.")
             inv_freqs = torch.stack(
                 [
-                    self._make_inv_freqs(b, c, legacy=legacy)
+                    self._make_inv_freqs(b, c)
                     for b, c in zip(self._bases, self._dims, strict=False)
                 ]
             ).unsqueeze(-2)
@@ -796,7 +802,7 @@ class Embedding(nn.Module):
 def make_grid_positions(
     grid_shape: tuple[int, ...],
     num_prefix_tokens: int,
-    device: torch.device | str = "cpu",
+    device: torch.device | str | None = "cpu",
     legacy: bool = False,
 ) -> Tensor:
     """Build [S, N] position tensor for an N-D grid with prefix tokens.
@@ -2050,7 +2056,6 @@ class TRM3(nn.Module):
                 cfg.puzzle_grid_shape,
                 cfg.num_puzzle_id_tokens + cfg.num_register_tokens,
                 device=device,
-                legacy=self.rope._legacy,  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
             )
         return self.rope(positions)
 
