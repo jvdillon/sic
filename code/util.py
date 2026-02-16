@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from numbers import Integral
 from types import TracebackType
-from typing import Any, Self, TextIO
+from typing import Protocol, Self, TextIO
 
 import hashlib
 import math
@@ -14,6 +14,16 @@ import random
 import sys
 import traceback
 
+
+if True:
+    import warnings
+
+    warnings.filterwarnings(
+        "ignore",
+        message="^Please use the new API settings to control TF32 behavior",
+    )
+
+
 from torch import Tensor
 from typing_extensions import override
 
@@ -22,12 +32,23 @@ import pytest
 import torch
 
 
+class SupportsStr(Protocol):
+    def __str__(self) -> str: ...
+
+
+class SupportsArgSort(Protocol):
+    def __eq__(self, other: object) -> bool: ...
+    def __getitem__(self, key: object) -> object: ...
+    def __hash__(self) -> int: ...
+    def __lt__(self, other: object) -> bool: ...
+
+
 # Module-level numpy Generator for modern random API.
 # Use set_seed() to initialize, then use numpy_rng for random operations.
 numpy_rng: np.random.Generator = np.random.default_rng()
 
 
-def salt(*args: object) -> int:
+def salt(*args: SupportsStr) -> int:
     # Intentionally using hashlib.md5 for reproducibility and portability.
     s = hashlib.md5(str(args).encode())  # noqa: S324
     return int(s.hexdigest(), 16) & ((1 << 31) - 1)
@@ -59,14 +80,12 @@ def enable_determinism(*, cudnn: bool = True, sdpa: bool = False) -> None:
     To get bit-for-bit you may need to: rm -rf /tmp/torchinductor_${USER}/
     """
     # https://docs.nvidia.com/cuda/cublas/index.html#results-reproducibility
-    # warnings.filterwarnings("ignore", message=".*TF32.*")
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True)
-    if cudnn:
-        # cuDNN deterministic convolutions
+    if cudnn and torch.backends.cudnn.is_available():
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
-    if sdpa:
+    if sdpa and torch.cuda.is_available():
         torch.backends.cuda.enable_flash_sdp(False)
         torch.backends.cuda.enable_mem_efficient_sdp(False)
 
@@ -412,5 +431,5 @@ def _dims(dim: int | Integral | Sequence[int | Integral]) -> tuple[int, ...]:
     return tuple(operator.index(d) for d in dim)
 
 
-def argsort(x: Sequence[Any], descending: bool = False) -> list[int]:
+def argsort(x: Sequence[SupportsArgSort], descending: bool = False) -> list[int]:
     return sorted(range(len(x)), key=x.__getitem__, reverse=descending)

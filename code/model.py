@@ -504,9 +504,9 @@ class RoPE(nn.Module):
             positions = positions.unsqueeze(-1)
 
         # Disable autocast: RoPE frequencies require full float32 precision.
-        with torch.autocast(device_type=self.device.type, enabled=False):
-            positions = positions.to(dtype=torch.float32, device=self.device)
-            inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=self.device)
+        with torch.autocast(device_type=positions.device.type, enabled=False):
+            positions = positions.to(dtype=torch.float32)
+            inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=positions.device)
 
             # [..., S, N] @ [N, H, D] -> [..., S, H, D].
             emb = torch.einsum(
@@ -515,8 +515,8 @@ class RoPE(nn.Module):
                 inv_freqs,
             )
             return (
-                emb.cos().to(dtype=self.dtype),
-                emb.sin().to(dtype=self.dtype),
+                emb.cos().to(dtype=self.dtype, device=self.device),
+                emb.sin().to(dtype=self.dtype, device=self.device),
             )
 
     def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:

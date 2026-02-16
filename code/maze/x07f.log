@@ -1,13 +1,13 @@
 Adam params: ('embed_tokens.weight', 'head.weight', 'head.bias', 'q_head.weight', 'q_head.bias', 'puzzle_id_embed.weight')
 Muon 2D params: ('reasoning.0.attn.o_proj.weight', 'reasoning.0.mlp.up_proj.weight', 'reasoning.0.mlp.down_proj.weight', 'reasoning.1.attn.o_proj.weight', 'reasoning.1.mlp.up_proj.weight', 'reasoning.1.mlp.down_proj.weight')
 Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasoning.1.attn.qkv_proj.weight')
-  path_valid=0.30%, exact_match=0.00%
+  path_valid=0.00%, exact_match=0.00%
   eval_avg_halt_step: 16.00
   per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
-  H_cos: ['0.848', '0.961']
-  z_H_delta: ['18.875', '13.250']
-  cells: fixed=[24, 0] broken=[0, 24]
-  per_ACT_cell_acc: ['H1=87.3%', 'H2=87.3%', 'H3=87.5%', 'H4=87.7%', 'H5=88.1%', 'H6=88.8%', 'H7=89.5%', 'H8=90.1%', 'H9=90.6%', 'H10=91.0%', 'H11=91.2%', 'H12=91.4%', 'H13=91.6%', 'H14=91.7%', 'H15=91.8%', 'H16=91.9%']
+  H_cos: ['0.762', '0.980']
+  z_H_delta: ['19.500', '8.625']
+  cells: fixed=[0, 0] broken=[0, 0]
+  per_ACT_cell_acc: ['H1=87.3%', 'H2=87.5%', 'H3=87.8%', 'H4=88.5%', 'H5=89.1%', 'H6=89.6%', 'H7=89.9%', 'H8=90.2%', 'H9=90.3%', 'H10=90.4%', 'H11=90.4%', 'H12=90.4%', 'H13=90.4%', 'H14=90.4%', 'H15=90.4%', 'H16=90.4%']
   per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
   mean_sigmoid_q_halt: ['0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000']
   halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
@@ -15,16 +15,16 @@ Muon 3D params (ensemble_dims=1): ('reasoning.0.attn.qkv_proj.weight', 'reasonin
   Avg ACT steps (last 100): 16.00
   eval_avg_halt_step: 16.00
   per_H_acc: ['H0=0.0%', 'H1=0.0%', 'H2=0.0%']
-  H_cos: ['0.844', '0.961']
-  z_H_delta: ['18.875', '13.188']
-  cells: fixed=[6, 0] broken=[0, 6]
-  per_ACT_cell_acc: ['H1=87.2%', 'H2=87.2%', 'H3=87.5%', 'H4=87.6%', 'H5=88.1%', 'H6=88.8%', 'H7=89.6%', 'H8=90.2%', 'H9=90.7%', 'H10=91.0%', 'H11=91.3%', 'H12=91.5%', 'H13=91.7%', 'H14=91.8%', 'H15=91.9%', 'H16=92.0%']
+  H_cos: ['0.762', '0.980']
+  z_H_delta: ['19.500', '8.562']
+  cells: fixed=[0, 0] broken=[0, 0]
+  per_ACT_cell_acc: ['H1=87.2%', 'H2=87.5%', 'H3=87.8%', 'H4=88.4%', 'H5=89.1%', 'H6=89.6%', 'H7=90.0%', 'H8=90.2%', 'H9=90.4%', 'H10=90.4%', 'H11=90.5%', 'H12=90.5%', 'H13=90.5%', 'H14=90.5%', 'H15=90.5%', 'H16=90.5%']
   per_ACT_puzzle_acc: ['H1=0.0%', 'H2=0.0%', 'H3=0.0%', 'H4=0.0%', 'H5=0.0%', 'H6=0.0%', 'H7=0.0%', 'H8=0.0%', 'H9=0.0%', 'H10=0.0%', 'H11=0.0%', 'H12=0.0%', 'H13=0.0%', 'H14=0.0%', 'H15=0.0%', 'H16=0.0%']
   mean_sigmoid_q_halt: ['0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000', '0.000']
   halt_rates: ['0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00']
   halt_histogram %: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0]
   Avg ACT steps (last 100): 16.00
-  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07f/step00500.pt acc=92.32% (0.088s)
-  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07f/best.pt acc=92.32% (0.169s)
-Step   500  Test 92.32% /  0.00% (halt: 92.32%/ 0.00%)  Train lm=0.8438±0.1309ϵ[0.7266,2.3438] n_halted=7.9360±30.8988ϵ[0.0000,128.0000]  TrainAcc 92.67%/ 0.00% (halt: 92.67%/ 0.00%)  (72.639s / 216.756s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07f/step00500.pt acc=90.19% (0.089s)
+  saved: /home/jvdillon/projects/sic/code/maze/ckpts/x07f/best.pt acc=90.19% (0.170s)
+Step   500  Test 90.19% /  0.00% (halt: 90.19%/ 0.00%)  Train lm=0.8555±0.1245ϵ[0.7461,2.3438] n_halted=7.9360±30.8988ϵ[0.0000,128.0000]  TrainAcc 90.48%/ 0.00% (halt: 90.48%/ 0.00%)  (64.745s / 190.121s)
   n_active=128.0000±0.0000ϵ[128.0000,128.0000] n_expunged=0.0000±0.0000ϵ[0.0000,0.0000] pool_util=1.0000±0.0000ϵ[1.0000,1.0000]
