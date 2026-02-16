@@ -503,10 +503,14 @@ class RoPE(nn.Module):
         if positions.ndim == 1:
             positions = positions.unsqueeze(-1)
 
-        # Disable autocast: RoPE frequencies require full float32 precision.
+        positions = positions.to(dtype=torch.float32)
+        inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=positions.device)
+
         with torch.autocast(device_type=positions.device.type, enabled=False):
-            positions = positions.to(dtype=torch.float32)
-            inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=positions.device)
+            # Disable autocast; RoPE dotproduct require full float32 precision.
+            # Note that this disabling only happens if two things are true:
+            # youre using autocast AND positions is on GPU (because positions
+            # on CPU already isn't using autocast).
 
             # [..., S, N] @ [N, H, D] -> [..., S, H, D].
             emb = torch.einsum(
@@ -514,10 +518,11 @@ class RoPE(nn.Module):
                 positions[..., self._active_axes],
                 inv_freqs,
             )
-            return (
-                emb.cos().to(dtype=self.dtype, device=self.device),
-                emb.sin().to(dtype=self.dtype, device=self.device),
-            )
+
+        return (
+            emb.cos().to(dtype=self.dtype, device=self.device),
+            emb.sin().to(dtype=self.dtype, device=self.device),
+        )
 
     # def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
     #     super()._apply(fn, recurse)
