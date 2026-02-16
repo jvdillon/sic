@@ -454,12 +454,10 @@ class RoPE(nn.Module):
         dim: int | Iterable[int],
         *,
         base: float | Iterable[float] = 10e3,
-        legacy: bool = False,
     ):
         super().__init__()
         dims, bases = self._broadcast_args(dim, base)
         self.dims = dims
-        self._legacy = legacy
         self._active_axes = [i for i, c in enumerate(dims) if c > 0]
         if not self._active_axes:
             raise ValueError(f"At least one dim must be nonzero, got {dims}.")
@@ -505,26 +503,21 @@ class RoPE(nn.Module):
         if positions.ndim == 1:
             positions = positions.unsqueeze(-1)
 
-        if self._legacy:
-            # Old RotaryEmbedding precomputed cos/sin on CPU at init.
-            # CPU and GPU trig differ by 1 ULP; replicate CPU path.
-            device = "cpu"
-        else:
-            device = self.device
+        # Disable autocast: RoPE frequencies require full float32 precision.
+        with torch.autocast(device_type=self.device.type, enabled=False):
+            positions = positions.to(dtype=torch.float32, device=self.device)
+            inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=self.device)
 
-        positions = positions.to(dtype=torch.float32, device=device)
-        inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=device)
-
-        # [..., S, N] @ [N, H, D] -> [..., S, H, D].
-        emb = torch.einsum(
-            "...n,nhd->...hd",
-            positions[..., self._active_axes],
-            inv_freqs,
-        )
-        return (
-            emb.cos().to(dtype=self.dtype, device=self.device),
-            emb.sin().to(dtype=self.dtype, device=self.device),
-        )
+            # [..., S, N] @ [N, H, D] -> [..., S, H, D].
+            emb = torch.einsum(
+                "...n,nhd->...hd",
+                positions[..., self._active_axes],
+                inv_freqs,
+            )
+            return (
+                emb.cos().to(dtype=self.dtype),
+                emb.sin().to(dtype=self.dtype),
+            )
 
     def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
         super()._apply(fn, recurse)
@@ -650,9 +643,8 @@ class RoPEMixed(RoPE):
         base: float | Iterable[float] = 10e3,
         axial: bool = False,
         learnable: bool = False,
-        legacy: bool = False,
     ):
-        super().__init__(dim, base=base, legacy=legacy)
+        super().__init__(dim, base=base)
         if axial:
             inv_freqs = self._inv_freqs
         else:
@@ -1212,7 +1204,6 @@ class TRM(nn.Module):
                 "base": 10e3,
                 "axial": True,
                 "learnable": False,
-                "legacy": True,
             }
         )
         dtype: torch.dtype | None = torch.bfloat16
@@ -1592,7 +1583,6 @@ class TRM3(nn.Module):
                 "base": 10e3,
                 "axial": True,
                 "learnable": False,
-                "legacy": True,
             }
         )
         num_heads: int = 8  # Only used for RoPE dim calculation

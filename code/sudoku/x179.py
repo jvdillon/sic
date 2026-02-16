@@ -101,7 +101,7 @@ class Experiment:
         self.act_carry: dict[str, Tensor] | None = None
 
     def setup_model(self) -> None:
-        set_seed(self.seed, deterministic=True)
+        set_seed(self.seed)
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = self.config.dtype

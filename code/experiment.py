@@ -11,7 +11,12 @@ import math
 import pathlib
 import sys
 import time
-import warnings
+
+
+if False:
+    from util import enable_determinism
+
+    enable_determinism()
 
 from evaluation import print_diagnostics
 from model import (
@@ -29,9 +34,6 @@ import numpy as np
 import torch
 
 from data import PuzzleDataset, augment_sudoku
-
-
-warnings.filterwarnings("ignore", message=".*TF32.*")
 
 
 def check_maze_paths(
@@ -311,7 +313,7 @@ class Experiment:
         )
 
     def setup_model(self) -> None:
-        set_seed(self.seed, deterministic=True)
+        set_seed(self.seed)
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype: torch.dtype = self.config.dtype or torch.bfloat16

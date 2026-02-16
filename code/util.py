@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from numbers import Integral
 from types import TracebackType
@@ -6,6 +8,7 @@ from typing import Any, Self, TextIO
 import hashlib
 import math
 import operator
+import os
 import pathlib
 import random
 import sys
@@ -30,8 +33,9 @@ def salt(*args: object) -> int:
     return int(s.hexdigest(), 16) & ((1 << 31) - 1)
 
 
-def set_seed(seed: int, deterministic: bool = False) -> None:
+def set_seed(seed: int) -> None:
     """Set random seed locally (non-distributed)."""
+    # os.environ["PYTHONHASHSEED"] = str(salt("PYTHONHASHSEED", i, seed))
     random.seed(salt("python", seed))
     # Reset the Generator's bit_generator state with the new seed
     numpy_rng.bit_generator.state = np.random.PCG64(salt("numpy", seed)).state
@@ -42,21 +46,29 @@ def set_seed(seed: int, deterministic: bool = False) -> None:
             torch.cuda.init()
         for i in range(torch.cuda.device_count()):
             torch.cuda.manual_seed(salt("cuda", i, seed))
-    if deterministic:
-        enable_determinism()
+        # Or torch.cuda.manual_seed_all(seed)
 
 
-def enable_determinism() -> None:
+def enable_determinism(*, cudnn: bool = True, sdpa: bool = False) -> None:
     """Enable all determinism settings for reproducible results.
 
+    https://docs.pytorch.org/docs/stable/notes/randomness.html
+
     Call once at program start, before any CUDA operations.
+
+    To get bit-for-bit you may need to: rm -rf /tmp/torchinductor_${USER}/
     """
-    # cuDNN deterministic convolutions
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    # SDPA: disable non-deterministic Flash and MemEfficient backends
-    # torch.backends.cuda.enable_flash_sdp(False)
-    # torch.backends.cuda.enable_mem_efficient_sdp(False)
+    # https://docs.nvidia.com/cuda/cublas/index.html#results-reproducibility
+    # warnings.filterwarnings("ignore", message=".*TF32.*")
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    torch.use_deterministic_algorithms(True)
+    if cudnn:
+        # cuDNN deterministic convolutions
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+    if sdpa:
+        torch.backends.cuda.enable_flash_sdp(False)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
 
 
 class Tee:
