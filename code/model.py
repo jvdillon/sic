@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Literal, Protocol, Self, TypedDict
+from typing import Any, Literal, Protocol, Self, TypedDict, cast
 
 import dataclasses
 import functools
@@ -490,7 +490,6 @@ class RoPE(nn.Module):
           sin: [..., H, dim // 2].
 
         """
-        # Broadcasts [..., num_axes] against per-axis freqs via split+zip.
         if positions.ndim == 1:
             positions = positions.unsqueeze(-1)
         pos = positions.to(dtype=torch.float32).split(1, dim=-1)
@@ -502,7 +501,7 @@ class RoPE(nn.Module):
         if self.reduction_mode == "cat":
             emb = torch.cat(parts, dim=-1)
         elif self.reduction_mode == "sum":
-            emb = torch.stack(parts).sum(0)
+            emb = cast(Tensor, sum(parts))
         else:
             raise ValueError(f"Unknown {self.reduction_mode=}.")
         return (
@@ -578,12 +577,7 @@ class RoPE(nn.Module):
             1.0 / (b ** (torch.arange(0, c, 2, dtype=torch.float32) / c))
         """
         return (
-            torch.linspace(
-                0,
-                math.log(b) * (-1 + 2 / c),
-                c // 2,
-                dtype=torch.float64,
-            )
+            torch.linspace(0, math.log(b) * (-1 + 2 / c), c // 2, dtype=torch.float64)
             .exp()
             .float()
         )
@@ -598,7 +592,8 @@ class RoPE(nn.Module):
 
     @classmethod
     def _broadcast_sequences(
-        cls, *args: object | Sequence[object]
+        cls,
+        *args: object | Sequence[object],
     ) -> tuple[list[Any], ...]:
         lists = [[a] if not isinstance(a, Sequence) else list(a) for a in args]
         nd = max(len(a) for a in lists)
