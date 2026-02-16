@@ -140,11 +140,11 @@ class TestRoPE:
 
     def test_scalar_dim_replicated_by_bases(self):
         rope = RoPE(dim=128, base=[10_000.0, 10_000.0, 10_000.0])
-        assert rope.dims == (128, 128, 128)
+        assert rope.dim == (128, 128, 128)
 
     def test_scalar_dim_replicated_2(self):
         rope = RoPE(dim=128, base=[10_000.0, 10_000.0])
-        assert rope.dims == (128, 128)
+        assert rope.dim == (128, 128)
 
     def test_odd_dim_raises(self):
         with pytest.raises(ValueError, match="even"):
@@ -152,22 +152,24 @@ class TestRoPE:
 
     # --- Block-diagonal structure ----------------------------------------
 
-    def test_axial_block_diagonal(self):
+    def test_axial_per_axis_freqs(self):
         rope = RoPE(dim=[16, 16])
-        inv = rope._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        assert (inv[0, 0, 8:] == 0).all()
-        assert (inv[1, 0, :8] == 0).all()
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert inv[0].numel() == 8
+        assert inv[1].numel() == 8
 
     # --- dtype preservation through .to() --------------------------------
 
     def test_no_grad(self):
         rope = RoPE(dim=32)
-        assert not rope._inv_freqs.requires_grad  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert all(not f.requires_grad for f in inv if f.numel())
 
     def test_dtype_preserved_after_cast(self):
         rope = RoPE(dim=32)
         rope = rope.to(torch.bfloat16)
-        assert rope._inv_freqs.dtype == torch.float32  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert all(f.dtype == torch.float32 for f in inv if f.numel())
 
     def test_output_dtype_matches_model(self):
         rope = RoPE(dim=32).to(torch.bfloat16)
@@ -179,9 +181,9 @@ class TestRoPE:
     def test_different_base_changes_freqs(self):
         r1 = RoPE(dim=32, base=100.0)
         r2 = RoPE(dim=32, base=10_000.0)
-        d1 = r1._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        d2 = r2._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        assert not torch.equal(d1, d2)
+        inv1 = r1._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv2 = r2._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert not torch.equal(inv1[0], inv2[0])
 
 
 class TestRoPEMixed:
@@ -196,13 +198,18 @@ class TestRoPEMixed:
             ({"dim": 32, "num_heads": 4, "learnable": True}, (10,), (10, 4, 16)),
             # 2D multi-head axial.
             (
-                {"dim": [64, 64], "num_heads": 4, "axial": True},
+                {"dim": [64, 64], "num_heads": 4, "reduction_mode": "cat"},
                 (16, 2),
                 (16, 4, 64),
             ),
             # 2D sum (non-axial): dim=64 replicated, each axis has 32.
             (
-                {"dim": 64, "num_heads": 8, "base": [100.0, 100.0], "axial": False},
+                {
+                    "dim": 64,
+                    "num_heads": 8,
+                    "base": [100.0, 100.0],
+                    "reduction_mode": "sum",
+                },
                 (16, 2),
                 (16, 8, 32),
             ),
@@ -212,7 +219,7 @@ class TestRoPEMixed:
                     "dim": 64,
                     "num_heads": 8,
                     "base": [100.0, 100.0],
-                    "axial": False,
+                    "reduction_mode": "sum",
                     "learnable": True,
                 },
                 (16, 2),
@@ -223,7 +230,7 @@ class TestRoPEMixed:
                 {
                     "dim": [44, 42, 42],
                     "num_heads": 4,
-                    "axial": True,
+                    "reduction_mode": "cat",
                 },
                 (8, 3),
                 (8, 4, 64),
@@ -259,32 +266,36 @@ class TestRoPEMixed:
     # --- Sum: dense structure --------------------------------------------
 
     def test_sum_dense(self):
-        rope = RoPEMixed(dim=16, num_heads=4, base=[100.0, 100.0], axial=False)
-        inv = rope._inv_freqs.data  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        # All axes touch all channels (no block-diagonal zeros).
-        assert inv.shape[0] == 2  # 2 axes
-        assert inv.shape[1] == 4  # 4 heads
+        rope = RoPEMixed(dim=16, num_heads=4, base=[100.0, 100.0], reduction_mode="sum")
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        active = [f for f in inv if f.numel()]
+        assert len(active) == 2  # 2 axes
+        assert all(f.shape[0] == 4 for f in active)  # 4 heads
 
     def test_axial_false_unequal_dims_raises(self):
         with pytest.raises(ValueError, match="uniform"):
-            RoPEMixed(dim=[44, 42], num_heads=4, axial=False)
+            RoPEMixed(dim=[44, 42], num_heads=4, reduction_mode="sum")
 
     # --- learnable / requires_grad ---------------------------------------
 
     def test_learnable_has_grad(self):
         rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
-        assert rope._inv_freqs.requires_grad  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert all(f.requires_grad for f in inv if f.numel())
 
     def test_fixed_no_grad(self):
         rope = RoPEMixed(dim=32, num_heads=4, learnable=False)
-        assert not rope._inv_freqs.requires_grad  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert all(not f.requires_grad for f in inv if f.numel())
 
     # --- dtype preservation through .to() --------------------------------
 
-    def test_dtype_preserved_after_cast(self):
-        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
-        rope = rope.to(torch.bfloat16)
-        assert rope._inv_freqs.dtype == torch.float32  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    def test_output_f32_after_cast(self):
+        """Forward computes in float32 regardless of parameter dtype."""
+        rope = RoPEMixed(dim=32, num_heads=4, learnable=True).to(torch.bfloat16)
+        cos, sin = rope(torch.arange(10).unsqueeze(-1))
+        assert cos.dtype == torch.bfloat16
+        assert sin.dtype == torch.bfloat16
 
     def test_output_dtype_matches_model(self):
         rope = RoPEMixed(dim=32, num_heads=4).to(torch.bfloat16)

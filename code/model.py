@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Any, Literal, Protocol, Self, TypedDict
 
 import dataclasses
@@ -407,7 +407,7 @@ class RoPE(nn.Module):
     Number of axes inferred from ``dim``: scalar for 1D, iterable for ND.
     Per-axis channel counts can be unequal (e.g. ``dim=[44, 42, 42]``
     allocates 44 frequencies to the first axis and 42 each to the other
-    two). Each nonzero count must be even and >= 4; use 0 to skip an
+    two). Each nonzero count must be even and >= 2; use 0 to skip an
     axis (e.g. ``dim=[128, 0]`` encodes only the first axis).
 
     Returns half-dim cos/sin (shape ``[..., S, 1, dim//2]``). Pair
@@ -439,7 +439,7 @@ class RoPE(nn.Module):
 
     Args:
       dim: Channel count per axis. Scalar for 1D (e.g. 128), iterable
-          for ND. Each nonzero value must be even and >= 4. Use 0 to
+          for ND. Each nonzero value must be even and >= 2. Use 0 to
           skip an axis.
       base: Frequency base(s). Scalar (shared across axes) or iterable
           (one per axis). Controls the longest wavelength: the lowest
@@ -454,30 +454,21 @@ class RoPE(nn.Module):
         dim: int | Iterable[int],
         *,
         base: float | Iterable[float] = 10e3,
+        reduction_mode: Literal["cat", "sum"] = "cat",
     ):
         super().__init__()
-        dims, bases = self._broadcast_args(dim, base)
-        self.dims = dims
-        self._active_axes = [i for i, c in enumerate(dims) if c > 0]
-        if not self._active_axes:
-            raise ValueError(f"At least one dim must be nonzero, got {dims}.")
-        self._bases, self._dims = zip(
-            *((b, c) for b, c in zip(bases, dims, strict=True) if c > 0),
-            strict=False,
-        )
-        for c in self._dims:
+        self.reduction_mode = reduction_mode
+        dim, base = self._broadcast_sequences(dim, base)
+        self.dim = tuple(int(d) for d in dim)
+        self.base = tuple(float(b) for b in base)
+        self._inv_freqs: list[Tensor] = [torch.empty(0) for _ in self.dim]
+        for i, (b, c) in enumerate(zip(self.base, self.dim, strict=True)):
+            if c == 0:
+                continue
             self._validate_c(c)
-        # Block-diagonal [N_axes, 1, total_half_dim]: each axis's
-        # freqs occupy separate channels (zeros elsewhere).
-        total = sum(c // 2 for c in self._dims)
-        rows = []
-        offset = 0
-        for b, c in zip(self._bases, self._dims, strict=False):
-            row = torch.zeros(total, dtype=torch.float32)  # device="cpu"
-            row[offset : offset + c // 2] = self._make_inv_freqs(b, c)
-            offset += c // 2
-            rows.append(row)
-        self._inv_freqs = torch.stack(rows).unsqueeze(-2)
+            self._inv_freqs[i] = self._make_inv_freqs(b, c).unsqueeze(-2)
+        if all(not f.numel() for f in self._inv_freqs):
+            raise ValueError(f"At least one dim must be nonzero, got {self.dim}.")
         self._dtype = nn.Buffer(torch.empty(0), persistent=False)
 
     @property
@@ -492,42 +483,32 @@ class RoPE(nn.Module):
         """Encode positions to half-dim (cos, sin) embeddings.
 
         Args:
-          positions: [..., S, num_axes] or [..., S] when num_axes=1.
+          positions: [..., num_axes].
 
         Returns:
-          cos: [..., S, H, dim // 2] where H=1 for fixed, num_heads
-              for per-head variants.
-          sin: Same shape as cos.
+          cos: [..., H, dim // 2].
+          sin: [..., H, dim // 2].
 
         """
+        # Broadcasts [..., num_axes] against per-axis freqs via split+zip.
         if positions.ndim == 1:
             positions = positions.unsqueeze(-1)
-
-        positions = positions.to(dtype=torch.float32)
-        inv_freqs = self._inv_freqs.to(dtype=torch.float32, device=positions.device)
-
-        with torch.autocast(device_type=positions.device.type, enabled=False):
-            # Disable autocast; RoPE dotproduct require full float32 precision.
-            # Note that this disabling only happens if two things are true:
-            # youre using autocast AND positions is on GPU (because positions
-            # on CPU already isn't using autocast).
-
-            # [..., S, N] @ [N, H, D] -> [..., S, H, D].
-            emb = torch.einsum(
-                "...n,nhd->...hd",
-                positions[..., self._active_axes],
-                inv_freqs,
-            )
-
+        pos = positions.to(dtype=torch.float32).split(1, dim=-1)
+        parts = [
+            p.unsqueeze(-1) * f.to(dtype=torch.float32, device=p.device)
+            for p, f in zip(pos, self._inv_freqs, strict=True)
+            if f.numel()
+        ]
+        if self.reduction_mode == "cat":
+            emb = torch.cat(parts, dim=-1)
+        elif self.reduction_mode == "sum":
+            emb = torch.stack(parts).sum(0)
+        else:
+            raise ValueError(f"Unknown {self.reduction_mode=}.")
         return (
             emb.cos().to(dtype=self.dtype, device=self.device),
             emb.sin().to(dtype=self.dtype, device=self.device),
         )
-
-    # def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
-    #     super()._apply(fn, recurse)
-    #     self._inv_freqs = self._inv_freqs.to(device=self._dtype.device)
-    #     return self
 
     @classmethod
     def smallest_recommended_base(
@@ -558,7 +539,7 @@ class RoPE(nn.Module):
           base: Float (1D) or tuple of floats (ND).
 
         """
-        dims, maxpos = cls._broadcast_args(dim, max_positions)
+        dims, maxpos = cls._broadcast_sequences(dim, max_positions)
         bases = []
         for c, m in zip(dims, maxpos, strict=True):
             if c == 0:
@@ -569,18 +550,38 @@ class RoPE(nn.Module):
         return bases[0] if len(bases) == 1 else tuple(bases)
 
     @classmethod
-    def _make_inv_freqs(cls, base: float, dim: int) -> Tensor:
-        """Inverse frequencies: base^linspace(0, -1+2/c, c//2).
+    def mesh_arange(
+        cls,
+        end: int | Sequence[int],
+        *,
+        start: int | Sequence[int] = 0,
+        step: int | Sequence[int] = 1,
+        dtype: torch.dtype = torch.long,
+        device: torch.device | str | None = None,
+    ) -> Tensor:
+        start, end, step = cls._broadcast_sequences(start, end, step)
+        grid = torch.meshgrid(
+            *[
+                torch.arange(s, e, st, dtype=dtype, device=device)
+                for s, e, st in zip(start, end, step, strict=False)
+            ],
+            indexing="ij",
+        )
+        return torch.stack(grid, dim=-1).reshape(-1, len(end))
+
+    @classmethod
+    def _make_inv_freqs(cls, b: float, c: int) -> Tensor:
+        """Inverse frequencies: b^linspace(0, -1+2/c, c//2).
 
         Often this code is written like:
 
-            1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
+            1.0 / (b ** (torch.arange(0, c, 2, dtype=torch.float32) / c))
         """
         return (
             torch.linspace(
                 0,
-                math.log(base) * (-1 + 2 / dim),
-                dim // 2,
+                math.log(b) * (-1 + 2 / c),
+                c // 2,
                 dtype=torch.float64,
             )
             .exp()
@@ -590,31 +591,22 @@ class RoPE(nn.Module):
     @classmethod
     def _validate_c(cls, c: int) -> None:
         """Validate a single per-axis channel count."""
-        if c < 4 or c % 2 != 0:
-            raise ValueError(f"Per-axis dim {c} must be even and >= 4.")
+        if c < 2:
+            raise ValueError(f"Dim {c} must be at least 2.")
+        if c % 2 == 1:
+            raise ValueError(f"Dim {c} must be even.")
 
     @classmethod
-    def _broadcast_args(
-        cls,
-        dim: int | Iterable[int],
-        other: float | Iterable[float] | Iterable[int],
-    ) -> tuple[tuple[int, ...], tuple[float, ...]]:
-        """Broadcast dim and other to equal-length tuples."""
-        dims = (int(dim),) if isinstance(dim, int) else tuple(int(d) for d in dim)
-        others = (
-            (float(other),)
-            if isinstance(other, (int, float))
-            else tuple(float(o) for o in other)
-        )
-        if len(dims) == 1 and len(others) > 1:
-            dims = dims * len(others)
-        if len(others) == 1:
-            others = others * len(dims)
-        if len(dims) != len(others):
-            raise ValueError(
-                f"len(dim)={len(dims)} must equal len(other)={len(others)}."
-            )
-        return dims, others
+    def _broadcast_sequences(
+        cls, *args: object | Sequence[object]
+    ) -> tuple[list[Any], ...]:
+        lists = [[a] if not isinstance(a, Sequence) else list(a) for a in args]
+        nd = max(len(a) for a in lists)
+        for a in lists:
+            if len(a) not in (1, nd):
+                lengths = [len(x) for x in lists]
+                raise ValueError(f"Incompatible lengths: {lengths}.")
+        return tuple(a * nd if len(a) == 1 else a for a in lists)
 
 
 class RoPEMixed(RoPE):
@@ -623,9 +615,9 @@ class RoPEMixed(RoPE):
     Extends ``RoPE`` with per-head frequency scaling via random
     directions on the N-sphere.
 
-    When ``axial=True`` (default), per-axis channels stay separate
-    (learned axial RoPE). When ``axial=False``, all axes share
-    channels (summed) — this is RoPE-Mixed from
+    When ``reduction_mode="cat"`` (default), per-axis channels stay
+    separate (learned axial RoPE). When ``reduction_mode="sum"``, all
+    axes share channels (summed) — this is RoPE-Mixed from
     [Heo et al., ECCV 2024](https://arxiv.org/abs/2403.13298).
 
     Returns half-dim cos/sin (shape ``[..., S, H, dim//2]``). Pair
@@ -635,7 +627,7 @@ class RoPEMixed(RoPE):
       dim: Channel count per axis (same semantics as ``RoPE``).
       num_heads: Number of attention heads.
       base: Frequency base(s) (same semantics as ``RoPE``).
-      axial: If True, axial (cat). If False (default), sum.
+      reduction_mode: "cat" (axial) or "sum" (RoPE-Mixed).
       learnable: If True, frequencies are learnable. Default False.
 
     """
@@ -646,37 +638,34 @@ class RoPEMixed(RoPE):
         *,
         num_heads: int = 1,
         base: float | Iterable[float] = 10e3,
-        axial: bool = False,
+        reduction_mode: Literal["cat", "sum"] = "sum",
         learnable: bool = False,
     ):
-        super().__init__(dim, base=base)
-        if axial:
-            inv_freqs = self._inv_freqs
-        else:
-            if len(set(self._dims)) > 1:
-                raise ValueError(f"Sum mode requires uniform dims, got {self._dims}.")
-            inv_freqs = torch.stack(
-                [
-                    self._make_inv_freqs(b, c)
-                    for b, c in zip(self._bases, self._dims, strict=False)
-                ]
-            ).unsqueeze(-2)
+        super().__init__(dim, base=base, reduction_mode=reduction_mode)
+        if reduction_mode == "sum":
+            active_dims = {f.shape[-1] for f in self._inv_freqs if f.numel()}
+            if len(active_dims) > 1:
+                raise ValueError(f"Sum mode requires uniform dims, got {active_dims}.")
+        directions = None
+        active_count = sum(1 for f in self._inv_freqs if f.numel())
         if num_heads > 1:
             directions = nn.functional.normalize(
                 trunc_normal_init_(
-                    torch.empty(len(self._active_axes), num_heads, 1),
+                    torch.empty(active_count, num_heads, 1),
                     std=1.0,
                 ),
                 dim=0,
             )
-            inv_freqs = inv_freqs * directions
-        self._inv_freqs = nn.Parameter(inv_freqs, requires_grad=learnable)
-
-    def _apply(self, fn: Callable[..., Any], recurse: bool = True) -> Self:
-        inv_freqs = self._inv_freqs.data.clone()
-        nn.Module._apply(self, fn, recurse)  # noqa: SLF001
-        self._inv_freqs.data = inv_freqs  # .to(device=self._dtype.device)
-        return self
+        freqs = []
+        j = 0
+        for inv_f in self._inv_freqs:
+            if inv_f.numel():
+                v = inv_f * directions[j] if directions is not None else inv_f
+                freqs.append(nn.Parameter(v, requires_grad=learnable))
+                j += 1
+            else:
+                freqs.append(nn.Parameter(torch.empty(0), requires_grad=False))
+        self._inv_freqs: nn.ParameterList = nn.ParameterList(freqs)  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class Linear(nn.Module):
@@ -811,11 +800,7 @@ def make_grid_positions(
     When legacy=True, uses the old convention (1-offset on ALL axes).
     """
     n = len(grid_shape)
-    grid = torch.meshgrid(
-        *(torch.arange(s, device=device) for s in grid_shape),
-        indexing="ij",
-    )
-    grid_pos = torch.stack([g.reshape(-1) for g in grid], dim=-1)
+    grid_pos = RoPE.mesh_arange(grid_shape, device=device)
     if legacy:
         grid_pos = 1 + grid_pos
     else:
@@ -1207,7 +1192,7 @@ class TRM(nn.Module):
         rope_kwargs: dict[str, Any] = dataclasses.field(
             default_factory=lambda: {
                 "base": 10e3,
-                "axial": True,
+                "reduction_mode": "cat",
                 "learnable": False,
             }
         )
@@ -1586,7 +1571,7 @@ class TRM3(nn.Module):
         rope_kwargs: dict[str, Any] = dataclasses.field(
             default_factory=lambda: {
                 "base": 10e3,
-                "axial": True,
+                "reduction_mode": "cat",
                 "learnable": False,
             }
         )
@@ -2044,7 +2029,7 @@ class TRM3(nn.Module):
         if self.rope is None:
             return None
         cfg = self.config
-        if len(self.rope.dims) == 1:
+        if len(self.rope.dim) == 1:
             positions = torch.arange(cfg.total_seq_len, device=device)
         else:
             positions = make_grid_positions(
