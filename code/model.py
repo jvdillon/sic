@@ -315,7 +315,7 @@ def apply_rope(
     """Apply rotary position embedding to query and key tensors.
 
     cos/sin are half-dim (D//2). Splits q/k into pairs, applies a 2D
-    rotation, and recombines. No replication needed — half the memory
+    rotation, and recombines. No replication needed -- half the memory
     vs full-dim cos/sin approaches.
 
     The ``interleave`` flag selects the dimension pairing convention:
@@ -412,7 +412,7 @@ class RoPE(nn.Module):
 
     Returns half-dim cos/sin (shape ``[..., S, 1, dim//2]``). Pair
     with ``apply_rope`` which splits q/k, applies the 2D rotation, and
-    recombines — no replication needed. The ``interleave`` flag on
+    recombines -- no replication needed. The ``interleave`` flag on
     ``apply_rope`` selects the dimension pairing convention:
     GPT-NeoX / HuggingFace half-split (LLaMA, Mistral, Gemma, Qwen)
     vs RoFormer / Meta LLaMA interleave. See ``apply_rope`` docstring
@@ -638,16 +638,16 @@ class RoPE(nn.Module):
 class RoPEMixed(RoPE):
     """N-dimensional RoPE with per-head frequencies.
 
-    Extends ``RoPE`` with per-head frequency scaling via random
-    directions on the N-sphere.
+    Extends ``RoPE`` with per-head frequency scaling via random directions on
+    the N-sphere.
 
-    When ``reduction_mode="cat"`` (default), per-axis channels stay
-    separate (learned axial RoPE). When ``reduction_mode="sum"``, all
-    axes share channels (summed) — this is RoPE-Mixed from
-    [Heo et al., ECCV 2024](https://arxiv.org/abs/2403.13298).
+    When ``reduction_mode="cat"`` (default), per-axis channels stay separate
+    (learned axial RoPE). When ``reduction_mode="sum"``, all axes share
+    channels (summed) -- this and ``learnable=True`` is RoPE-Mixed from [Heo et
+    al., ECCV 2024](https://arxiv.org/abs/2403.13298).
 
-    Returns half-dim cos/sin (shape ``[..., S, H, dim//2]``). Pair
-    with ``apply_rope``.
+    Returns half-dim cos/sin (shape ``[..., S, H, dim//2]``). Pair with
+    ``apply_rope``.
 
     Args:
       dim: Channel count per axis (same semantics as ``RoPE``).
@@ -665,7 +665,7 @@ class RoPEMixed(RoPE):
         *,
         num_heads: int = 1,
         base: float | Iterable[float] = 10e3,
-        reduction_mode: Literal["cat", "sum"] = "sum",
+        reduction_mode: Literal["cat", "sum"] = "cat",
         learnable: bool = False,
     ):
         super().__init__(dim, base=base, reduction_mode=reduction_mode)
@@ -1223,13 +1223,9 @@ class TRM(nn.Module):
         L_cycles: int = 9
         state_noise: float = 0.0
 
-        rope_kwargs: dict[str, Any] = dataclasses.field(
-            default_factory=lambda: {
-                "base": 10e3,
-                "reduction_mode": "cat",
-                "learnable": False,
-            }
-        )
+        use_rope: bool = False
+        rope_kwargs: dict[str, Any] = dataclasses.field(default_factory=dict)
+
         dtype: torch.dtype | None = torch.bfloat16
         head_bias: bool = True
         act: bool = True
@@ -1238,7 +1234,6 @@ class TRM(nn.Module):
             MLPMixerBlock,
             seq_len=seq_len,
         )
-        use_rope: bool = False
         causal: bool = False
         no_grad_inner: bool = True  # False = BPTT through all H_cycles
         head_init_weight_fn: InitFn = normal_init_
@@ -1602,13 +1597,7 @@ class TRM3(nn.Module):
         z_L_random_init: bool = False
 
         use_rope: bool = False
-        rope_kwargs: dict[str, Any] = dataclasses.field(
-            default_factory=lambda: {
-                "base": 10e3,
-                "reduction_mode": "cat",
-                "learnable": False,
-            }
-        )
+        rope_kwargs: dict[str, Any] = dataclasses.field(default_factory=dict)
         num_heads: int = 8  # Only used for RoPE dim calculation
 
         # Prefix tokens: prepend before puzzle_grid
