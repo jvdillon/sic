@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07d: x07 + use_rope=False, activation checkpointing on H-cycles."""
 
 from __future__ import annotations
 

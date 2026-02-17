@@ -1,4 +1,4 @@
-"""x000f: x000 with attn_muon_modified=True."""
+"""x000i: x000 + use_ema=False, attn_muon_modified, label_smoothing=0.01."""
 
 from typing import cast
 

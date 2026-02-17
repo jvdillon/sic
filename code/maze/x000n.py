@@ -1,4 +1,4 @@
-"""x000f: x000 with attn_muon_modified=True."""
+"""x000n: standalone x000l + label_smoothing=0.15, muon_lr=0.010, muon_wd=0.1."""
 
 from typing import cast
 

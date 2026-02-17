@@ -1,4 +1,4 @@
-"""x000a: x000 except larger lr."""
+"""x000c: x000 + lr_warmup_steps=1000, lr_min_ratio=0.10."""
 
 from experiment import main, setup_muon_optimizers
 from maze.x000 import Experiment as Experiment000

@@ -1,4 +1,4 @@
-"""x000c: 125 groups × 8 augmentations = 1000 patterns (same as noaug)."""
+"""x000e: x000 + grad_accum_steps=6, batch_size=124."""
 
 from experiment import main
 from maze.x000 import Experiment as Experiment000

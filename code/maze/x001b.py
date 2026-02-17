@@ -1,4 +1,4 @@
-"""x000f: x000 with attn_muon_modified=True."""
+"""x001b: standalone K=4 (K_L=4, carry_H=copy_top1, z_L_init_svd), muon_lr=0.001."""
 
 from typing import cast
 

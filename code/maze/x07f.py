@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07f: x07 + 2D RoPE."""
 
 from __future__ import annotations
 

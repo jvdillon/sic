@@ -39,6 +39,7 @@ class Experiment(ExperimentBase):
     eval_method: Literal["full", "fast", "wta"] = "full"
     eval_path_valid: bool = True
     label_smoothing_includes_pad_token: bool = False
+    anchor_seq_index: int | None = None
 
     config: TRM3ConfigProtocol = TRM3.Config(
         vocab_size=_CFG.vocab_size,

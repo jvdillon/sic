@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07g: x07 + max_steps_schedule, 2D RoPE, activation checkpointing."""
 
 from __future__ import annotations
 
@@ -27,11 +27,7 @@ class Experiment(Experiment07):
 
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07.config),
-        use_rope=True,
         rope_kwargs={"base": (10e3, 10e3)},
-        num_layers=2,
-        H_cycles=3,  # 3,
-        L_cycles=4,  # 4,
     )
 
     def _run_h_cycles(

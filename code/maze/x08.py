@@ -1,4 +1,4 @@
-"""x08: x07 + attn_qk_norm=True, muon_lr=0.01."""
+"""x08: x07 + muon_lr=0.01."""
 
 from experiment import main, setup_muon_optimizers
 from maze.x07 import Experiment as Experiment07

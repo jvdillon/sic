@@ -1,4 +1,4 @@
-"""x000f: x000 with attn_muon_modified=True."""
+"""x000m: x000l + batch_size=176, muon_lr=0.010."""
 
 from experiment import main, setup_muon_optimizers
 from maze.x000l import Experiment as Experiment000l

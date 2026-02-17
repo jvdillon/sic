@@ -1,4 +1,4 @@
-"""x000f: x000 with attn_muon_modified=True."""
+"""x000g: x000 + use_ema=False, attn_muon_modified, 2D RoPE."""
 
 from typing import cast
 

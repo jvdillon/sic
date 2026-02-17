@@ -1,58 +1,26 @@
-"""x07a: x07 + attn_qk_norm=True, eval_method="fast".
+"""x07a: x07 + 2D RoPE, register_token_init_std=1.0."""
 
-x07.log is eval_method="fast".
-x07.log.1 is eval_method="full".
-"""
+from __future__ import annotations
 
-from typing import Literal
+from typing import cast
 
+import dataclasses
 import functools
 
 from experiment import main
 from maze.x07 import Experiment as Experiment07
-from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
-
-from data import get_puzzle_config
+from model import TRM3, TRM3ConfigProtocol
 
 
-_CFG = get_puzzle_config("maze")
+Config07 = cast(TRM3.Config, Experiment07.config)
+Block07 = cast(functools.partial[TRM3ConfigProtocol], Config07.block_fn)
 
 
 class Experiment(Experiment07):
-    eval_method: Literal["full", "fast", "wta"] = "fast"
-
-    config: TRM3ConfigProtocol = TRM3.Config(
-        vocab_size=_CFG.vocab_size,
-        puzzle_grid_shape=_CFG.grid_shape,
-        num_layers=2,
-        H_cycles=3,
-        L_cycles=4,
-        K_H=1,
-        K_L=1,
-        carry_H="all",
-        carry_L="all",
-        z_L_init_svd=False,
-        use_rope=True,
-        num_heads=8,
-        num_puzzle_id_tokens=1,
-        num_puzzle_ids=1,
-        num_register_tokens=15,
-        register_token_init_std=0.0,
-        register_tokens_learnable=False,
-        q_halt_seq_index=0,
-        cast_model_to_dtype=False,
-        label_smoothing_includes_pad_token=False,
-        block_fn=functools.partial(
-            TransformerBlock,
-            multiple_of=128,
-            num_heads=8,
-            mlp_init_weight_fn=trunc_normal_init_,
-            mlp_muon_modified=True,
-            attn_init_weight_fn=trunc_normal_init_,
-            attn_muon_modified=True,
-            attn_checkpoint_muon_norm=True,
-            attn_qk_norm=True,
-        ),
+    config: TRM3ConfigProtocol = dataclasses.replace(
+        Config07,
+        rope_kwargs={"base": (10e3, 10e3)},
+        register_token_init_std=1.0,
     )
 
 

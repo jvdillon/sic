@@ -1,4 +1,4 @@
-"""x000a: x000 except larger lr."""
+"""x000b: x000 + muon_lr=0.0025."""
 
 from experiment import main, setup_muon_optimizers
 from maze.x000 import Experiment as Experiment000

@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07m: x07 + K=4, K_L=4, carry_L=copy_top1, z_L_init_svd, 2D RoPE, layer checkpointing."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07e: x07 + max_steps_schedule (progressive H-steps)."""
 
 from __future__ import annotations
 

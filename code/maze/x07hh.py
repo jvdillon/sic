@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07hh: x07b + bundle_size=8, 2D RoPE."""
 
 from __future__ import annotations
 
@@ -16,11 +16,7 @@ class Experiment(Experiment07b):
 
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07b.config),
-        use_rope=True,
         rope_kwargs={"base": (10e3, 10e3)},
-        num_layers=2,
-        H_cycles=3,  # 3,
-        L_cycles=4,  # 4,
     )
 
 

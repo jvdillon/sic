@@ -1,4 +1,4 @@
-"""x09: x07 + num_layers=3, AC on layer 1."""
+"""x09: x07 + num_layers=3, AC on layer 0, register_token_init_std=1.0."""
 
 from typing import cast
 

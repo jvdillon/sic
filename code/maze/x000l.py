@@ -1,4 +1,4 @@
-"""x000f: x000 with attn_muon_modified=True."""
+"""x000l: x000 + 16k steps, attn_muon_modified, no EMA, sum-norm loss."""
 
 from typing import cast
 

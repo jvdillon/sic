@@ -1,4 +1,4 @@
-"""x08a: x08 + muon_lr=0.02."""
+"""x07l: x07 + rope_kwargs=1e3, register_token_init_std=1.0."""
 
 from __future__ import annotations
 
