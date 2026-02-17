@@ -14,7 +14,11 @@ from model import TRM3, TRM3ConfigProtocol
 class Experiment(Experiment07):
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07.config),
-        rope_kwargs={"base": (10e3, 10e3)},
+        rope_kwargs={
+            "base": (10e3, 10e3),
+            "reduction_mode": "cat",
+            "learnable": False,
+        },
     )
 
 

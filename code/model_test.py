@@ -98,8 +98,8 @@ class TestRoPE:
             ({"dim": [64, 64]}, (16, 2), (16, 1, 64)),
             # 3D axial (explicit per-axis dims).
             ({"dim": [44, 42, 42]}, (8, 3), (8, 1, 64)),
-            # 3D axial (scalar dim replicated).
-            ({"dim": 128, "base": [100.0, 100.0, 100.0]}, (8, 3), (8, 1, 192)),
+            # 3D axial (scalar dim auto-split).
+            ({"dim": 128, "base": [100.0, 100.0, 100.0]}, (8, 3), (8, 1, 64)),
             # Batched positions.
             ({"dim": 32}, (4, 10, 1), (4, 10, 1, 16)),
         ],
@@ -138,17 +138,25 @@ class TestRoPE:
 
     # --- Dim replication -------------------------------------------------
 
-    def test_scalar_dim_replicated_by_bases(self):
+    def test_scalar_dim_split_by_bases_3(self):
         rope = RoPE(dim=128, base=[10_000.0, 10_000.0, 10_000.0])
-        assert rope.dim == (128, 128, 128)
+        assert rope.dim == (44, 42, 42)
 
-    def test_scalar_dim_replicated_2(self):
+    def test_scalar_dim_split_by_bases_2(self):
         rope = RoPE(dim=128, base=[10_000.0, 10_000.0])
+        assert rope.dim == (64, 64)
+
+    def test_scalar_dim_replicated_sum(self):
+        rope = RoPE(dim=128, base=[10_000.0, 10_000.0], reduction_mode="sum")
         assert rope.dim == (128, 128)
 
     def test_odd_dim_raises(self):
         with pytest.raises(ValueError, match="even"):
             RoPE(dim=3, base=[10_000.0, 10_000.0])
+
+    def test_dim_too_small_for_axes_raises(self):
+        with pytest.raises(ValueError, match="Cannot split"):
+            RoPE(dim=2, base=[10_000.0, 10_000.0, 10_000.0])
 
     # --- Block-diagonal structure ----------------------------------------
 

@@ -420,27 +420,29 @@ class RoPE(nn.Module):
 
     ``smallest_recommended_base(dim, max_positions)`` reference:
 
-        len      c=16    c=32    c=64   c=128   c=256
+              len      c=16    c=32    c=64   c=128   c=256
         ----------------------------------------------------
-           16       3       3       2       2       2
-           32       6       5       5       5       5
-           64      14      12      11      10      10
-          128      31      25      22      21      21
-          256      69      52      46      43      42
-          512     152     109      94      87      84
-        1,024     337     229     192     177     169
-        2,048     745     479     393     357     341
-        4,096   1,645   1,004     803     722     686
-        8,192   3,632   2,103   1,643   1,461   1,379
-       16,384   8,021   4,405   3,361   2,954   2,774
-       32,768  17,713   9,227   6,873   5,974   5,579
-       65,536  39,114  19,328  14,058  12,080  11,218
-      131,072  86,372  40,484  28,751  24,428  22,560
+               16       3       3       2       2       2
+               32       6       5       5       5       5
+               64      14      12      11      10      10
+              128      31      25      22      21      21
+              256      69      52      46      43      42
+              512     152     109      94      87      84
+            1,024     337     229     192     177     169
+            2,048     745     479     393     357     341
+            4,096   1,645   1,004     803     722     686
+            8,192   3,632   2,103   1,643   1,461   1,379
+           16,384   8,021   4,405   3,361   2,954   2,774
+           32,768  17,713   9,227   6,873   5,974   5,579
+           65,536  39,114  19,328  14,058  12,080  11,218
+          131,072  86,372  40,484  28,751  24,428  22,560
 
     Args:
-      dim: Channel count per axis. Scalar for 1D (e.g. 128), iterable
-          for ND. Each nonzero value must be even and >= 2. Use 0 to
-          skip an axis.
+      dim: Channel count. Scalar + multi-element ``base`` auto-splits:
+          cat mode splits evenly (e.g. 128 across 3 axes → [44, 42, 42]),
+          sum mode replicates (e.g. 64 across 2 axes → [64, 64]).
+          Iterable for explicit per-axis allocation. Each nonzero value
+          must be even and >= 2. Use 0 to skip an axis.
       base: Frequency base(s). Scalar (shared across axes) or iterable
           (one per axis). Controls the longest wavelength: the lowest
           frequency has period ``2*pi*base^((c-2)/c)`` where c is the
@@ -460,6 +462,13 @@ class RoPE(nn.Module):
     ):
         super().__init__()
         self.reduction_mode = reduction_mode
+        if (
+            reduction_mode == "cat"
+            and isinstance(dim, int)
+            and isinstance(base, Sequence)
+            and len(base) > 1
+        ):
+            dim = self._split_dim(dim, len(base))
         dim, base = self._broadcast_sequences(dim, base)
         self.dim = tuple(int(d) for d in dim)
         self.base = tuple(float(b) for b in base)
@@ -591,6 +600,26 @@ class RoPE(nn.Module):
             raise ValueError(f"Dim {c} must be at least 2.")
         if c % 2 == 1:
             raise ValueError(f"Dim {c} must be even.")
+
+    @classmethod
+    def _split_dim(cls, total: int, naxes: int) -> list[int]:
+        """Split total channels across axes, each even, front-loaded.
+
+        E.g. _split_dim(128, 3) → [44, 42, 42].
+        """
+        if total % 2:
+            raise ValueError(f"Total dim={total} must be even.")
+        if total < 2 * naxes:
+            raise ValueError(
+                f"Cannot split dim={total} across {naxes} axes"
+                f" (need at least {2 * naxes})."
+            )
+        per = total // naxes // 2 * 2
+        remainder = total - per * naxes
+        dims = [per] * naxes
+        for i in range(remainder // 2):
+            dims[i] += 2
+        return dims
 
     @classmethod
     def _broadcast_sequences(
