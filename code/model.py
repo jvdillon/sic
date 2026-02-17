@@ -448,8 +448,7 @@ class RoPE(nn.Module):
           frequency has period ``2*pi*base^((c-2)/c)`` where c is the
           per-axis channel count. Use ``smallest_recommended_base`` to
           compute from max position counts.
-      reduction_mode: "cat" (axial) or "sum" (RoPE-Mixed).
-          Note: this default ("cat") differs from RoPEMixed ("sum").
+      reduction_mode: "cat" (axial; default) or "sum" (RoPE-Mixed).
 
     """
 
@@ -653,8 +652,7 @@ class RoPEMixed(RoPE):
       dim: Channel count per axis (same semantics as ``RoPE``).
       num_heads: Number of attention heads.
       base: Frequency base(s) (same semantics as ``RoPE``).
-      reduction_mode: "cat" (axial) or "sum" (RoPE-Mixed).
-          Note: this default ("sum") differs from RoPE ("cat").
+      reduction_mode: "cat" (axial; default) or "sum" (RoPE-Mixed).
       learnable: If True, frequencies are learnable. Default False.
 
     """
