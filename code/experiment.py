@@ -694,7 +694,12 @@ class Experiment:
         # Detach cos_sin for no_grad iterations to avoid retaining the
         # gradient graph when inv_freqs is a learnable Parameter.
         cos_sin_detach = (
-            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+            (
+                cos_sin[0].detach(),
+                cos_sin[1].detach(),
+            )
+            if cos_sin is not None
+            else None
         )
         for _ in range(self.model.config.H_cycles - 1):
             with torch.no_grad():
