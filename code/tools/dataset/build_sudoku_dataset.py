@@ -1,4 +1,4 @@
-from code.dataset.common import PuzzleDatasetMetadata
+from code.tools.dataset.common import PuzzleDatasetMetadata
 from pathlib import Path
 
 import csv

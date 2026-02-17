@@ -13,7 +13,7 @@ From the project root (`~/projects/sic`):
 - [HRM README](https://github.com/sapientinc/HRM#dataset-preparation): `python dataset/build_sudoku_dataset.py --output-dir data/sudoku-extreme-1k-aug-1000 --subsample-size 1000 --num-aug 1000`
 
 ```bash
-uv run python -m code.dataset.build_sudoku_dataset \
+uv run python -m code.tools.dataset.build_sudoku_dataset \
   --output-dir /opt/scratch/datasets/sudoku-extreme-1k-aug-1000 \
   --subsample-size 1000 \
   --num-aug 1000
@@ -26,19 +26,22 @@ uv run python -m code.dataset.build_sudoku_dataset \
 - [TRM README](https://github.com/SamsungSAILMontreal/TinyRecursiveModels#dataset-preparation): `python dataset/build_maze_dataset.py # 1000 examples, 8 augments` (but omits `--aug`; code defaults to `aug=False`)
 - [HRM README](https://github.com/sapientinc/HRM#dataset-preparation): `python dataset/build_maze_dataset.py # 1000 examples`
 
-To match TRM paper (with augmentation):
+Despite what is is in the TRM paper, we believe both TRM and HRM paper in fact
+did **not** use augmentations for maze. We believe this because dihedral
+augmentations seems to break RoPE encodings.
+Therefore to match TRM and HRM paper:
 
 ```bash
-uv run python -m code.dataset.build_maze_dataset \
-  --output-dir /opt/scratch/datasets/maze-30x30-hard-1k-aug \
-  --aug
+uv run python -m code.tools.dataset.build_maze_dataset \
+  --output-dir /opt/scratch/datasets/maze-30x30-hard-1k
 ```
 
-To match HRM paper (no augmentation):
+and to generate with augmentations:
 
 ```bash
-uv run python -m code.dataset.build_maze_dataset \
-  --output-dir /opt/scratch/datasets/maze-30x30-hard-1k
+uv run python -m code.tools.dataset.build_maze_dataset \
+  --output-dir /opt/scratch/datasets/maze-30x30-hard-1k-aug \
+  --aug
 ```
 
 ## ARC
@@ -62,14 +65,14 @@ cp /tmp/trm/kaggle/combined/arc-agi_*.json /opt/scratch/datasets/arc-agi/
 rm -rf /tmp/trm
 
 # ARC-AGI-1
-uv run python -m code.dataset.build_arc_dataset \
+uv run python -m code.tools.dataset.build_arc_dataset \
   --input-file-prefix /opt/scratch/datasets/arc-agi/arc-agi \
   --output-dir /opt/scratch/datasets/arc1concept-aug-1000 \
   --subsets training evaluation concept \
   --test-set-name evaluation
 
 # ARC-AGI-2
-uv run python -m code.dataset.build_arc_dataset \
+uv run python -m code.tools.dataset.build_arc_dataset \
   --input-file-prefix /opt/scratch/datasets/arc-agi/arc-agi \
   --output-dir /opt/scratch/datasets/arc2concept-aug-1000 \
   --subsets training2 evaluation2 concept \

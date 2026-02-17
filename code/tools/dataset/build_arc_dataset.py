@@ -1,4 +1,4 @@
-from code.dataset.common import (
+from code.tools.dataset.common import (
     PuzzleDatasetMetadata,
     dihedral_transform,
     inverse_dihedral_transform,

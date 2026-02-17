@@ -1,12 +1,28 @@
-"""Collect full 16-step ACT trajectories for maze error analysis.
+r"""Collect full ACT trajectories for puzzle error analysis.
 
-Evaluates 4 checkpoints × 2 splits, saves per-cell logits and q_halt at each step.
+Usage::
+
+    python collect_trajectories.py \
+        --type maze --split test --num_train 2000 --num_test 250 \
+        --x 07b,7500 --x 07,2500,train
+
+Each --x is: EXP,STEP[,SPLIT][,NUM][,TYPE]. Fields after STEP override
+the corresponding global defaults.
+
+TYPE is one of: maze, maze-aug, sudoku, arc.
+The -aug suffix selects the augmented dataset variant.
+
+Checkpoint path: <task>/ckpts/<exp>/step<STEP>.pt  (task = type without -aug)
+Data dir: looked up from _DATA_DIRS[type]
+Label: <exp>_<split>_<step>
 """
 
 from collections import deque
 from pathlib import Path
 from typing import Any
 
+import argparse
+import importlib
 import pickle
 import sys
 
@@ -19,13 +35,51 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from data import load_puzzle_dataset
 
 
-def load_model(exp_module_name: str, ckpt_path: str, device: torch.device):
-    """Load experiment and checkpoint."""
-    import importlib  # noqa: PLC0415
+_DATA_DIRS: dict[str, str] = {
+    "maze": "/opt/scratch/datasets/maze-30x30-hard-1k",
+    "maze-aug": "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
+    "sudoku": "/opt/scratch/datasets/sudoku-extreme-1k-aug-1000",
+    "arc": "/opt/scratch/datasets/arc1concept-aug-1000",
+}
 
-    mod = importlib.import_module(f"maze.{exp_module_name}")
+
+def _task_from_type(type_str: str) -> str:
+    """Strip -aug suffix to get the experiment module prefix."""
+    return type_str.removesuffix("-aug")
+
+
+def _parse_x(spec: str, defaults: argparse.Namespace) -> dict[str, Any]:
+    """Parse an --x spec into a config dict.
+
+    Format: EXP,STEP[,SPLIT][,NUM][,TYPE]
+    """
+    parts = spec.split(",")
+    assert len(parts) >= 2, f"--x needs at least EXP,STEP: got {spec!r}"
+    exp = parts[0]
+    step = int(parts[1])
+    split = parts[2] if len(parts) > 2 else defaults.split
+    num = int(parts[3]) if len(parts) > 3 else None
+    type_str = parts[4] if len(parts) > 4 else defaults.type
+    if num is None:
+        num = defaults.num_train if split == "train" else defaults.num_test
+    return {
+        "exp": exp,
+        "step": step,
+        "split": split,
+        "num": num,
+        "type": type_str,
+    }
+
+
+def load_model(
+    task: str,
+    exp_name: str,
+    ckpt_path: str,
+    device: torch.device,
+) -> Any:
+    """Load experiment and checkpoint."""
+    mod = importlib.import_module(f"{task}.{exp_name}")
     exp = mod.Experiment()
-    # Move model to target device if needed
     if exp.device != device:
         exp.model = exp.model.to(device)
         exp.device = device
@@ -78,8 +132,8 @@ def collect_trajectories(
                     out = exp.model(inp, z_H, z_L, puzzle_ids)
                 z_H = out["z_H"]
                 z_L = out["z_L"]
-                logits = out["logits"]  # [B, grid_len, vocab]
-                q_halt = out["q_halt"]  # [B]
+                logits = out["logits"]
+                q_halt = out["q_halt"]
 
                 all_logits[start:end, step] = (
                     logits.cpu().float().numpy().astype(np.float16)
@@ -125,8 +179,7 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict[str, Any]:
     solution_cells.add(start)
     solution_cells.add(end)
 
-    # Wrong turn analysis: for each solution cell, count non-solution open neighbors
-    wrong_turn_depths = []
+    wrong_turn_depths: list[int] = []
     for r, c in solution_cells:
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
@@ -136,9 +189,8 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict[str, Any]:
                 and grid[nr, nc] >= 2
                 and (nr, nc) not in solution_cells
             ):
-                # BFS to measure depth of this dead-end branch
-                visited = set()
-                q = deque([(nr, nc)])
+                visited: set[tuple[int, int]] = set()
+                q: deque[tuple[int, int]] = deque([(nr, nc)])
                 visited.add((nr, nc))
                 while q:
                     wr, wc = q.popleft()
@@ -155,10 +207,8 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict[str, Any]:
                             q.append((wnr, wnc))
                 wrong_turn_depths.append(len(visited))
 
-    # Distance from start along solution path for each solution cell
-    # BFS along solution path only
-    path_dist = {}
-    pq = deque([start])
+    path_dist: dict[tuple[int, int], int] = {}
+    pq: deque[tuple[int, int]] = deque([start])
     path_dist[start] = 0
     while pq:
         r, c = pq.popleft()
@@ -172,9 +222,9 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict[str, Any]:
         "path_len": len(solution_cells),
         "wrong_turns": len(wrong_turn_depths),
         "max_wrong_depth": max(wrong_turn_depths) if wrong_turn_depths else 0,
-        "mean_wrong_depth": float(np.mean(wrong_turn_depths))
-        if wrong_turn_depths
-        else 0,
+        "mean_wrong_depth": (
+            float(np.mean(wrong_turn_depths)) if wrong_turn_depths else 0
+        ),
         "total_wrong_cells": sum(wrong_turn_depths),
         "start": start,
         "end": end,
@@ -183,128 +233,105 @@ def analyze_maze_structure(inp: np.ndarray, lab: np.ndarray) -> dict[str, Any]:
     }
 
 
-def main():
-    device = torch.device("cuda")
-    out_path = Path(__file__).parent / "trajectory_data.pkl"
+def _compute_structures(
+    task: str,
+    traj: dict[str, Any],
+    group_indices: torch.Tensor,
+    n_puzzles: int,
+) -> list[dict[str, Any]]:
+    """Compute task-specific structural features for base instances."""
+    if task != "maze":
+        return []
 
-    # Configuration: (exp_module, ckpt_step, data_dir, split, n_puzzles, label)
-    configs = [
-        # x07b (augmented) - train: first 250 instances = rows 0..1999
-        (
-            "x07b",
-            9500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
-            "train",
-            2000,
-            "x07b_train_9500",
-        ),
-        (
-            "x07b",
-            7500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
-            "train",
-            2000,
-            "x07b_train_7500",
-        ),
-        # x07b test
-        (
-            "x07b",
-            9500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
-            "test",
-            250,
-            "x07b_test_9500",
-        ),
-        (
-            "x07b",
-            7500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k-aug",
-            "test",
-            250,
-            "x07b_test_7500",
-        ),
-        # x07 (non-augmented) - train
-        (
-            "x07",
-            12500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k",
-            "train",
-            250,
-            "x07_train_12500",
-        ),
-        (
-            "x07",
-            6500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k",
-            "train",
-            250,
-            "x07_train_6500",
-        ),
-        # x07 test
-        (
-            "x07",
-            12500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k",
-            "test",
-            250,
-            "x07_test_12500",
-        ),
-        (
-            "x07",
-            6500,
-            "/opt/scratch/datasets/maze-30x30-hard-1k",
-            "test",
-            250,
-            "x07_test_6500",
-        ),
+    n_augs_per_instance = (
+        int(group_indices[1] - group_indices[0]) if len(group_indices) > 1 else 1
+    )
+    if n_augs_per_instance > 1:
+        n_instances = min(
+            n_puzzles // n_augs_per_instance, len(traj["inputs"]) // n_augs_per_instance
+        )
+        return [
+            analyze_maze_structure(
+                traj["inputs"][i * n_augs_per_instance],
+                traj["labels"][i * n_augs_per_instance],
+            )
+            for i in range(n_instances)
+        ]
+    return [
+        analyze_maze_structure(traj["inputs"][i], traj["labels"][i])
+        for i in range(min(n_puzzles, len(traj["inputs"])))
     ]
 
-    results = {}
 
-    for exp_name, step, data_dir, split, n_puzzles, label in configs:
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--type", default="maze", help="Puzzle type (default: maze)")
+    parser.add_argument("--split", default="test", help="Default split (default: test)")
+    parser.add_argument(
+        "--num_train", type=int, default=250, help="Default num samples for train"
+    )
+    parser.add_argument(
+        "--num_test", type=int, default=250, help="Default num samples for test"
+    )
+    parser.add_argument(
+        "--x", action="append", required=True, help="EXP,STEP[,SPLIT][,NUM][,TYPE]"
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output pickle path (default: trajectory_data.pkl)",
+    )
+    args = parser.parse_args()
+
+    device = torch.device("cuda")
+    out_path = (
+        Path(args.output)
+        if args.output
+        else Path(__file__).parent / "trajectory_data.pkl"
+    )
+    code_dir = Path(__file__).resolve().parent.parent
+
+    configs = [_parse_x(spec, args) for spec in args.x]
+
+    results: dict[str, Any] = {}
+    meta: dict[str, dict[str, Any]] = {}
+
+    for cfg in configs:
+        exp_name = cfg["exp"]
+        step = cfg["step"]
+        split = cfg["split"]
+        n_puzzles = cfg["num"]
+        type_str = cfg["type"]
+        task = _task_from_type(type_str)
+        label = f"{exp_name}_{split}_{step}"
+
         print(f"\n{'=' * 60}")
-        print(f"Collecting: {label}")
+        print(f"Collecting: {label}  (type={type_str})")
         print(f"{'=' * 60}")
 
-        ckpt_path = str(
-            Path(__file__).parent / "ckpts" / exp_name / f"step{step:05d}.pt"
-        )
+        data_dir = _DATA_DIRS[type_str]
+        ckpt_path = str(code_dir / task / "ckpts" / exp_name / f"step{step:05d}.pt")
         print(f"  Checkpoint: {ckpt_path}")
 
-        # Load data
         data = load_puzzle_dataset(data_dir, split)
         inputs = data["inputs"][:n_puzzles]
         labels = data["labels"][:n_puzzles]
-        print(f"  Data: {len(inputs)} puzzles from {data_dir}/{split}")
+        print(f"  Data: {len(inputs)} samples from {data_dir}/{split}")
 
-        # Load model
-        exp = load_model(exp_name, ckpt_path, device)
+        exp = load_model(task, exp_name, ckpt_path, device)
         print("  Model loaded")
 
-        # Collect trajectories
         traj = collect_trajectories(exp, inputs, labels, device)
 
-        # Compute maze structure for base instances
         group_indices = data["group_indices"]
-        if split == "train" and "aug" in data_dir:
-            # Augmented: analyze only base instances (every 8th puzzle)
-            n_instances = min(250, n_puzzles // 8)
-            structures = []
-            for i in range(n_instances):
-                base_idx = i * 8
-                structures.append(
-                    analyze_maze_structure(
-                        traj["inputs"][base_idx], traj["labels"][base_idx]
-                    )
-                )
-        else:
-            structures = []
-            for i in range(min(250, len(inputs))):
-                structures.append(
-                    analyze_maze_structure(traj["inputs"][i], traj["labels"][i])
-                )
-
-        traj["maze_structures"] = structures
+        traj["maze_structures"] = _compute_structures(
+            task,
+            traj,
+            group_indices,
+            n_puzzles,
+        )
         traj["group_indices"] = (
             group_indices[: n_puzzles + 1].numpy()
             if len(group_indices) > n_puzzles
@@ -312,14 +339,27 @@ def main():
         )
         results[label] = traj
 
-        # Quick summary
-        final_preds = traj["logits"][:, -1].argmax(axis=-1)  # [N, 900]
+        n_augs = (
+            int(group_indices[1] - group_indices[0]) if len(group_indices) > 1 else 1
+        )
+        meta[label] = {
+            "type": type_str,
+            "task": task,
+            "split": split,
+            "exp": exp_name,
+            "step": step,
+            "n_augs": n_augs,
+        }
+
+        final_preds = traj["logits"][:, -1].argmax(axis=-1)
         cell_acc = (final_preds == traj["labels"]).mean() * 100
         puzzle_acc = (final_preds == traj["labels"]).all(axis=-1).mean() * 100
-        print(f"  Step 16: cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
+        print(f"  Final step: cell_acc={cell_acc:.2f}%, puzzle_acc={puzzle_acc:.2f}%")
 
         del exp
         torch.cuda.empty_cache()
+
+    results["_meta"] = meta
 
     print(f"\nSaving to {out_path}...")
     with out_path.open("wb") as f:

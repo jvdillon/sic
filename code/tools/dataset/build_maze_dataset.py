@@ -1,4 +1,4 @@
-from code.dataset.common import PuzzleDatasetMetadata, dihedral_transform
+from code.tools.dataset.common import PuzzleDatasetMetadata, dihedral_transform
 from pathlib import Path
 from typing import Any
 
