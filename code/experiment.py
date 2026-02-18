@@ -454,15 +454,9 @@ class Experiment:
         active_samples, winner_chains = state.select_winners(forward_result["losses"])
 
         if len(active_samples) > 0:
-            assert self.device is not None
-            with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-                loss = self._compute_loss(
-                    forward_result, state, active_samples, winner_chains, train_q_halt
-                )
-            if self.loss_sum_normalize:
-                (loss / self.batch_size).backward()
-            else:
-                loss.backward()
+            self._backward(
+                forward_result, state, active_samples, winner_chains, train_q_halt
+            )
 
         self._update_weights()
 
@@ -847,6 +841,29 @@ class Experiment:
                 )
             )
         return loss
+
+    def _backward(
+        self,
+        forward_result: ForwardResult,
+        state: "TrainingState",
+        active_samples: Tensor,
+        winner_chains: Tensor,
+        train_q_halt: bool,
+    ) -> None:
+        """Compute loss and run backward pass.
+
+        Override this in subclasses that need custom backward behavior
+        (e.g. per-group gradient surgery).
+        """
+        assert self.device is not None
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
+            loss = self._compute_loss(
+                forward_result, state, active_samples, winner_chains, train_q_halt
+            )
+        if self.loss_sum_normalize:
+            (loss / self.batch_size).backward()
+        else:
+            loss.backward()
 
     def _lr_scale(self) -> float:
         return lr_scale(

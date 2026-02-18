@@ -45,13 +45,6 @@ class Experiment(Experiment07a):
         super().reset_transient_state()
         self._act_ema = None
 
-    def _act_post_backward(
-        self,
-        carry: dict[str, Tensor],
-        was_running: Tensor,
-    ) -> None:
-        del carry, was_running
-
     def _update_weights(self) -> None:
         super()._update_weights()
         # Initialize EMA on first call.

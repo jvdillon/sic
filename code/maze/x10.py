@@ -52,7 +52,7 @@ class Experiment(Experiment07a):
             forward_result, state, active_samples, winner_chains, train_q_halt
         )
         # Probe reasoning block Lipschitz constant via finite difference.
-        x = forward_result["z_L"][:1].detach()
+        x = forward_result["z_L"][winner_chains[:1]].detach()
         eps_vec = torch.randn_like(x)
         eps_vec = eps_vec / eps_vec.norm() * self.lip_eps
         cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
