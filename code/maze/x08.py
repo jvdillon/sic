@@ -5,9 +5,10 @@ gradients that conflict with early-step gradients (which see all puzzles).
 This destroys the shared reasoning block's performance on easy puzzles,
 causing post-saturation oscillation.
 
-Fix: Store the gradient from ACT step 0. Before applying subsequent steps'
-gradients, project out the component that conflicts with step 0's direction.
-This prevents late-step updates from undoing early-step progress.
+Fix: Store the gradient from the earliest ACT step group. Before applying
+later groups' gradients, project out the component that conflicts with the
+earliest group's direction. This prevents late-step updates from undoing
+early-step progress.
 
 References:
 - Yu et al. (2020), "Gradient Surgery for Multi-Task Learning" (PCGrad)
@@ -78,16 +79,19 @@ class Experiment(Experiment07a):
             if self.loss_sum_normalize:
                 (loss / self.batch_size).backward(retain_graph=retain)
             else:
-                loss.backward(retain_graph=retain)
+                # Scale so accumulated group means equal the global mean.
+                (loss * (mask.sum().float() / len(h_steps))).backward(
+                    retain_graph=retain
+                )
 
-            if step_val == 0:
-                # Store step-0 gradient as reference direction.
+            if ref_grad is None:
+                # Store earliest group's gradient as reference direction.
                 ref_grad = {
                     n: p.grad.detach().clone()
                     for n, p in self.model.named_parameters()
                     if p.grad is not None
                 }
-            elif ref_grad is not None:
+            else:
                 # Project out conflicting component of this group's gradient.
                 with torch.no_grad():
                     for n, p in self.model.named_parameters():

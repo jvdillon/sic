@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from experiment import HCycleResult, main
 from maze.x07a import Experiment as Experiment07a
-from model import TRM3
 from torch.utils.checkpoint import checkpoint
 
 
 if TYPE_CHECKING:
     from torch import Tensor
-
-
-Config07a = cast(TRM3.Config, Experiment07a.config)
 
 
 class Experiment(Experiment07a):
