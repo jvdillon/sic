@@ -1,22 +1,14 @@
-"""x07k: x07 + label_smoothing=0.1, register_token_init_std=1.0."""
+"""x07k: x07a + label_smoothing=0.1."""
 
 from __future__ import annotations
 
-from typing import cast
-
-import dataclasses
-
 from experiment import main
-from maze.x07 import Experiment as Experiment07
-from model import TRM3, TRM3ConfigProtocol
+from maze.x07a import Experiment as Experiment07a
 
 
-class Experiment(Experiment07):
+class Experiment(Experiment07a):
+    total_train_steps: int = 8_000
     label_smoothing: float = 0.1
-    config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07.config),
-        register_token_init_std=1.0,
-    )
 
 
 if __name__ == "__main__":

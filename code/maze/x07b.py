@@ -1,33 +1,24 @@
-"""x07b: x07 + 2D RoPE, register_token_init_std=1.0 + activation checkpointing on H-cycles.."""
+"""x07b: x07a + 2D RoPE, register_token_init_std=1.0 + activation checkpointing on H-cycles.."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
-import dataclasses
-import functools
-
 from experiment import main
-from maze.x07 import Experiment as Experiment07
-from model import TRM3, TRM3ConfigProtocol
+from maze.x07a import Experiment as Experiment07a
+from model import TRM3
 from torch.utils.checkpoint import checkpoint
 
 
 if TYPE_CHECKING:
     from torch import Tensor
 
-Config07 = cast(TRM3.Config, Experiment07.config)
-Block07 = cast(functools.partial[TRM3ConfigProtocol], Config07.block_fn)
+
+Config07a = cast(TRM3.Config, Experiment07a.config)
 
 
-class Experiment(Experiment07):
-    config: TRM3ConfigProtocol = dataclasses.replace(
-        Config07,
-        rope_kwargs={"base": (10e3, 10e3)},
-        register_token_init_std=1.0,
-    )
-
+class Experiment(Experiment07a):
     def _run_h_cycles(
         self,
         core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],

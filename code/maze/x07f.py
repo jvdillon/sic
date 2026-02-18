@@ -1,21 +1,13 @@
-"""x07f: x07 + 2D RoPE."""
+"""x07f: x07a"""
 
 from __future__ import annotations
 
-from typing import cast
-
-import dataclasses
-
 from experiment import main
-from maze.x07 import Experiment as Experiment07
-from model import TRM3, TRM3ConfigProtocol
+from maze.x07a import Experiment as Experiment07a
 
 
-class Experiment(Experiment07):
-    config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07.config),
-        rope_kwargs={"base": (10e3, 10e3)},
-    )
+class Experiment(Experiment07a):
+    pass
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""x07c: x07 + 2D RoPE, register_token_init_std=1.0, attn_qk_norm=True."""
+"""x07c: x07a + attn_qk_norm=True."""
 
 from __future__ import annotations
 
@@ -8,23 +8,22 @@ import dataclasses
 import functools
 
 from experiment import main
-from maze.x07 import Experiment as Experiment07
+from maze.x07a import Experiment as Experiment07a
 from model import TRM3, TRM3ConfigProtocol
 
 
-Config07 = cast(TRM3.Config, Experiment07.config)
-Block07 = cast(functools.partial[TRM3ConfigProtocol], Config07.block_fn)
+Config07a = cast(TRM3.Config, Experiment07a.config)
+Block07a = cast(functools.partial[TRM3ConfigProtocol], Config07a.block_fn)
 
 
-class Experiment(Experiment07):
+class Experiment(Experiment07a):
+    total_train_steps: int = 8_000
     config: TRM3ConfigProtocol = dataclasses.replace(
-        Config07,
-        rope_kwargs={"base": (10e3, 10e3)},
-        register_token_init_std=1.0,
+        Config07a,
         block_fn=functools.partial(
-            Block07.func,
+            Block07a.func,
             **{
-                **Block07.keywords,
+                **Block07a.keywords,
                 "attn_qk_norm": True,
             },
         ),

@@ -1,4 +1,4 @@
-"""x07i: x07b + bundle_size=8, 2D RoPE, anchor_seq_index=1, register_token_init_std=1.0."""
+"""x07i: x07b + aug data, bundle_size=8, anchor_seq_index=1, AC on H-cycles."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from model import TRM3, TRM3ConfigProtocol
 
 
 class Experiment(Experiment07b):
+    total_train_steps: int = 8_000
+    data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k-aug"
     augmentation_random_bundle_max_size: int = 8
 
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07b.config),
-        rope_kwargs={"base": (10e3, 10e3)},
         anchor_seq_index=1,
-        register_token_init_std=1.0,
     )
 
 
