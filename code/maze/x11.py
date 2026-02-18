@@ -19,11 +19,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from experiment import main
+from experiment import cross_entropy_with_batched_smoothing, main
 from maze.x07a import Experiment as Experiment07a
+from torch import nn
+
+import torch
 
 
 if TYPE_CHECKING:
+    from experiment import ForwardResult, TrainingState
     from torch import Tensor
 
 
@@ -31,31 +35,66 @@ class Experiment(Experiment07a):
     smooth_start: float = 0.375
     smooth_end: float = 0.0625
 
-    def _compute_act_loss(
+    def _compute_loss(
         self,
-        carry: dict[str, Tensor],
-        was_running: Tensor,
-        logits: Tensor,
-        all_logits: list[Tensor],
-        q_halt: Tensor,
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        # Per-step label smoothing: linearly interpolate based on ACT step.
-        step = int(carry["steps"][was_running][0].item())
+        forward_result: ForwardResult,
+        state: TrainingState,
+        active_samples: Tensor,
+        winner_chains: Tensor,
+        train_q_halt: bool,
+    ) -> Tensor:
+        # Get logits and labels for winner chains.
+        w_logits = forward_result["logits"][winner_chains]
+        w_labels = state.labels[active_samples]
+
+        # Per-sample smoothing: linear interpolation based on ACT step.
+        h_steps = state.h_step[active_samples].float()
         max_step = self.max_reasoning_steps - 1
-        t = min(step / max(max_step, 1), 1.0)
-        old_smooth = self.label_smoothing
-        self.label_smoothing = self.smooth_start + t * (
-            self.smooth_end - self.smooth_start
-        )
-        result = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[unresolved-attribute]
-            carry,
-            was_running,
-            logits,
-            all_logits,
-            q_halt,
-        )
-        self.label_smoothing = old_smooth
-        return result
+        t = (h_steps / max(max_step, 1)).clamp(max=1.0)
+        smoothing = self.smooth_start + t * (self.smooth_end - self.smooth_start)
+
+        # Recompute LM loss with per-sample batched smoothing.
+        if self.label_smoothing_includes_pad_token:
+            loss_labels = w_labels.reshape(-1)
+            loss_ignore = 0
+        else:
+            loss_labels = (w_labels - 1).reshape(-1)
+            loss_ignore = -1
+
+        W, S = w_labels.shape
+        smoothing_per_token = smoothing.unsqueeze(1).expand(W, S).reshape(-1)
+
+        per_token_loss = cross_entropy_with_batched_smoothing(
+            w_logits.reshape(-1, w_logits.shape[-1]),
+            loss_labels,
+            ignore_index=loss_ignore,
+            reduction="none",
+            label_smoothing=smoothing_per_token,
+        ).reshape(W, S)
+
+        loss_count = (w_labels != 0).sum(dim=-1).clamp(min=1)
+        per_chain_loss = per_token_loss.sum(dim=-1) / loss_count
+
+        reduction = "sum" if self.loss_sum_normalize else "mean"
+        loss = getattr(per_chain_loss, reduction)()
+
+        # q_halt loss (same as base).
+        if train_q_halt:
+            with torch.no_grad():
+                predictions = self._preds(forward_result["logits"][winner_chains])
+                correct = (
+                    (predictions == state.labels[active_samples]).all(dim=-1).float()
+                )
+            loss = (
+                loss
+                + self.q_halt_weight
+                * nn.functional.binary_cross_entropy_with_logits(
+                    forward_result["q_halt"][winner_chains],
+                    correct,
+                    reduction=reduction,
+                )
+            )
+        return loss
 
 
 if __name__ == "__main__":

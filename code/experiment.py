@@ -456,51 +456,13 @@ class Experiment:
         if len(active_samples) > 0:
             assert self.device is not None
             with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-                if self.loss_sum_normalize:
-                    # Reference style: sum losses, divide total by batch_size in backward
-                    loss = forward_result["losses"][winner_chains].sum()
-                    if train_q_halt:
-                        with torch.no_grad():
-                            predictions = self._preds(
-                                forward_result["logits"][winner_chains]
-                            )
-                            correct = (
-                                (predictions == state.labels[active_samples])
-                                .all(dim=-1)
-                                .float()
-                            )
-                        loss = (
-                            loss
-                            + self.q_halt_weight
-                            * nn.functional.binary_cross_entropy_with_logits(
-                                forward_result["q_halt"][winner_chains],
-                                correct,
-                                reduction="sum",
-                            )
-                        )
-                    (loss / self.batch_size).backward()
-                else:
-                    loss = forward_result["losses"][winner_chains].mean()
-                    if train_q_halt:
-                        with torch.no_grad():
-                            predictions = self._preds(
-                                forward_result["logits"][winner_chains]
-                            )
-                            correct = (
-                                (predictions == state.labels[active_samples])
-                                .all(dim=-1)
-                                .float()
-                            )
-                        loss = (
-                            loss
-                            + self.q_halt_weight
-                            * nn.functional.binary_cross_entropy_with_logits(
-                                forward_result["q_halt"][winner_chains],
-                                correct,
-                                reduction="mean",
-                            )
-                        )
-                    loss.backward()
+                loss = self._compute_loss(
+                    forward_result, state, active_samples, winner_chains, train_q_halt
+                )
+            if self.loss_sum_normalize:
+                (loss / self.batch_size).backward()
+            else:
+                loss.backward()
 
         self._update_weights()
 
@@ -854,6 +816,37 @@ class Experiment:
             z_H=z_H,
             z_L=z_L,
         )
+
+    def _compute_loss(
+        self,
+        forward_result: ForwardResult,
+        state: "TrainingState",
+        active_samples: Tensor,
+        winner_chains: Tensor,
+        train_q_halt: bool,
+    ) -> Tensor:
+        """Compute the total training loss for one step.
+
+        Override this in subclasses to add custom loss terms.
+        """
+        reduction = "sum" if self.loss_sum_normalize else "mean"
+        loss = getattr(forward_result["losses"][winner_chains], reduction)()
+        if train_q_halt:
+            with torch.no_grad():
+                predictions = self._preds(forward_result["logits"][winner_chains])
+                correct = (
+                    (predictions == state.labels[active_samples]).all(dim=-1).float()
+                )
+            loss = (
+                loss
+                + self.q_halt_weight
+                * nn.functional.binary_cross_entropy_with_logits(
+                    forward_result["q_halt"][winner_chains],
+                    correct,
+                    reduction=reduction,
+                )
+            )
+        return loss
 
     def _lr_scale(self) -> float:
         return lr_scale(
@@ -1927,6 +1920,70 @@ def resume_from_checkpoint(
             dtype=exp.dtype,
         )
     print(f"Resumed from {ckpt_path} at step {exp.current_step}")
+
+
+def cross_entropy_with_batched_smoothing(
+    input: Tensor,
+    target: Tensor,
+    weight: Tensor | None = None,
+    size_average: bool | None = None,
+    ignore_index: int = -100,
+    reduce: bool | None = None,
+    reduction: str = "mean",
+    label_smoothing: float | Tensor = 0.0,
+) -> Tensor:
+    """Like ``nn.functional.cross_entropy``, but ``label_smoothing`` may be a per-element Tensor.
+
+    When ``label_smoothing`` is a scalar float the call is forwarded to
+    ``nn.functional.cross_entropy`` unchanged.  When it is a ``Tensor`` of the
+    same shape as ``target``, each element receives its own smoothing value.
+
+    """
+    # Resolve deprecated size_average / reduce to a reduction string.
+    if size_average is not None or reduce is not None:
+        if reduce is not None and not reduce:
+            reduction = "none"
+        elif size_average is not None and not size_average:
+            reduction = "sum"
+        else:
+            reduction = "mean"
+
+    # Scalar smoothing: delegate to PyTorch.
+    if isinstance(label_smoothing, (int, float)):
+        return nn.functional.cross_entropy(
+            input,
+            target,
+            weight=weight,
+            ignore_index=ignore_index,
+            reduction=reduction,
+            label_smoothing=label_smoothing,
+        )
+
+    # --- Per-element (tensor) smoothing ---
+    log_probs = input.log_softmax(dim=-1)
+    nll = nn.functional.nll_loss(
+        log_probs, target, ignore_index=ignore_index, reduction="none"
+    )
+    smooth_loss = -log_probs.mean(dim=-1)
+    loss = (1.0 - label_smoothing) * nll + label_smoothing * smooth_loss
+
+    mask = (target != ignore_index).float()
+    loss = loss * mask
+
+    if weight is not None:
+        sample_weight: Tensor | None = weight[target.clamp(min=0)] * mask
+        loss = loss * sample_weight
+    else:
+        sample_weight = None
+
+    if reduction == "none":
+        return loss
+    if reduction == "sum":
+        return loss.sum()
+    # "mean"
+    if sample_weight is not None:
+        return loss.sum() / sample_weight.sum().clamp(min=1)
+    return loss.sum() / mask.sum().clamp(min=1)
 
 
 def compute_diversity_loss(all_logits: list[Tensor]) -> Tensor:

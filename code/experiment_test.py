@@ -10,6 +10,7 @@ import tempfile
 from experiment import (
     Experiment,
     compute_diversity_loss,
+    cross_entropy_with_batched_smoothing,
     resume_from_checkpoint,
     setup_muon_optimizers,
 )
@@ -29,6 +30,159 @@ def test_compute_diversity_loss():
     loss = compute_diversity_loss(all_logits)
     assert loss.shape == ()
     assert -1 <= loss.item() <= 1
+
+
+def test_batched_smoothing_matches_torch_scalar():
+    """cross_entropy_with_batched_smoothing matches torch CE when smoothing is constant."""
+    torch.manual_seed(0)
+    N, C = 32, 10
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+
+    for s in [0.0, 0.1, 0.3]:
+        smoothing = torch.full((N,), s)
+        ours = cross_entropy_with_batched_smoothing(
+            logits, targets, reduction="none", label_smoothing=smoothing
+        )
+        ref = torch.nn.functional.cross_entropy(
+            logits, targets, label_smoothing=s, reduction="none"
+        )
+        assert torch.allclose(ours, ref, atol=1e-5), (
+            f"smoothing={s}: max diff={torch.abs(ours - ref).max().item()}"
+        )
+
+
+def test_batched_smoothing_scalar_delegates():
+    """Scalar label_smoothing delegates to F.cross_entropy (all reductions)."""
+    torch.manual_seed(0)
+    N, C = 16, 10
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+
+    for reduction in ["none", "sum", "mean"]:
+        ours = cross_entropy_with_batched_smoothing(
+            logits, targets, reduction=reduction, label_smoothing=0.1
+        )
+        ref = torch.nn.functional.cross_entropy(
+            logits, targets, reduction=reduction, label_smoothing=0.1
+        )
+        assert torch.allclose(ours, ref, atol=1e-5), (
+            f"reduction={reduction}: max diff={torch.abs(ours - ref).max().item()}"
+        )
+
+
+def test_batched_smoothing_ignore_index():
+    """cross_entropy_with_batched_smoothing zeros out ignored targets."""
+    torch.manual_seed(0)
+    N, C = 16, 10
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+    targets[0] = -100
+    targets[5] = -100
+    smoothing = torch.full((N,), 0.1)
+
+    losses = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="none", label_smoothing=smoothing
+    )
+    assert losses[0].item() == 0.0
+    assert losses[5].item() == 0.0
+    assert losses[1].item() > 0.0
+
+
+def test_batched_smoothing_custom_ignore_index():
+    """cross_entropy_with_batched_smoothing works with non-default ignore_index."""
+    torch.manual_seed(0)
+    N, C = 16, 10
+    # ignore_index=-1: simulates label_smoothing_includes_pad_token=False
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+    targets[0] = -1
+    targets[7] = -1
+    smoothing = torch.full((N,), 0.1)
+
+    losses = cross_entropy_with_batched_smoothing(
+        logits, targets, ignore_index=-1, reduction="none", label_smoothing=smoothing
+    )
+    assert losses[0].item() == 0.0
+    assert losses[7].item() == 0.0
+    assert losses[1].item() > 0.0
+
+    # ignore_index=0: simulates label_smoothing_includes_pad_token=True
+    targets2 = torch.randint(1, C, (N,))
+    targets2[2] = 0
+    losses2 = cross_entropy_with_batched_smoothing(
+        logits, targets2, ignore_index=0, reduction="none", label_smoothing=smoothing
+    )
+    assert losses2[2].item() == 0.0
+    assert losses2[3].item() > 0.0
+
+
+def test_batched_smoothing_per_element():
+    """Different smoothing per element produces different losses."""
+    torch.manual_seed(0)
+    N, C = 8, 10
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+    smoothing_lo = torch.full((N,), 0.0)
+    smoothing_hi = torch.full((N,), 0.5)
+
+    loss_lo = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="none", label_smoothing=smoothing_lo
+    )
+    loss_hi = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="none", label_smoothing=smoothing_hi
+    )
+    assert not torch.allclose(loss_lo, loss_hi), (
+        "Different smoothing should give different losses"
+    )
+
+
+def test_batched_smoothing_reduction():
+    """Tensor smoothing respects reduction='sum' and 'mean'."""
+    torch.manual_seed(0)
+    N, C = 16, 10
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+    smoothing = torch.full((N,), 0.1)
+
+    per_elem = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="none", label_smoothing=smoothing
+    )
+    loss_sum = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="sum", label_smoothing=smoothing
+    )
+    loss_mean = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="mean", label_smoothing=smoothing
+    )
+    assert torch.allclose(loss_sum, per_elem.sum(), atol=1e-5)
+    assert torch.allclose(loss_mean, per_elem.mean(), atol=1e-5)
+
+
+def test_batched_smoothing_weight():
+    """Tensor smoothing with class weight matches manual computation."""
+    torch.manual_seed(0)
+    N, C = 16, 10
+    logits = torch.randn(N, C)
+    targets = torch.randint(0, C, (N,))
+    smoothing = torch.full((N,), 0.1)
+    weight = torch.rand(C)
+
+    # reduction="none": each element scaled by weight[target]
+    loss_w = cross_entropy_with_batched_smoothing(
+        logits, targets, weight=weight, reduction="none", label_smoothing=smoothing
+    )
+    loss_no_w = cross_entropy_with_batched_smoothing(
+        logits, targets, reduction="none", label_smoothing=smoothing
+    )
+    expected = loss_no_w * weight[targets]
+    assert torch.allclose(loss_w, expected, atol=1e-5)
+
+    # reduction="mean": weighted mean (sum of weighted loss / sum of weights)
+    loss_mean = cross_entropy_with_batched_smoothing(
+        logits, targets, weight=weight, reduction="mean", label_smoothing=smoothing
+    )
+    expected_mean = expected.sum() / weight[targets].sum()
+    assert torch.allclose(loss_mean, expected_mean, atol=1e-5)
 
 
 def _test_config() -> TRM3.Config:
