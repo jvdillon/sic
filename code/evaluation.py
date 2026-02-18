@@ -79,10 +79,10 @@ def evaluate_single_start(
 ) -> tuple[float, float]:
     """Evaluate model with single start point. Returns (cell_acc, puzzle_acc)."""
     B = inputs.shape[0]
-    seq_len = model.config.seq_len
+    seq_len = model.config.total_seq_len
 
-    z_H = model.H_init.expand(B, seq_len, -1)
-    z_L = model.L_init.expand(B, seq_len, -1)
+    z_H = model.H_init[0].expand(B, seq_len, -1)
+    z_L = model.L_init[0].expand(B, seq_len, -1)
 
     with torch.no_grad():
         preds, _, _ = run_act_steps(model, inputs, z_H, z_L, max_steps, device, dtype)
@@ -104,15 +104,15 @@ def evaluate_multistart(
 ) -> tuple[float, float]:
     """Evaluate model with multiple start points (noise in z_L). Returns (cell_acc, puzzle_acc)."""
     B = inputs.shape[0]
-    seq_len = model.config.seq_len
+    seq_len = model.config.total_seq_len
     hidden_size = model.config.hidden_size
 
     best_preds = None
     best_q_halt = torch.full((B,), float("-inf"), device=device)
 
     for _ in range(n_starts):
-        z_H = model.H_init.expand(B, seq_len, -1)
-        z_L = model.L_init.expand(B, seq_len, -1)
+        z_H = model.H_init[0].expand(B, seq_len, -1)
+        z_L = model.L_init[0].expand(B, seq_len, -1)
         if z_L_noise > 0:
             noise = torch.randn(B, seq_len, hidden_size, device=device, dtype=dtype)
             z_L = z_L + noise * z_L_noise

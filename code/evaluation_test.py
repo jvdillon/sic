@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+
 from evaluation import (
     cells_fixed_broken,
     evaluate_multistart,
@@ -11,28 +13,35 @@ from evaluation import (
     run_act_steps,
     z_h_deltas,
 )
-from model import TRM
+from model import TRM3, MLPMixerBlock
 
 import torch
 
 
-def test_run_act_steps():
-    config = TRM.Config(
+def _config() -> TRM3.Config:
+    return TRM3.Config(
         hidden_size=64,
-        num_heads=4,
         num_layers=1,
         H_cycles=2,
         L_cycles=2,
         compile_core=False,
+        device=None,
+        dtype=torch.float32,
+        num_register_tokens=0,
+        block_fn=functools.partial(MLPMixerBlock, seq_len=81),
     )
+
+
+def test_run_act_steps():
+    config = _config()
     model = config.setup()
     model.eval()
 
     device = torch.device("cpu")
     dtype = torch.float32
     inputs = torch.randint(low=0, high=10, size=(2, 81))
-    z_H = model.H_init.expand(2, 81, -1)
-    z_L = model.L_init.expand(2, 81, -1)
+    z_H = model.H_init[0].expand(2, 81, -1)
+    z_L = model.L_init[0].expand(2, 81, -1)
 
     with torch.no_grad():
         preds, q_halt, z_H_out = run_act_steps(
@@ -51,14 +60,7 @@ def test_run_act_steps():
 
 
 def test_evaluate_single_start():
-    config = TRM.Config(
-        hidden_size=64,
-        num_heads=4,
-        num_layers=1,
-        H_cycles=2,
-        L_cycles=2,
-        compile_core=False,
-    )
+    config = _config()
     model = config.setup()
     model.eval()
 
@@ -79,14 +81,7 @@ def test_evaluate_single_start():
 
 
 def test_evaluate_multistart():
-    config = TRM.Config(
-        hidden_size=64,
-        num_heads=4,
-        num_layers=1,
-        H_cycles=2,
-        L_cycles=2,
-        compile_core=False,
-    )
+    config = _config()
     model = config.setup()
     model.eval()
 

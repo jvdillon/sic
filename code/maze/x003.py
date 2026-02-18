@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from experiment import ForwardResult, main
+from experiment import ForwardResult, HCycleResult, main
 from maze.x002 import Experiment as Experiment002
 from torch import Tensor
 from torch.nn import functional
@@ -56,7 +56,7 @@ class Experiment(Experiment002):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> HCycleResult:
         n_prefix = self.config.num_puzzle_id_tokens + self.config.num_register_tokens
         labels = getattr(self, "_train_labels", None)
         base_emb = embeddings
@@ -69,7 +69,9 @@ class Experiment(Experiment002):
                     cos_sin,
                 )
             embeddings = self._pred_feedback(base_emb, logits, n_prefix, labels)
-        return core(embeddings, z_H, z_L, cos_sin)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
+        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
     def _forward(self, state: Any) -> ForwardResult:
         batch_indices = state.batch_index.clamp(min=0)

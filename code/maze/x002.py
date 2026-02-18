@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from experiment import main
+from experiment import HCycleResult, main
 from maze.x000l import Experiment as Experiment000l
 from torch import Tensor
 from torch.nn import functional
@@ -42,7 +42,7 @@ class Experiment(Experiment000l):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> HCycleResult:
         n_prefix = self.config.num_puzzle_id_tokens + self.config.num_register_tokens
         base_emb = embeddings
         for _ in range(self.model.config.H_cycles - 1):
@@ -58,7 +58,9 @@ class Experiment(Experiment000l):
             else:
                 with torch.no_grad():
                     embeddings = self._pred_feedback(base_emb, logits, n_prefix)
-        return core(embeddings, z_H, z_L, cos_sin)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
+        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
     def _eval_forward(
         self,

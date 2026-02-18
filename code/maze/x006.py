@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, cast
 
 import dataclasses
 
+from experiment import HCycleResult
 from maze.x000l import Experiment as Experiment000l
 from model import TRM3, TRM3ConfigProtocol
 from torch import nn
@@ -66,7 +67,7 @@ class Experiment(Experiment000l):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> HCycleResult:
         for _ in range(self.model.config.H_cycles - 1):
             result = checkpoint(
                 core,
@@ -78,7 +79,9 @@ class Experiment(Experiment000l):
             )
             assert result is not None
             _logits, _q_halt, z_H, z_L = result
-        return core(embeddings, z_H, z_L, cos_sin)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
+        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
     def _core_forward(
         self,
@@ -101,13 +104,14 @@ class Experiment(Experiment000l):
             emb = m._prepend_prefix(emb, puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
             core = m.core_compiled if cfg.compile_core else m.core
             cos_sin = m._get_cos_sin(emb.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-            logits, _q_halt, z_H_out, z_L_out = self._run_h_cycles(
+            h_result = self._run_h_cycles(
                 core,
                 emb,
                 z_H,
                 z_L,
                 cos_sin,
             )
+            logits, z_H_out, z_L_out = h_result.logits, h_result.z_H, h_result.z_L
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         return logits[:, n_prefix:], z_H_out, z_L_out
 

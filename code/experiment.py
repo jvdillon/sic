@@ -3,7 +3,15 @@
 from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, TypedDict, cast, runtime_checkable
+from typing import (
+    Any,
+    Literal,
+    NamedTuple,
+    Protocol,
+    TypedDict,
+    cast,
+    runtime_checkable,
+)
 
 import contextlib
 import dataclasses
@@ -182,12 +190,23 @@ def _reset_eval_slot(
     valid[idx] = True
 
 
+class HCycleResult(NamedTuple):
+    logits: Tensor
+    q_halt: Tensor
+    z_H: Tensor
+    z_L: Tensor
+    z_H_pre: Tensor  # z_H input to last core() call
+    z_L_pre: Tensor  # z_L input to last core() call
+
+
 class ForwardResult(TypedDict):
     losses: Tensor  # [P] per-chain losses (inf for inactive)
     logits: Tensor  # [P, num_puzzle_grid_tokens, V]
     q_halt: Tensor  # [P]
     z_H: Tensor  # [P, total_seq_len, C]
     z_L: Tensor  # [P, total_seq_len, C]
+    z_H_pre: Tensor  # [P, total_seq_len, C] z_H input to last core()
+    z_L_pre: Tensor  # [P, total_seq_len, C] z_L input to last core()
 
 
 class Experiment:
@@ -654,7 +673,7 @@ class Experiment:
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> HCycleResult:
         # Detach cos_sin for no_grad iterations to avoid retaining the
         # gradient graph when inv_freqs is a learnable Parameter.
         cos_sin_detach = (
@@ -673,7 +692,9 @@ class Experiment:
                     z_L.detach(),
                     cos_sin_detach,
                 )
-        return core(embeddings, z_H, z_L, cos_sin)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
+        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
     def _forward(self, state: "TrainingState") -> ForwardResult:
         num_chains = state.num_chains
@@ -701,6 +722,8 @@ class Experiment:
                 ),
                 z_H=state.z_H.clone(),
                 z_L=state.z_L.clone(),
+                z_H_pre=state.z_H.clone(),
+                z_L_pre=state.z_L.clone(),
             )
 
         batch_indices = state.batch_index.clamp(min=0)
@@ -768,13 +791,15 @@ class Experiment:
             )
             z_L = state.z_L
             cos_sin = self.model._get_cos_sin(embeddings.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-            logits, q_halt, z_H, z_L = self._run_h_cycles(
+            hc = self._run_h_cycles(
                 core,
                 embeddings,
                 z_H,
                 z_L,
                 cos_sin,
             )
+            logits, q_halt, z_H, z_L = hc.logits, hc.q_halt, hc.z_H, hc.z_L
+            z_H_pre, z_L_pre = hc.z_H_pre, hc.z_L_pre
 
         # Slice output to exclude prefix positions
         # Sequence was: [puzzle_id_tokens..., register_tokens..., input...]
@@ -809,6 +834,8 @@ class Experiment:
             q_halt=q_halt,
             z_H=z_H,
             z_L=z_L,
+            z_H_pre=z_H_pre,
+            z_L_pre=z_L_pre,
         )
 
     def _compute_loss(

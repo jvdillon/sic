@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from experiment import main
+from experiment import HCycleResult, main
 from maze.x000l import Experiment as Experiment000l
 from torch.utils.checkpoint import checkpoint
 
@@ -28,7 +28,7 @@ class Experiment(Experiment000l):
         z_H: Tensor,
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> HCycleResult:
         for _ in range(self.model.config.H_cycles - 1):
             result = checkpoint(
                 core,
@@ -40,7 +40,9 @@ class Experiment(Experiment000l):
             )
             assert result is not None
             _logits, _q_halt, z_H, z_L = result
-        return core(embeddings, z_H, z_L, cos_sin)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
+        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
 
 if __name__ == "__main__":

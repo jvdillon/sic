@@ -9,7 +9,7 @@ import pathlib
 
 from model import (
     EMA,
-    TRM,
+    TRM3,
     Attention,
     BatchNorm,
     Embedding,
@@ -463,53 +463,41 @@ class TestEMA:
                 assert torch.equal(p.data, modified[n])
 
 
-class TestTRMConfig:
-    def test_n_iters(self):
-        config = TRM.Config()
-        assert config.n_iters == 6 * (9 + 1)
+def _trm3_test_config(**overrides: Any) -> TRM3.Config:
+    defaults: dict[str, Any] = {
+        "hidden_size": 64,
+        "num_layers": 1,
+        "H_cycles": 2,
+        "L_cycles": 2,
+        "compile_core": False,
+        "device": None,
+        "dtype": torch.float32,
+        "num_register_tokens": 0,
+        "puzzle_grid_shape": (82,),
+        "block_fn": functools.partial(MLPMixerBlock, seq_len=82),
+    }
+    defaults.update(overrides)
+    return TRM3.Config(**defaults)
 
 
-class TestTRM:
+class TestTRM3:
     @pytest.fixture
-    def config(self) -> TRM.Config:
-        return TRM.Config(
-            hidden_size=64,
-            num_heads=4,
-            num_layers=1,
-            H_cycles=2,
-            L_cycles=2,
-            act=False,
-            compile_core=False,
-            seq_len=82,
-            block_fn=functools.partial(MLPMixerBlock, seq_len=82),
-        )
+    def config(self) -> TRM3.Config:
+        return _trm3_test_config()
 
-    @pytest.fixture
-    def act_config(self) -> TRM.Config:
-        return TRM.Config(
-            hidden_size=64,
-            num_heads=4,
-            num_layers=1,
-            H_cycles=2,
-            L_cycles=2,
-            compile_core=False,
-            seq_len=82,
-            block_fn=functools.partial(MLPMixerBlock, seq_len=82),
-        )
-
-    def test_forward_basic(self, config: TRM.Config):
+    def test_forward_basic(self, config: TRM3.Config):
         model = config.setup()
         x = torch.randint(low=0, high=12, size=(2, 82))
-        z_H = model.H_init.expand(2, 82, -1)
-        z_L = model.L_init.expand(2, 82, -1)
+        z_H = model.H_init[0].expand(2, 82, -1)
+        z_L = model.L_init[0].expand(2, 82, -1)
         out = model(x, z_H, z_L)
         assert out["logits"].shape == (2, 82, 12)
 
-    def test_forward_with_z_states(self, act_config: TRM.Config):
-        model = act_config.setup()
+    def test_forward_with_z_states(self, config: TRM3.Config):
+        model = config.setup()
         x = torch.randint(low=0, high=12, size=(2, 82))
-        z_H = model.H_init.expand(2, 82, -1)
-        z_L = model.L_init.expand(2, 82, -1)
+        z_H = model.H_init[0].expand(2, 82, -1)
+        z_L = model.L_init[0].expand(2, 82, -1)
         out = model(x, z_H, z_L)
         assert "logits" in out
         assert "q_halt" in out
@@ -518,58 +506,31 @@ class TestTRM:
         assert out["logits"].shape == (2, 82, 12)
         assert out["q_halt"].shape == (2,)
 
-    def test_all_logits(self, config: TRM.Config):
+    def test_all_logits(self, config: TRM3.Config):
         model = config.setup()
         x = torch.randint(low=0, high=12, size=(2, 82))
-        z_H = model.H_init.expand(2, 82, -1)
-        z_L = model.L_init.expand(2, 82, -1)
+        z_H = model.H_init[0].expand(2, 82, -1)
+        z_L = model.L_init[0].expand(2, 82, -1)
         out = model(x, z_H, z_L)
         assert "all_logits" in out
         assert len(out["all_logits"]) == config.H_cycles
 
-    def test_all_z_h(self, config: TRM.Config):
+    def test_all_z_h(self, config: TRM3.Config):
         model = config.setup()
         x = torch.randint(low=0, high=12, size=(2, 82))
-        z_H = model.H_init.expand(2, 82, -1)
-        z_L = model.L_init.expand(2, 82, -1)
+        z_H = model.H_init[0].expand(2, 82, -1)
+        z_L = model.L_init[0].expand(2, 82, -1)
         out = model(x, z_H, z_L)
         assert "all_z_H" in out
         assert len(out["all_z_H"]) == config.H_cycles
         assert out["all_z_H"][0].shape == (2, 82, config.hidden_size)
 
-    def test_state_noise_training(self, config: TRM.Config):
-        config.state_noise = 0.1
-        model = config.setup()
-        model.train()
-        x = torch.randint(low=0, high=12, size=(2, 82))
-        z_H = model.H_init.expand(2, 82, -1)
-        z_L = model.L_init.expand(2, 82, -1)
-
-        torch.manual_seed(42)
-        out1 = model(x, z_H, z_L)
-        torch.manual_seed(42)
-        out2 = model(x, z_H, z_L)
-
-        assert torch.equal(out1["logits"], out2["logits"])
-
-    def test_no_block_fn_raises(self):
-        config = TRM.Config(
-            hidden_size=64,
-            num_heads=4,
-            num_layers=1,
-            H_cycles=2,
-            L_cycles=2,
-            block_fn=None,  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
-        )
-        with pytest.raises(ValueError, match="block_fn is required"):
-            config.setup()
-
-    def test_step(self, act_config: TRM.Config):
+    def test_step(self, config: TRM3.Config):
         """Test step() for single H-cycle."""
-        model = act_config.setup()
+        model = config.setup()
         x = torch.randint(low=0, high=12, size=(2, 82))
-        z_H = model.H_init.expand(2, 82, -1)
-        z_L = model.L_init.expand(2, 82, -1)
+        z_H = model.H_init[0].expand(2, 82, -1)
+        z_L = model.L_init[0].expand(2, 82, -1)
         out = model.step(x, z_H, z_L)
         assert out["logits"].shape == (2, 82, 12)
         assert out["q_halt"].shape == (2,)
@@ -577,19 +538,8 @@ class TestTRM:
         assert out["z_L"].shape == (2, 82, 64)
 
 
-def _trm_bitforbit_config() -> TRM.Config:
-    return TRM.Config(
-        hidden_size=4,
-        num_heads=1,
-        num_layers=1,
-        H_cycles=2,
-        L_cycles=2,
-        act=False,
-        compile_core=False,
-        dtype=torch.float32,
-        seq_len=82,
-        block_fn=functools.partial(MLPMixerBlock, seq_len=82),
-    )
+def _trm_bitforbit_config() -> TRM3.Config:
+    return _trm3_test_config(hidden_size=4)
 
 
 def _trm_bitforbit_inputs() -> torch.Tensor:
@@ -604,8 +554,8 @@ def regenerate_trm_checkpoint() -> None:
     model.eval()
 
     inputs = _trm_bitforbit_inputs()
-    z_H = model.H_init.expand(1, 82, -1).clone()
-    z_L = model.L_init.expand(1, 82, -1).clone()
+    z_H = model.H_init[0].expand(1, 82, -1).clone()
+    z_L = model.L_init[0].expand(1, 82, -1).clone()
 
     with torch.no_grad():
         out = model(inputs, z_H, z_L)
@@ -621,7 +571,7 @@ def regenerate_trm_checkpoint() -> None:
 
 
 class TestTRMBitForBit:
-    """Bit-for-bit reproducibility tests for TRM."""
+    """Bit-for-bit reproducibility tests for TRM3."""
 
     @pytest.fixture
     def checkpoint(self) -> dict[str, Any]:
@@ -638,8 +588,8 @@ class TestTRMBitForBit:
         model.eval()
 
         inputs = _trm_bitforbit_inputs()
-        z_H = model.H_init.expand(1, 82, -1).clone()
-        z_L = model.L_init.expand(1, 82, -1).clone()
+        z_H = model.H_init[0].expand(1, 82, -1).clone()
+        z_L = model.L_init[0].expand(1, 82, -1).clone()
 
         with torch.no_grad():
             out = model(inputs, z_H, z_L)
@@ -664,8 +614,8 @@ class TestTRMBitForBit:
 
         for _ in range(5):
             opt1.zero_grad()
-            z_H = model1.H_init.expand(1, 82, -1).clone()
-            z_L = model1.L_init.expand(1, 82, -1).clone()
+            z_H = model1.H_init[0].expand(1, 82, -1).clone()
+            z_L = model1.L_init[0].expand(1, 82, -1).clone()
             out = model1(inputs, z_H, z_L)
             loss = torch.nn.functional.cross_entropy(
                 out["logits"].view(-1, 12),
@@ -682,8 +632,8 @@ class TestTRMBitForBit:
 
         for _ in range(5):
             opt2.zero_grad()
-            z_H = model2.H_init.expand(1, 82, -1).clone()
-            z_L = model2.L_init.expand(1, 82, -1).clone()
+            z_H = model2.H_init[0].expand(1, 82, -1).clone()
+            z_L = model2.L_init[0].expand(1, 82, -1).clone()
             out = model2(inputs, z_H, z_L)
             loss = torch.nn.functional.cross_entropy(
                 out["logits"].view(-1, 12),

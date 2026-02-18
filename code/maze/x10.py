@@ -52,11 +52,13 @@ class Experiment(Experiment07a):
             forward_result, state, active_samples, winner_chains, train_q_halt
         )
         # Probe reasoning block Lipschitz constant via finite difference.
-        # Use the H-cycle operating point: reasoning(z_H_input + z_L_output).
-        # state.z_H still holds pre-core values (updated after _update_weights).
-        z_H_input = state.z_H[winner_chains[:1]].detach()
-        z_L_output = forward_result["z_L"][winner_chains[:1]].detach()
-        x = z_H_input + z_L_output
+        # z_H_pre and z_L_pre are the inputs to the last H-cycle's core() call,
+        # i.e. the exact operating point of the reasoning block we want to
+        # regularize.
+        x = (
+            forward_result["z_H_pre"][winner_chains[:1]].detach()
+            + forward_result["z_L_pre"][winner_chains[:1]].detach()
+        )
         eps_vec = torch.randn_like(x)
         eps_vec = eps_vec / eps_vec.norm() * self.lip_eps
         cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
