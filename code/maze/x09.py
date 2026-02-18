@@ -1,4 +1,4 @@
-"""x11: x07a + EMA parameter mixing after each ACT step.
+"""x09: x07a + EMA parameter mixing after each ACT step.
 
 Motivation: Late ACT steps produce sparse, high-variance gradients from
 hard puzzles that push the shared reasoning block away from the region

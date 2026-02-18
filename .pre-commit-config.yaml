@@ -50,8 +50,8 @@ repos:
         exclude: ^\.typings/
         pass_filenames: false
 
-  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
-    rev: 1.38.0
-    hooks:
-      - id: basedpyright
-        exclude: ^\.typings/
+  # - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+  #   rev: 1.38.0
+  #   hooks:
+  #     - id: basedpyright
+  #       exclude: ^\.typings/

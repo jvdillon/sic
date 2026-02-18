@@ -1,4 +1,4 @@
-"""x10: x07a + PCGrad between ACT steps.
+"""x08: x07a + PCGrad between ACT steps.
 
 Motivation: Late ACT steps see only hard (unhalted) puzzles, producing
 gradients that conflict with early-step gradients (which see all puzzles).
@@ -74,10 +74,11 @@ class Experiment(Experiment07a):
                 loss = self._compute_loss(
                     forward_result, state, group_active, group_winners, train_q_halt
                 )
+            retain = step_val != unique_steps[-1]
             if self.loss_sum_normalize:
-                (loss / self.batch_size).backward()
+                (loss / self.batch_size).backward(retain_graph=retain)
             else:
-                loss.backward()
+                loss.backward(retain_graph=retain)
 
             if step_val == 0:
                 # Store step-0 gradient as reference direction.

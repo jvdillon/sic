@@ -1,4 +1,4 @@
-"""x13: x07a + per-ACT-step label smoothing decay.
+"""x11: x07a + per-ACT-step label smoothing decay.
 
 Motivation: Early ACT steps have noisy predictions — high label smoothing
 prevents overconfident gradients from bad reasoning states. Later steps

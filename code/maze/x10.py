@@ -1,4 +1,4 @@
-"""x12: x07a + Lipschitz penalty on reasoning block.
+"""x10: x07a + Lipschitz penalty on reasoning block.
 
 Motivation: The shared reasoning block is applied iteratively (L_cycles
 per H-cycle, H_cycles per ACT step). If its Jacobian spectral radius
@@ -52,7 +52,11 @@ class Experiment(Experiment07a):
             forward_result, state, active_samples, winner_chains, train_q_halt
         )
         # Probe reasoning block Lipschitz constant via finite difference.
-        x = forward_result["z_L"][winner_chains[:1]].detach()
+        # Use the H-cycle operating point: reasoning(z_H_input + z_L_output).
+        # state.z_H still holds pre-core values (updated after _update_weights).
+        z_H_input = state.z_H[winner_chains[:1]].detach()
+        z_L_output = forward_result["z_L"][winner_chains[:1]].detach()
+        x = z_H_input + z_L_output
         eps_vec = torch.randn_like(x)
         eps_vec = eps_vec / eps_vec.norm() * self.lip_eps
         cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
