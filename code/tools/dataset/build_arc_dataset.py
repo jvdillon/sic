@@ -148,7 +148,7 @@ def inverse_aug(name: str) -> tuple[str, Callable[[np.ndarray], np.ndarray]]:
     def _map_grid(grid: np.ndarray) -> np.ndarray:
         return inv_perm[inverse_dihedral_transform(grid, trans_id_int)]
 
-    return name.split(PuzzleIdSeparator)[0], _map_grid
+    return name.split(PuzzleIdSeparator, maxsplit=1)[0], _map_grid
 
 
 def convert_single_arc_puzzle(
