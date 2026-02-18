@@ -13,10 +13,10 @@ iterative application without expensive eigenvalue computation.
 
 References:
 - Bai et al. (2022), "Stabilizing Equilibrium Models by Jacobian
-  Regularization" — penalizes spectral radius of DEQ iteration map
-- Miller & Hardt (2019), "Stable Recurrent Models" — constrains
+  Regularization" -- penalizes spectral radius of DEQ iteration map
+- Miller & Hardt (2019), "Stable Recurrent Models" -- constrains
   recurrent Jacobian spectral radius < 1 for stability
-- Behrmann et al. (2019), "Invertible Residual Networks" — Lip(g) < 1
+- Behrmann et al. (2019), "Invertible Residual Networks" -- Lip(g) < 1
   ensures contractivity of residual blocks
 
 """
@@ -50,11 +50,15 @@ class Experiment(Experiment07a):
         train_q_halt: bool,
     ) -> Tensor:
         loss = super()._compute_loss(
-            forward_result, state, active_samples, winner_chains, train_q_halt
+            forward_result,
+            state,
+            active_samples,
+            winner_chains,
+            train_q_halt,
         )
         # Penalize reasoning block Lipschitz constant via finite difference
         # at each active sample's winner chain. z_H_pre and z_L_pre are the
-        # inputs to the last H-cycle's core() call — the operating point
+        # inputs to the last H-cycle's core() call -- the operating point
         # where contractivity matters most.
         x = (
             forward_result["z_H_pre"][winner_chains].detach()

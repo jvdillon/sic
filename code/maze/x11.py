@@ -1,6 +1,6 @@
 """x11: x07a + per-ACT-step label smoothing decay.
 
-Motivation: Early ACT steps have noisy predictions — high label smoothing
+Motivation: Early ACT steps have noisy predictions -- high label smoothing
 prevents overconfident gradients from bad reasoning states. Later steps
 have refined predictions, so harder targets let the model sharpen.
 
@@ -10,7 +10,7 @@ minimum (or zero).
 
 References:
 - Zheng et al. (2022), "Confidence-aware label smoothing"
-- Furlanello et al. (2018), "Born-Again Networks" — soft-to-hard targets
+- Furlanello et al. (2018), "Born-Again Networks" -- soft-to-hard targets
 Novel application: schedule tied to ACT step index, not training epoch.
 
 """

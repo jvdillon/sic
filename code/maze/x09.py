@@ -8,7 +8,7 @@ Fix: After each optimizer step, mix current parameters toward an EMA:
 theta <- (1 - alpha) * theta + alpha * theta_ema. This prevents any
 single ACT step from moving parameters too far from the stable region.
 Unlike weight decay (which pulls toward zero), this pulls toward the
-running average — a much better attractor.
+running average -- a much better attractor.
 
 References:
 - Herbster & Warmuth (1998), "Tracking the Best Expert" (Fixed-Share)

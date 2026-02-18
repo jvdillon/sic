@@ -46,7 +46,7 @@ class Experiment(Experiment07a):
         unique_steps = h_steps.unique(sorted=True)
 
         if len(unique_steps) <= 1:
-            # All samples at same step — no conflict possible, use base path.
+            # All samples at same step -- no conflict possible, use base path.
             super()._backward(
                 forward_result, state, active_samples, winner_chains, train_q_halt
             )

@@ -12,12 +12,12 @@ Rewind phase (like BP through unrolled non-skip connections):
   backward through the memoized z chain. At each rewind step t,
   forward from z[t] with current theta, backward with the carried
   adjoint, update theta. The adjoint naturally decays through the
-  chain — early steps get weak signal, which is correct since the
+  chain -- early steps get weak signal, which is correct since the
   forward phase already handled them directly.
 
 Staleness: theta is updated between rewind steps, so the adjoint
 drifts from what it would be under a single fixed theta. This is
-the core approximation — the bet is that the drift is small relative
+the core approximation -- the bet is that the drift is small relative
 to the useful gradient signal.
 
 Note: rewind steps consume optimizer steps from total_train_steps.

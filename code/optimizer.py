@@ -259,7 +259,7 @@ class Muon(torch.optim.Optimizer):
 
 class DummyOptimizer(torch.optim.Optimizer):
     def __init__(self) -> None:
-        # Empty param list — no parameters to optimize.
+        # Empty param list -- no parameters to optimize.
         super().__init__([torch.empty(0)], defaults={})
         self.param_groups.clear()
 
