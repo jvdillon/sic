@@ -19,7 +19,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-
 dependencies = [
     "setuptools",
     "torch==2.9.0",
@@ -33,6 +32,7 @@ dependencies = [
     "tqdm",
     "huggingface_hub",
 ]
+
 [dependency-groups]
 debug = [
     "gnureadline",
@@ -47,6 +47,7 @@ lint = [
     "pre-commit>=3.5",
     "pytest>=7.0",
     "ruff>=0.8",
+    "ty>=0.0.17",
 ]
 dev = [
     {include-group = "debug"},
