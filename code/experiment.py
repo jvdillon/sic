@@ -1,9 +1,12 @@
 """TRM experiment framework."""
 
+from __future__ import annotations
+
 from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import (
+    TYPE_CHECKING,
     Any,
     Literal,
     NamedTuple,
@@ -35,13 +38,16 @@ from model import (
 )
 from optimizer import DummyOptimizer, Muon, lr_scale
 from torch import Tensor, nn
-from torch.optim import AdamW
 from util import Tee, numpy_rng, set_seed
 
 import numpy as np
 import torch
 
 from data import PuzzleDataset, augment_sudoku
+
+
+if TYPE_CHECKING:
+    from torch.optim import AdamW
 
 
 def check_maze_paths(
@@ -190,6 +196,19 @@ def _reset_eval_slot(
     valid[idx] = True
 
 
+class EvalResult(NamedTuple):
+    """Result from Experiment.evaluate()."""
+
+    cell_acc: float
+    puzzle_acc: float
+    halt_cell_acc: float
+    halt_puzzle_acc: float
+    train_cell_acc: float
+    train_puzzle_acc: float
+    train_halt_cell_acc: float
+    train_halt_puzzle_acc: float
+
+
 class HCycleResult(NamedTuple):
     logits: Tensor
     q_halt: Tensor
@@ -294,6 +313,7 @@ class Experiment:
 
     cast_model_to_dtype: bool = True
     max_pending_samples: int = 1000
+    log_lip: bool = False  # Log reasoning block Lipschitz estimate per step
 
     def __init__(self) -> None:
         self.setup_model()  # Sets self.device and self.dtype
@@ -551,7 +571,7 @@ class Experiment:
         self._fill_pending()
 
         num_active = int(state.active.sum().item())
-        return {
+        result = {
             "lm": (
                 forward_result["losses"][active_at_forward].mean().detach()
                 if active_at_forward.any()
@@ -574,6 +594,12 @@ class Experiment:
                 device=state.device,
             ),
         }
+        if self.log_lip:
+            result["lip"] = torch.tensor(
+                self._probe_lip(forward_result, winner_chains),
+                device=state.device,
+            )
+        return result
 
     def reset_transient_state(self) -> None:
         print(f"  Resetting transient state at step {self.current_step}")
@@ -696,7 +722,7 @@ class Experiment:
         logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
         return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
-    def _forward(self, state: "TrainingState") -> ForwardResult:
+    def _forward(self, state: TrainingState) -> ForwardResult:
         num_chains = state.num_chains
         active = state.batch_index >= 0
         cfg = self.config
@@ -741,34 +767,12 @@ class Experiment:
             )
 
             # TRM-style prefix tokens: [puzzle_id_tokens..., register_tokens..., puzzle_grid...]
-            if cfg.num_puzzle_id_tokens > 0 or cfg.num_register_tokens > 0:
-                prefix_parts: list[Tensor] = []
-                B = embeddings.shape[0]
-                # Puzzle ID tokens: per-puzzle learned embeddings
-                if (
-                    cfg.num_puzzle_id_tokens > 0
-                    and self.model.puzzle_id_embed is not None
-                ):
-                    chain_puzzle_ids = state.puzzle_ids[batch_indices]
-                    puzzle_emb = self.model.puzzle_id_embed(chain_puzzle_ids, cfg.dtype)
-                    puzzle_emb = puzzle_emb.view(
-                        B,
-                        cfg.num_puzzle_id_tokens,
-                        cfg.hidden_size,
-                    )
-                    puzzle_emb = self.model.embed_scale * puzzle_emb
-                    prefix_parts.append(puzzle_emb)
-                # Register tokens: shared learned tokens (expanded to batch)
-                if (
-                    cfg.num_register_tokens > 0
-                    and self.model.register_tokens is not None
-                ):
-                    reg_emb = self.model.register_tokens.unsqueeze(0).expand(B, -1, -1)
-                    reg_emb = self.model.embed_scale * reg_emb.to(dtype=cfg.dtype)
-                    prefix_parts.append(reg_emb)
-                if prefix_parts:
-                    prefix = torch.cat(prefix_parts, dim=1)
-                    embeddings = torch.cat([prefix, embeddings], dim=1)
+            chain_puzzle_ids = (
+                state.puzzle_ids[batch_indices]
+                if cfg.num_puzzle_id_tokens > 0
+                else None
+            )
+            embeddings = self.model._prepend_prefix(embeddings, chain_puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
             # Add puzzle_id embedding to z_H if enabled (old additive approach).
             # NOTE: This is a separate feature from TRM-style prefix tokens above.
@@ -841,7 +845,7 @@ class Experiment:
     def _compute_loss(
         self,
         forward_result: ForwardResult,
-        state: "TrainingState",
+        state: TrainingState,
         active_samples: Tensor,
         winner_chains: Tensor,
         train_q_halt: bool,
@@ -869,10 +873,39 @@ class Experiment:
             )
         return loss
 
+    def _probe_lip(
+        self,
+        forward_result: ForwardResult,
+        winner_chains: Tensor,
+        eps: float = 1e-3,
+    ) -> float:
+        """Estimate local Lipschitz constant of the reasoning block.
+
+        Probes at z_H_pre + z_L_pre (the input to the last H-cycle's core
+        call) for each active sample's winner chain. Uses a single random
+        perturbation direction, averages the per-sample ratios.
+        """
+        if len(winner_chains) == 0:
+            return 0.0
+        x = (
+            forward_result["z_H_pre"][winner_chains].detach()
+            + forward_result["z_L_pre"][winner_chains].detach()
+        )
+        eps_vec = torch.randn_like(x)
+        # Normalize per sample: each sample gets a unit-norm perturbation.
+        norms = eps_vec.flatten(1).norm(dim=1, keepdim=True).unsqueeze(-1)
+        eps_vec = eps_vec / norms.clamp(min=1e-12) * eps
+        cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        with torch.no_grad():
+            f_x = self.model.reasoning(x, cos_sin)
+            f_x_eps = self.model.reasoning(x + eps_vec, cos_sin)
+        per_sample = (f_x_eps - f_x).flatten(1).norm(dim=1) / eps
+        return per_sample.mean().item()
+
     def _backward(
         self,
         forward_result: ForwardResult,
-        state: "TrainingState",
+        state: TrainingState,
         active_samples: Tensor,
         winner_chains: Tensor,
         train_q_halt: bool,
@@ -939,7 +972,7 @@ class Experiment:
         self,
         loader: Any,
         train_loader: Any | None = None,
-    ) -> tuple[float, float, float, float, float, float, float, float]:
+    ) -> EvalResult:
         ema = self.ema  # Local var for type narrowing
         use_ema = ema is not None and self.current_step >= self.ema_warmup_steps
         if use_ema:
@@ -957,11 +990,16 @@ class Experiment:
                 saved_path = self.eval_path_valid
                 self.max_eval_samples = self.max_eval_samples_train
                 self.eval_path_valid = False
-                train_cell_acc, train_puzzle_acc, train_halt_cell, train_halt_puz = (
-                    self.evaluate_act(train_loader)
-                )
-                self.max_eval_samples = saved_samples
-                self.eval_path_valid = saved_path
+                try:
+                    (
+                        train_cell_acc,
+                        train_puzzle_acc,
+                        train_halt_cell,
+                        train_halt_puz,
+                    ) = self.evaluate_act(train_loader)
+                finally:
+                    self.max_eval_samples = saved_samples
+                    self.eval_path_valid = saved_path
 
             ckpt_start = time.perf_counter()
             script_path = pathlib.Path(sys.argv[0]).resolve()
@@ -985,15 +1023,15 @@ class Experiment:
                 ckpt_elapsed = time.perf_counter() - ckpt_start
                 print(f"  saved: {path} acc={cell_acc:.2f}% ({ckpt_elapsed:5.3f}s)")
 
-            return (
-                cell_acc,
-                puzzle_acc,
-                halt_cell,
-                halt_puz,
-                train_cell_acc,
-                train_puzzle_acc,
-                train_halt_cell,
-                train_halt_puz,
+            return EvalResult(
+                cell_acc=cell_acc,
+                puzzle_acc=puzzle_acc,
+                halt_cell_acc=halt_cell,
+                halt_puzzle_acc=halt_puz,
+                train_cell_acc=train_cell_acc,
+                train_puzzle_acc=train_puzzle_acc,
+                train_halt_cell_acc=train_halt_cell,
+                train_halt_puzzle_acc=train_halt_puz,
             )
         finally:
             self.model.train()
@@ -1754,7 +1792,7 @@ class ExperimentProtocol(Protocol):
         self,
         loader: Any,
         train_loader: Any | None = None,
-    ) -> tuple[float, float, float, float, float, float, float, float]: ...
+    ) -> EvalResult: ...
     def make_checkpoint(self) -> dict[str, object]: ...
 
 
@@ -1791,16 +1829,7 @@ def train(experiment: ExperimentProtocol):
         train_eval_loader = (
             iter(trainloader) if experiment.max_eval_samples_train > 0 else None
         )
-        (
-            cell_acc,
-            puzzle_acc,
-            halt_cell,
-            halt_puz,
-            tr_cell,
-            tr_puz,
-            tr_halt_cell,
-            tr_halt_puz,
-        ) = experiment.evaluate(iter(testloader), train_loader=train_eval_loader)
+        er = experiment.evaluate(iter(testloader), train_loader=train_eval_loader)
 
         eval_time = time.perf_counter() - eval_start
         epoch_elapsed = eval_start - epoch_start
@@ -1834,11 +1863,15 @@ def train(experiment: ExperimentProtocol):
 
         train_acc_str = ""
         if experiment.max_eval_samples_train > 0:
-            train_acc_str = f"  TrainAcc {tr_cell:5.2f}%/{tr_puz:5.2f}% (halt: {tr_halt_cell:5.2f}%/{tr_halt_puz:5.2f}%)"
+            train_acc_str = (
+                f"  TrainAcc {er.train_cell_acc:5.2f}%/{er.train_puzzle_acc:5.2f}%"
+                f" (halt: {er.train_halt_cell_acc:5.2f}%/{er.train_halt_puzzle_acc:5.2f}%)"
+            )
 
         step = f"Step{experiment.current_step:6d}"
         acc_str = (
-            f"  Test {cell_acc:5.2f}% / {puzzle_acc:5.2f}% (halt: {halt_cell:5.2f}%/{halt_puz:5.2f}%)"
+            f"  Test {er.cell_acc:5.2f}% / {er.puzzle_acc:5.2f}%"
+            f" (halt: {er.halt_cell_acc:5.2f}%/{er.halt_puzzle_acc:5.2f}%)"
             f"{train_loss}{train_acc_str}"
         )
         timing = f"  ({eval_time:5.3f}s / {epoch_elapsed:6.3f}s)"

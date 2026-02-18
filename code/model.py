@@ -17,6 +17,7 @@ import torch
 
 
 InitFn = Callable[[Tensor], Tensor]
+CarryPolicy = Literal["top1", "top2", "copy_top1", "copy_top2", "all", "none"]
 
 
 #############################################
@@ -73,22 +74,8 @@ class TRM3ConfigProtocol(Protocol):
     use_rope: bool
     rope_kwargs: dict[str, Any]
     num_heads: int
-    carry_H: Literal[
-        "top1",
-        "top2",
-        "copy_top1",
-        "copy_top2",
-        "all",
-        "none",
-    ]
-    carry_L: Literal[
-        "top1",
-        "top2",
-        "copy_top1",
-        "copy_top2",
-        "all",
-        "none",
-    ]
+    carry_H: CarryPolicy
+    carry_L: CarryPolicy
     core_damping: float
     anchor_seq_index: int | None
     label_smoothing_includes_pad_token: bool
@@ -910,7 +897,7 @@ class SwiGLU(nn.Module):
         if muon_modified:
             if act_fn is not nn.functional.silu:
                 raise NotImplementedError(
-                    "Muon modified SwiGLU is only defined whent "
+                    "Muon modified SwiGLU is only defined when "
                     f"act_fn is nn.functional.silu ({act_fn})."
                 )
             self.norm = norm_fn(c_hidden)
@@ -1213,22 +1200,8 @@ class TRM3(nn.Module):
         # - "copy_top2": half get top1, half get top2 (randperm assignment)
         # - "all": all chains updated with their own output (no selection)
         # - "none": no carry - reset to init each step
-        carry_H: Literal[
-            "top1",
-            "top2",
-            "copy_top1",
-            "copy_top2",
-            "all",
-            "none",
-        ] = "top1"
-        carry_L: Literal[
-            "top1",
-            "top2",
-            "copy_top1",
-            "copy_top2",
-            "all",
-            "none",
-        ] = "all"
+        carry_H: CarryPolicy = "top1"
+        carry_L: CarryPolicy = "all"
 
         # SVD init alignment
         z_H_init_svd: bool = False
@@ -1961,6 +1934,74 @@ class TRM3(nn.Module):
 
         return h_indices, l_indices
 
+    @staticmethod
+    def _apply_carry_policy(
+        policy: CarryPolicy,
+        z: Tensor,
+        z_out: Tensor,
+        batch_idx: Tensor,
+        top1_idx: Tensor,
+        top2_idx: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Apply a single carry policy, returning (z_new, updated_mask).
+
+        Args:
+            policy: One of "top1", "top2", "copy_top1", "copy_top2", "all", "none".
+            z: Current states [B, N, S, C].
+            z_out: Output states [B, N, S, C].
+            batch_idx: [B] arange index.
+            top1_idx: [B] index of best chain per batch element.
+            top2_idx: [B] index of second-best chain per batch element.
+
+        Returns:
+            (z_new, updated) where updated is [B, N] bool mask.
+
+        """
+        B, N = z.shape[:2]
+        device = z.device
+        updated = torch.zeros(B, N, device=device, dtype=torch.bool)
+
+        if policy == "top1":
+            z_new = z.clone()
+            z_new[batch_idx, top1_idx] = z_out[batch_idx, top1_idx].detach()
+            updated[batch_idx, top1_idx] = True
+        elif policy == "top2":
+            z_new = z.clone()
+            z_new[batch_idx, top1_idx] = z_out[batch_idx, top1_idx].detach()
+            z_new[batch_idx, top2_idx] = z_out[batch_idx, top2_idx].detach()
+            updated[batch_idx, top1_idx] = True
+            updated[batch_idx, top2_idx] = True
+        elif policy == "copy_top1":
+            winner = z_out[batch_idx, top1_idx].unsqueeze(1)  # [B, 1, S, C]
+            z_new = winner.expand_as(z).contiguous().detach()
+            updated[:] = True
+        elif policy == "copy_top2":
+            # Top1 gets winner, top2 gets runner, rest randomly assigned
+            winner = z_out[batch_idx, top1_idx].unsqueeze(1)  # [B, 1, S, C]
+            runner = z_out[batch_idx, top2_idx].unsqueeze(1)  # [B, 1, S, C]
+            # Fully vectorized random assignment (excluding top1/top2)
+            perm = torch.argsort(torch.rand(B, N, device=device), dim=-1)  # [B, N]
+            half = N // 2
+            use_winner = (perm < half).unsqueeze(-1).unsqueeze(-1)  # [B, N, 1, 1]
+            z_new = torch.where(
+                use_winner,
+                winner.expand_as(z),
+                runner.expand_as(z),
+            ).detach()
+            # Ensure top1 gets winner, top2 gets runner (override random)
+            z_new[batch_idx, top1_idx] = z_out[batch_idx, top1_idx].detach()
+            z_new[batch_idx, top2_idx] = z_out[batch_idx, top2_idx].detach()
+            updated[:] = True
+        elif policy == "all":
+            z_new = z_out.detach()
+            updated[:] = True
+        elif policy == "none":
+            z_new = z.clone()
+        else:
+            raise ValueError(f"Unsupported carry policy: {policy}")
+
+        return z_new, updated
+
     def _update_carry(
         self,
         z_H: Tensor,
@@ -1971,12 +2012,6 @@ class TRM3(nn.Module):
         carry_count: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor]:
         """Update carry state based on chain-level carry_H and carry_L policies.
-
-        Policies operate on chains:
-        - top1: only winner chain's state carried, others frozen (keep current)
-        - top2: top 2 chains' states carried, others frozen
-        - copy_top1: all chains get winner's output copied
-        - copy_top2: half get top1, half get top2 (randperm assignment)
 
         Args:
             z_H: Current H states [B, N, S, C]
@@ -2000,87 +2035,25 @@ class TRM3(nn.Module):
         top1_idx = sorted_idx[:, 0]  # [B]
         top2_idx = sorted_idx[:, 1] if N > 1 else top1_idx  # [B]
 
-        # Track which chains get updated (for carry_count)
-        h_updated = torch.zeros(B, N, device=device, dtype=torch.bool)
-        l_updated = torch.zeros(B, N, device=device, dtype=torch.bool)
-
-        # Update z_H based on carry_H policy
-        z_H_new = z_H.clone()
-        if cfg.carry_H == "top1":
-            z_H_new[batch_idx, top1_idx] = z_H_out[batch_idx, top1_idx].detach()
-            h_updated[batch_idx, top1_idx] = True
-        elif cfg.carry_H == "top2":
-            z_H_new[batch_idx, top1_idx] = z_H_out[batch_idx, top1_idx].detach()
-            z_H_new[batch_idx, top2_idx] = z_H_out[batch_idx, top2_idx].detach()
-            h_updated[batch_idx, top1_idx] = True
-            h_updated[batch_idx, top2_idx] = True
-        elif cfg.carry_H == "copy_top1":
-            winner_H = z_H_out[batch_idx, top1_idx].unsqueeze(1)  # [B, 1, S, C]
-            z_H_new = winner_H.expand_as(z_H).contiguous().detach()
-            h_updated[:] = True
-        elif cfg.carry_H == "copy_top2":
-            # Top1 gets winner, top2 gets runner, rest randomly assigned
-            winner_H = z_H_out[batch_idx, top1_idx].unsqueeze(1)  # [B, 1, S, C]
-            runner_H = z_H_out[batch_idx, top2_idx].unsqueeze(1)  # [B, 1, S, C]
-            # Fully vectorized random assignment (excluding top1/top2)
-            perm = torch.argsort(torch.rand(B, N, device=device), dim=-1)  # [B, N]
-            half = N // 2
-            use_winner = (perm < half).unsqueeze(-1).unsqueeze(-1)  # [B, N, 1, 1]
-            z_H_new = torch.where(
-                use_winner,
-                winner_H.expand_as(z_H),
-                runner_H.expand_as(z_H),
-            ).detach()
-            # Ensure top1 gets winner, top2 gets runner (override random)
-            z_H_new[batch_idx, top1_idx] = z_H_out[batch_idx, top1_idx].detach()
-            z_H_new[batch_idx, top2_idx] = z_H_out[batch_idx, top2_idx].detach()
-            h_updated[:] = True
-        elif cfg.carry_H == "all":
-            z_H_new = z_H_out.detach()
-            h_updated[:] = True
-        elif cfg.carry_H != "none":
-            raise ValueError(f"Unsupported carry_H policy: {cfg.carry_H}")
-
-        # Update z_L based on carry_L policy
-        z_L_new = z_L.clone()
-        if cfg.carry_L == "top1":
-            z_L_new[batch_idx, top1_idx] = z_L_out[batch_idx, top1_idx].detach()
-            l_updated[batch_idx, top1_idx] = True
-        elif cfg.carry_L == "top2":
-            z_L_new[batch_idx, top1_idx] = z_L_out[batch_idx, top1_idx].detach()
-            z_L_new[batch_idx, top2_idx] = z_L_out[batch_idx, top2_idx].detach()
-            l_updated[batch_idx, top1_idx] = True
-            l_updated[batch_idx, top2_idx] = True
-        elif cfg.carry_L == "copy_top1":
-            winner_L = z_L_out[batch_idx, top1_idx].unsqueeze(1)
-            z_L_new = winner_L.expand_as(z_L).contiguous().detach()
-            l_updated[:] = True
-        elif cfg.carry_L == "copy_top2":
-            # Top1 gets winner, top2 gets runner, rest randomly assigned
-            winner_L = z_L_out[batch_idx, top1_idx].unsqueeze(1)  # [B, 1, S, C]
-            runner_L = z_L_out[batch_idx, top2_idx].unsqueeze(1)  # [B, 1, S, C]
-            # Fully vectorized random assignment (excluding top1/top2)
-            perm = torch.argsort(torch.rand(B, N, device=device), dim=-1)  # [B, N]
-            half = N // 2
-            use_winner = (perm < half).unsqueeze(-1).unsqueeze(-1)  # [B, N, 1, 1]
-            z_L_new = torch.where(
-                use_winner,
-                winner_L.expand_as(z_L),
-                runner_L.expand_as(z_L),
-            ).detach()
-            # Ensure top1 gets winner, top2 gets runner (override random)
-            z_L_new[batch_idx, top1_idx] = z_L_out[batch_idx, top1_idx].detach()
-            z_L_new[batch_idx, top2_idx] = z_L_out[batch_idx, top2_idx].detach()
-            l_updated[:] = True
-        elif cfg.carry_L == "all":
-            z_L_new = z_L_out.detach()
-            l_updated[:] = True
-        elif cfg.carry_L != "none":
-            raise ValueError(f"Unsupported carry_L policy: {cfg.carry_L}")
+        z_H_new, h_updated = self._apply_carry_policy(
+            cfg.carry_H,
+            z_H,
+            z_H_out,
+            batch_idx,
+            top1_idx,
+            top2_idx,
+        )
+        z_L_new, l_updated = self._apply_carry_policy(
+            cfg.carry_L,
+            z_L,
+            z_L_out,
+            batch_idx,
+            top1_idx,
+            top2_idx,
+        )
 
         # Update carry_count: increment where chain was updated (H or L)
-        updated = (h_updated | l_updated).long()
-        carry_count_new = carry_count + updated
+        carry_count_new = carry_count + (h_updated | l_updated).long()
 
         return z_H_new, z_L_new, carry_count_new
 

@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 class Experiment(Experiment07a):
     lip_weight: float = 0.1
     lip_eps: float = 1e-3
+    log_lip: bool = True
 
     def _compute_loss(
         self,
@@ -51,23 +52,24 @@ class Experiment(Experiment07a):
         loss = super()._compute_loss(
             forward_result, state, active_samples, winner_chains, train_q_halt
         )
-        # Probe reasoning block Lipschitz constant via finite difference.
-        # z_H_pre and z_L_pre are the inputs to the last H-cycle's core() call,
-        # i.e. the exact operating point of the reasoning block we want to
-        # regularize.
+        # Penalize reasoning block Lipschitz constant via finite difference
+        # at each active sample's winner chain. z_H_pre and z_L_pre are the
+        # inputs to the last H-cycle's core() call — the operating point
+        # where contractivity matters most.
         x = (
-            forward_result["z_H_pre"][winner_chains[:1]].detach()
-            + forward_result["z_L_pre"][winner_chains[:1]].detach()
+            forward_result["z_H_pre"][winner_chains].detach()
+            + forward_result["z_L_pre"][winner_chains].detach()
         )
         eps_vec = torch.randn_like(x)
-        eps_vec = eps_vec / eps_vec.norm() * self.lip_eps
+        norms = eps_vec.flatten(1).norm(dim=1, keepdim=True).unsqueeze(-1)
+        eps_vec = eps_vec / norms.clamp(min=1e-12) * self.lip_eps
         cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
         assert self.device is not None
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             f_x = self.model.reasoning(x, cos_sin)
             f_x_eps = self.model.reasoning(x + eps_vec, cos_sin)
-        ratio = (f_x_eps - f_x).norm() / self.lip_eps
-        lip_loss = self.lip_weight * ratio.square()
+        per_sample = (f_x_eps - f_x).flatten(1).norm(dim=1) / self.lip_eps
+        lip_loss = self.lip_weight * per_sample.square().mean()
         return loss + lip_loss
 
 
