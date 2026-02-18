@@ -13,7 +13,7 @@ from model import TRM3, TRM3ConfigProtocol
 
 class Experiment(Experiment07a):
     total_train_steps: int = 8_000
-    label_smoothing: float = 0.2
+    label_smoothing: float = 0.3
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07a.config),
         rope_kwargs={"base": (10, 10)},
