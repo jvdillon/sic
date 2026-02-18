@@ -234,7 +234,8 @@ def visualize_puzzles(
 
     """
     if isinstance(preds, np.ndarray):
-        preds_per_step = [preds]
+        assert not isinstance(preds, list)
+        preds_per_step: list[NDArray[np.intp]] = [preds]
         max_steps = 1
     else:
         preds_per_step = preds

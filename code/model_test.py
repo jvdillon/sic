@@ -559,7 +559,7 @@ class TestTRM:
             num_layers=1,
             H_cycles=2,
             L_cycles=2,
-            block_fn=None,  # pyright: ignore[reportArgumentType]
+            block_fn=None,  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
         )
         with pytest.raises(ValueError, match="block_fn is required"):
             config.setup()

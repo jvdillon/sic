@@ -1,6 +1,6 @@
 """x179: Control for x179 family. A clean rewrite of x178d."""
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import math
 import warnings
@@ -32,7 +32,7 @@ from data import PuzzleDataset, augment_sudoku  # noqa: E402
 
 
 class Experiment:
-    model: nn.Module
+    model: TRM3
     device: torch.device | None = None
     seed: int = 42
 
@@ -56,6 +56,7 @@ class Experiment:
     eval_batch_size: int | None = 384  # None = use batch_size
     eval_every_steps: int = 2_000
     max_eval_samples: int = 38_400  # 100 * 384; -1 = full test set
+    max_eval_samples_train: int = 0
     checkpoint_steps: list[int] = list(range(0, 75_000, 500))  # noqa: RUF012
     # Reset-retry at inference (#22)
     enable_reset_retry: bool = False
@@ -98,23 +99,26 @@ class Experiment:
         # ACT tracking
         self.act_steps_history: list[float] = []
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
-        self.act_carry: dict[str, Tensor] | None = None
+        self.act_carry: dict[str, Any] | None = None
 
     def setup_model(self) -> None:
         set_seed(self.seed)
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = self.config.dtype
-        self.model = self.config.setup().to(
-            device=self.device,
-            # This converts all parameters to bfloat16 meaning that gradients will be
-            # computed as bfloat16.
-            dtype=self.dtype if self.cast_model_to_dtype else None,
+        self.model = cast(
+            TRM3,
+            self.config.setup().to(
+                device=self.device,
+                # This converts all parameters to bfloat16 meaning that gradients will be
+                # computed as bfloat16.
+                dtype=self.dtype if self.cast_model_to_dtype else None,
+            ),
         )
         self.ema = EMA(self.model, decay=self.ema_decay) if self.use_ema else None
 
     def setup_optimizers(self) -> None:
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
             self.model,
             muon_lr=0.02,
         )
@@ -149,7 +153,7 @@ class Experiment:
         B = self.batch_size
         cfg = self.config
         return {
-            "model_carry": self.model.init_carry(B),  # pyright: ignore[reportCallIssue]
+            "model_carry": self.model.init_carry(B),
             "steps": torch.zeros(B, device=self.device, dtype=torch.long),
             "halted": torch.ones(B, device=self.device, dtype=torch.bool),
             "inputs": torch.zeros(
@@ -206,7 +210,7 @@ class Experiment:
         # WTA forward pass (samples heads, computes losses, updates carry)
         assert self.device is not None
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
-            out = self.model.wta_forward(  # pyright: ignore[reportCallIssue]
+            out = self.model.wta_forward(
                 carry["inputs"],
                 carry["model_carry"],
                 carry["labels"],
@@ -264,7 +268,7 @@ class Experiment:
 
     def _reset_halted_puzzles(
         self,
-        carry: dict[str, Tensor],
+        carry: dict[str, Any],
         inputs: Tensor,
         labels: Tensor,
         valid_count: int,
@@ -284,7 +288,7 @@ class Experiment:
                     self.halt_steps_histogram[steps_taken - 1] += 1
 
         n_reset = min(len(halted_indices), valid_count)
-        carry["model_carry"] = self.model.reset_carry_at_indices(  # pyright: ignore[reportCallIssue]
+        carry["model_carry"] = self.model.reset_carry_at_indices(
             carry["model_carry"],
             halted_indices,
             n_reset,
@@ -391,8 +395,8 @@ class Experiment:
     def _init_z(self, batch_size: int) -> tuple[Tensor, Tensor]:
         """For Experiment eval: Create initial z_H and z_L states for eval (single head)."""
         seq_len = self.config.total_seq_len
-        z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
-        z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()  # pyright: ignore[reportIndexIssue]
+        z_H = self.model.H_init[0].expand(batch_size, seq_len, -1).contiguous()
+        z_L = self.model.L_init[0].expand(batch_size, seq_len, -1).contiguous()
         return z_H, z_L
 
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
@@ -402,7 +406,7 @@ class Experiment:
         """
         del puzzle_idx
         # L_init is [K, hidden], expand to [K, total_seq_len, hidden]
-        return self.model.L_init.unsqueeze(1).expand(-1, self.config.total_seq_len, -1)  # pyright: ignore[reportCallIssue]
+        return self.model.L_init.unsqueeze(1).expand(-1, self.config.total_seq_len, -1)
 
     # Monkey patch in eval stuff from Experiment.
     evaluate = ExperimentNew.evaluate

@@ -236,6 +236,9 @@ reportUnreachable = false
 reportUnusedCallResult = false
 reportUnusedImport = false
 
+[tool.ty.environment]
+extra-paths = ["code/", "code/sudoku/", ".typings"]
+
 [tool.codespell]
 builtin = "clear,rare,code"
 ignore-words-list = "fave,jupyter,arange,iff,wrt,ow,lite,falsy,truthy,ws,deque,numer,warmup"

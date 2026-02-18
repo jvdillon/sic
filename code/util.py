@@ -173,7 +173,7 @@ class AutocastWrapper:
             cache_enabled=False,
         ):
             model = object.__getattribute__(self, "_model")
-            return model(x)  # type: ignore[operator]
+            return model(x)
 
     @override
     def __getattribute__(self, name: str) -> object:

@@ -47,7 +47,7 @@ class Experiment(Experiment07a):
         all_logits: list[Tensor],
         q_halt: Tensor,
     ) -> tuple[Tensor, dict[str, Tensor]]:
-        total_loss, loss_dict = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]
+        total_loss, loss_dict = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[unresolved-attribute]
             carry,
             was_running,
             logits,

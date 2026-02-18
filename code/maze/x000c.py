@@ -9,7 +9,7 @@ class Experiment(Experiment000):
     lr_min_ratio: float = 0.10
 
     def setup_optimizers(self) -> None:
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
             self.model,
             muon_lr=0.005,
         )

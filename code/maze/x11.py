@@ -47,7 +47,7 @@ class Experiment(Experiment07a):
         self.label_smoothing = self.smooth_start + t * (
             self.smooth_end - self.smooth_start
         )
-        result = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]
+        result = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[unresolved-attribute]
             carry,
             was_running,
             logits,

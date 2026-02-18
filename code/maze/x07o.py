@@ -6,7 +6,7 @@ from maze.x07a import Experiment as Experiment07a
 
 class Experiment(Experiment07a):
     def setup_optimizers(self) -> None:
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
             self.model,
             muon_lr=0.01,
         )

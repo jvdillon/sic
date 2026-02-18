@@ -25,7 +25,7 @@ class JsonSettingsSource(FileSettingsSourceBuilder):
     A JSON file settings source reads settings from a JSON file.
     Orjson is used if available, otherwise the standard json module is used.
     """
-    def __call__(self, settings: Type[BaseSettings]) -> PydanticBaseSettingsSource:
+    def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         ...
     
     def __repr__(self) -> str:

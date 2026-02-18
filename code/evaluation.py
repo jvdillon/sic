@@ -135,8 +135,8 @@ def evaluate_multistart(
             best_preds[better] = preds[better]
         best_q_halt = torch.maximum(best_q_halt, q_halt)
 
-    cell_acc = (best_preds == labels).float().mean().item() * 100
-    puzzle_acc = (best_preds == labels).all(dim=-1).float().mean().item() * 100
+    cell_acc = (best_preds == labels).float().mean().item() * 100  # ty: ignore[unresolved-attribute]
+    puzzle_acc = (best_preds == labels).all(dim=-1).float().mean().item() * 100  # ty: ignore[unresolved-attribute]
     return cell_acc, puzzle_acc
 
 

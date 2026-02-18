@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any, Literal
 
 import math
@@ -160,7 +160,8 @@ class Muon(torch.optim.Optimizer):
         super().__init__(params, defaults)
 
     @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
-    def step(self) -> None:
+    def step(self, closure: Callable[[], float] | None = None) -> None:  # ty: ignore[invalid-method-override]
+        del closure
         for group in self.param_groups:
             lr = group["lr"]
             weight_decay = group["weight_decay"]
@@ -256,21 +257,17 @@ class Muon(torch.optim.Optimizer):
                 # 3. We need to scale the g by -lr anyway; why not just do one scaling.
 
 
-class DummyOptimizer:
+class DummyOptimizer(torch.optim.Optimizer):
     def __init__(self) -> None:
-        self.param_groups: list[dict[str, Any]] = []
+        # Empty param list — no parameters to optimize.
+        super().__init__([torch.empty(0)], defaults={})
+        self.param_groups.clear()
 
-    def step(self) -> None:
-        pass
-
-    def zero_grad(self) -> None:
-        pass
-
-    def state_dict(self) -> dict[str, Any]:
-        return {}
-
-    def load_state_dict(self, _state_dict: dict[str, Any]) -> None:
-        pass
+    def step(  # ty: ignore[invalid-method-override]
+        self,
+        closure: Callable[[], float] | None = None,
+    ) -> None:
+        del closure
 
 
 def lr_scale(

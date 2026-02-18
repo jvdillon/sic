@@ -266,7 +266,7 @@ def test_fast_eval_streaming_replacement():
             out["q_halt"] = torch.full_like(q_halt, -10.0)
         return out
 
-    exp.model.forward = tracking_forward
+    exp.model.forward = tracking_forward  # ty: ignore[invalid-assignment]
 
     grid_len = exp.config.num_puzzle_grid_tokens
     all_inputs = [torch.randint(low=1, high=11, size=(2, grid_len)) for _ in range(3)]
@@ -316,7 +316,7 @@ def test_fast_eval_metrics_at_halt_time():
 
         return out
 
-    exp.model.forward = controlled_forward
+    exp.model.forward = controlled_forward  # ty: ignore[invalid-assignment]
 
     grid_len = exp.config.num_puzzle_grid_tokens
     B = 2
@@ -357,7 +357,7 @@ def test_no_recompilation_all_paths():
         call_signatures.append(sig)
         return originalcore(input_emb, z_H, z_L, cos_sin)
 
-    model.core = trackingcore
+    model.core = trackingcore  # ty: ignore[invalid-assignment]
 
     B = 4
     grid_len = config.num_puzzle_grid_tokens

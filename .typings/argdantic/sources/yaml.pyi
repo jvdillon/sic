@@ -25,7 +25,7 @@ class YamlSettingsSource(FileSettingsSourceBuilder):
     A YAML file settings source reads settings from a YAML file.
     If the PyYAML library is not installed, an error is raised.
     """
-    def __call__(self, settings: Type[BaseSettings]) -> PydanticBaseSettingsSource:
+    def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         ...
     
     def __repr__(self) -> str:

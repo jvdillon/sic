@@ -1067,7 +1067,7 @@ class TransformerBlock(nn.Module):
         cos_sin: tuple[Tensor, Tensor] | None = None,
     ) -> Tensor:
         if self.checkpoint and x.requires_grad:
-            return torch.utils.checkpoint.checkpoint(  # pyright: ignore[reportAttributeAccessIssue]
+            return torch_checkpoint(  # pyright: ignore[reportReturnType]
                 self._forward,
                 x,
                 cos_sin,
@@ -1170,7 +1170,7 @@ class GroupNorm(nn.GroupNorm):
 class Sequential(nn.Sequential):
     """Sequential that passes args and kwargs to blocks."""
 
-    def forward(self, z: Tensor, *args: Any, **kwargs: Any) -> Tensor:
+    def forward(self, z: Tensor, *args: Any, **kwargs: Any) -> Tensor:  # ty: ignore[invalid-method-override]
         for block in self:
             z = block(z, *args, **kwargs)
         return z
@@ -2174,8 +2174,8 @@ class TRM3(nn.Module):
             init_tensor: [K, hidden_size] tensor (H_init or L_init)
 
         """
-        block: Any = self.reasoning[0]
-        up_proj: Tensor = block.mlp.up_proj.weight
+        block = cast(Any, self.reasoning[0])
+        up_proj = block.mlp.up_proj.weight
         _, _, V = torch.linalg.svd(up_proj.float(), full_matrices=False)
         V_top = V[:10, :].T.to(dtype=init_tensor.dtype)  # [hidden_size, 10]
 
@@ -2215,8 +2215,8 @@ class TRM3(nn.Module):
         SVD alignment logic as _equalize_svd_alignment.
 
         """
-        block: Any = self.reasoning[0]
-        up_proj: Tensor = block.mlp.up_proj.weight
+        block = cast(Any, self.reasoning[0])
+        up_proj = block.mlp.up_proj.weight
         _, _, V = torch.linalg.svd(up_proj.float(), full_matrices=False)
         V_top = V[:10, :].T.to(dtype=z.dtype)  # [C, 10]
 

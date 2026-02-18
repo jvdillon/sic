@@ -3,7 +3,7 @@
 from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, Protocol, TypedDict, cast, runtime_checkable
 
 import contextlib
 import dataclasses
@@ -108,9 +108,13 @@ def _get_next_puzzle(
     if state.max_samples >= 0 and state.samples_seen >= state.max_samples:
         return None, None, None
 
-    if state.pending_inputs is not None and state.pending_idx < state.pending_valid:
+    if (
+        state.pending_inputs is not None
+        and state.pending_labels is not None
+        and state.pending_idx < state.pending_valid
+    ):
         inp = state.pending_inputs[state.pending_idx]
-        lab = state.pending_labels[state.pending_idx]  # pyright: ignore[reportOptionalSubscript]
+        lab = state.pending_labels[state.pending_idx]
         pid = (
             state.pending_puzzle_ids[state.pending_idx]
             if state.pending_puzzle_ids is not None
@@ -285,13 +289,14 @@ class Experiment:
         self.act_steps_history: list[float] = []
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
 
+        assert self.device is not None
         self._state = TrainingState(
             num_chains=self.num_chains,
             num_puzzle_grid_tokens=self.config.num_puzzle_grid_tokens,
             total_seq_len=self.config.total_seq_len,
             hidden_size=self.config.hidden_size,
             K=self.K,
-            device=self.device,  # pyright: ignore[reportArgumentType]
+            device=self.device,
             dtype=self.dtype,
         )
         self._pending_inputs = torch.empty(
@@ -362,13 +367,15 @@ class Experiment:
 
     def setup_optimizers(self) -> None:
         """Must be called before step(). Called by main() before train()."""
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
             self.model,
             muon_lr=0.02,
         )
         # Add experiment-level puzzle_id_embed to optimizer if enabled
-        if self.puzzle_id_embed is not None:
-            self.optimizer1.add_param_group(  # pyright: ignore[reportOptionalMemberAccess]
+        if self.puzzle_id_embed is not None and not isinstance(
+            self.optimizer1, DummyOptimizer
+        ):
+            self.optimizer1.add_param_group(
                 {"params": self.puzzle_id_embed.parameters()}
             )
 
@@ -600,13 +607,14 @@ class Experiment:
             for n, p in self.model.named_parameters():
                 if p.requires_grad and n in self.ema.shadow:
                     self.ema.shadow[n].copy_(p.data)
+        assert self.device is not None
         self._state = TrainingState(
             num_chains=self.num_chains,
             num_puzzle_grid_tokens=self.config.num_puzzle_grid_tokens,
             total_seq_len=self.config.total_seq_len,
             hidden_size=self.config.hidden_size,
             K=self.K,
-            device=self.device,  # pyright: ignore[reportArgumentType]
+            device=self.device,
             dtype=self.dtype,
         )
         self._pending_inputs = torch.empty(
@@ -868,12 +876,14 @@ class Experiment:
             )
 
         lr_scale_ = self._lr_scale()
+        assert self.optimizer1 is not None
+        assert self.optimizer2 is not None
         for optimizer in [self.optimizer1, self.optimizer2]:
-            for param_group in optimizer.param_groups:  # pyright: ignore[reportOptionalMemberAccess]
+            for param_group in optimizer.param_groups:
                 param_group["lr"] = param_group["initial_lr"] * lr_scale_
 
-        self.optimizer1.step()  # pyright: ignore[reportOptionalMemberAccess]
-        self.optimizer2.step()  # pyright: ignore[reportOptionalMemberAccess]
+        self.optimizer1.step()
+        self.optimizer2.step()
         self.model.zero_grad(set_to_none=True)
         self.current_step += 1
 
@@ -981,6 +991,7 @@ class Experiment:
 
     def evaluate_act_haltfast(self, loader: Any) -> tuple[float, float, float, float]:
         """Fast eval: streaming replacement when q_halt > 0, fixed batch size."""
+        assert self.device is not None
         bs = (
             self.eval_batch_size
             if self.eval_batch_size is not None
@@ -1025,7 +1036,7 @@ class Experiment:
 
         with torch.no_grad():
             while valid.any():
-                with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
+                with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self._eval_forward(inputs, z_H, z_L, puzzle_ids)
 
                 z_H = out["z_H"]
@@ -1093,6 +1104,7 @@ class Experiment:
         self, loader: Any, progress: bool = False
     ) -> tuple[float, float, float, float]:
         """WTA eval: run K heads, first to halt wins. Streaming replacement."""
+        assert self.device is not None
         start_time = time.perf_counter()
         seq_len = self._get_seq_len()
         hidden = self.model.config.hidden_size
@@ -1178,7 +1190,7 @@ class Experiment:
                     puzzle_ids.unsqueeze(1).expand(B, self.K).reshape(B * self.K)
                 )
 
-                with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
+                with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self._eval_forward(
                         inputs_batched, z_H_batched, z_L_batched, pids_batched
                     )
@@ -1263,6 +1275,7 @@ class Experiment:
         Reports both final-step accuracy (run all steps) and halt-time
         accuracy (predictions at the step where q_halt first fires).
         """
+        assert self.device is not None
         correct = torch.tensor(0, device=self.device)
         puzzles_correct = torch.tensor(0, device=self.device)
         halt_correct = torch.tensor(0, device=self.device)
@@ -1305,7 +1318,7 @@ class Experiment:
 
                 out: dict[str, Tensor] = {}
                 for step in range(self.current_max_steps):
-                    with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
+                    with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                         out = self._eval_forward(inputs, z_H, z_L, puzzle_ids)
                     z_H = out["z_H"]
                     z_L = out["z_L"]
@@ -1408,7 +1421,7 @@ class Experiment:
                 diag_B = sample_inputs.shape[0]
 
                 z_H, z_L = self._init_z(diag_B)
-                with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
+                with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                     out = self.model(sample_inputs, z_H, z_L, sample_puzzle_ids)
                 all_logits = list(out["all_logits"])
                 all_z_H = list(out["all_z_H"])
@@ -1420,7 +1433,7 @@ class Experiment:
                 step_logits = []
                 step_q_halts = []
                 for _ in range(self.current_max_steps):
-                    with torch.autocast(device_type=self.device.type, dtype=self.dtype):  # pyright: ignore[reportOptionalMemberAccess]
+                    with torch.autocast(device_type=self.device.type, dtype=self.dtype):
                         out = self.model.step(
                             sample_inputs, z_H, z_L, sample_puzzle_ids
                         )
@@ -1483,10 +1496,12 @@ class Experiment:
         return self.model.L_init[l_indices].unsqueeze(1).expand(-1, S, -1)
 
     def make_checkpoint(self) -> dict[str, object]:
+        assert self.optimizer1 is not None
+        assert self.optimizer2 is not None
         checkpoint: dict[str, object] = {
             "model": self.model.state_dict(),
-            "optimizer1": self.optimizer1.state_dict(),  # pyright: ignore[reportOptionalMemberAccess]
-            "optimizer2": self.optimizer2.state_dict(),  # pyright: ignore[reportOptionalMemberAccess]
+            "optimizer1": self.optimizer1.state_dict(),
+            "optimizer2": self.optimizer2.state_dict(),
             "step": self.current_step,
             "best_acc": self.best_acc,
         }
@@ -1676,7 +1691,37 @@ class TrainingState:
         self.chain_indices[batch_indices] = -1
 
 
-def train(experiment: Experiment):
+@runtime_checkable
+class ExperimentProtocol(Protocol):
+    """Duck-typed interface for experiments compatible with train()/main()."""
+
+    @property
+    def model(self) -> nn.Module: ...
+
+    current_step: int
+    max_train_sec: float
+    eval_every_steps: int
+    max_eval_samples_train: int
+
+    def setup_optimizers(self) -> None: ...
+    def make_train_loader(self) -> Any: ...
+    def make_test_loader(self) -> Any: ...
+    def step(
+        self,
+        inputs: Tensor,
+        labels: Tensor,
+        puzzle_ids: Tensor | None = None,
+        valid_count: int | None = None,
+    ) -> dict[str, Tensor] | None: ...
+    def evaluate(
+        self,
+        loader: Any,
+        train_loader: Any | None = None,
+    ) -> tuple[float, float, float, float, float, float, float, float]: ...
+    def make_checkpoint(self) -> dict[str, object]: ...
+
+
+def train(experiment: ExperimentProtocol):
     """TRM training loop."""
     testloader = experiment.make_test_loader()
     trainloader = experiment.make_train_loader()
@@ -1728,10 +1773,12 @@ def train(experiment: Experiment):
         if epoch_losses:
             first = epoch_losses[0]
             if isinstance(first, dict):
-                keys = list(first.keys())
+                keys: list[str] = list(first.keys())  # ty: ignore[invalid-assignment]
                 main_parts = []
                 extra_parts = []
-                dicts = [d for d in epoch_losses if isinstance(d, dict)]
+                dicts: list[dict[str, Tensor]] = [  # ty: ignore[invalid-assignment]
+                    d for d in epoch_losses if isinstance(d, dict)
+                ]
                 for k in keys:
                     vals = torch.stack([d[k] for d in dicts])
                     stat = f"{k}={vals.mean():.4f}±{vals.std():.4f}ϵ[{vals.min():.4f},{vals.max():.4f}]"
@@ -1796,8 +1843,8 @@ def train(experiment: Experiment):
 
 
 def main(
-    experiment: Experiment | object,
-):  # object: kludge for duck-typed experiments
+    experiment: ExperimentProtocol,
+):
     """TRM main entry point."""
     script_path = pathlib.Path(sys.argv[0])
     with (
@@ -1805,8 +1852,8 @@ def main(
         if script_path.name
         else contextlib.nullcontext()
     ):
-        experiment.setup_optimizers()  # pyright: ignore[reportAttributeAccessIssue]
-        return train(experiment)  # pyright: ignore[reportArgumentType]
+        experiment.setup_optimizers()
+        return train(experiment)
 
 
 def resume_from_checkpoint(

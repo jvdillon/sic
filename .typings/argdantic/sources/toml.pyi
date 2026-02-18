@@ -24,7 +24,7 @@ class TomlSettingsSource(FileSettingsSourceBuilder):
     """
     A TOML file settings source reads settings from a TOML file.
     """
-    def __call__(self, settings: Type[BaseSettings]) -> PydanticBaseSettingsSource:
+    def __call__(self, settings_cls: Type[BaseSettings]) -> PydanticBaseSettingsSource:
         ...
     
     def __repr__(self) -> str:

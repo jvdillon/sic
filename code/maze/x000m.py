@@ -8,7 +8,7 @@ class Experiment(Experiment000l):
     batch_size: int = 176
 
     def setup_optimizers(self) -> None:
-        self.optimizer1, self.optimizer2 = setup_muon_optimizers(  # pyright: ignore[reportAttributeAccessIssue]
+        self.optimizer1, self.optimizer2 = setup_muon_optimizers(
             self.model,
             muon_lr=0.010,
             # muon_wd=1e-4/0.01=0.01
