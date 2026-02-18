@@ -1,18 +1,23 @@
-"""x10: x07 + PCGrad between ACT steps.
+"""x12: x07a + Lipschitz penalty on reasoning block.
 
-Motivation: Late ACT steps see only hard (unhalted) puzzles, producing
-gradients that conflict with early-step gradients (which see all puzzles).
-This destroys the shared reasoning block's performance on easy puzzles,
-causing post-saturation oscillation.
+Motivation: The shared reasoning block is applied iteratively (L_cycles
+per H-cycle, H_cycles per ACT step). If its Jacobian spectral radius
+drifts above 1 as it fits hard puzzles, small perturbations amplify
+across iterations, causing post-saturation oscillation.
 
-Fix: Store the gradient from ACT step 0. Before applying subsequent steps'
-gradients, project out the component that conflicts with step 0's direction.
-This prevents late-step updates from undoing early-step progress.
+Fix: Penalize the local Lipschitz constant of the reasoning block via
+a single random-direction finite-difference probe per ACT step:
+  L_lip = (||f(x+eps) - f(x)|| / ||eps||)^2
+This encourages the reasoning map to be contractive, stabilizing the
+iterative application without expensive eigenvalue computation.
 
 References:
-- Yu et al. (2020), "Gradient Surgery for Multi-Task Learning" (PCGrad)
-- Liu et al. (2021), "Conflict-Averse Gradient Descent" (CAGrad)
-Novel application to ACT steps (each step treated as a separate task).
+- Bai et al. (2022), "Stabilizing Equilibrium Models by Jacobian
+  Regularization" — penalizes spectral radius of DEQ iteration map
+- Miller & Hardt (2019), "Stable Recurrent Models" — constrains
+  recurrent Jacobian spectral radius < 1 for stability
+- Behrmann et al. (2019), "Invertible Residual Networks" — Lip(g) < 1
+  ensures contractivity of residual blocks
 
 """
 
@@ -21,50 +26,46 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from experiment import main
-from maze.x07 import Experiment as Experiment07
+from maze.x07a import Experiment as Experiment07a
+
+import torch
 
 
 if TYPE_CHECKING:
     from torch import Tensor
 
 
-class Experiment(Experiment07):
-    def __init__(self) -> None:
-        super().__init__()
-        self._ref_grad: dict[str, Tensor] | None = None
+class Experiment(Experiment07a):
+    lip_weight: float = 0.1
+    lip_eps: float = 1e-3
 
-    def reset_transient_state(self) -> None:
-        super().reset_transient_state()
-        self._ref_grad = None
-
-    def _act_post_backward(
+    def _compute_act_loss(
         self,
         carry: dict[str, Tensor],
         was_running: Tensor,
-    ) -> None:
-        step = int(carry["steps"][was_running][0].item())
-        if step == 0:
-            # Store step-0 gradient as reference direction.
-            self._ref_grad = {
-                n: p.grad.detach().clone()
-                for n, p in self.model.named_parameters()
-                if p.grad is not None
-            }
-            return
-
-        ref = self._ref_grad
-        if ref is None:
-            return
-
-        # Project out conflicting component of current gradient.
-        for n, p in self.model.named_parameters():
-            if p.grad is None or n not in ref:
-                continue
-            g = p.grad
-            r = ref[n]
-            dot = (g * r).sum()
-            if dot < 0:
-                p.grad = g - (dot / (r.norm().square() + 1e-12)) * r
+        logits: Tensor,
+        all_logits: list[Tensor],
+        q_halt: Tensor,
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        total_loss, loss_dict = super()._compute_act_loss(  # pyright: ignore[reportAttributeAccessIssue]
+            carry,
+            was_running,
+            logits,
+            all_logits,
+            q_halt,
+        )
+        # Probe reasoning block Lipschitz constant via finite difference.
+        x = carry["z_L"][:1].detach()
+        eps_vec = torch.randn_like(x)
+        eps_vec = eps_vec / eps_vec.norm() * self.lip_eps
+        cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        assert self.device is not None
+        with torch.autocast(device_type=self.device.type, dtype=self.dtype):
+            f_x = self.model.reasoning(x, cos_sin)
+            f_x_eps = self.model.reasoning(x + eps_vec, cos_sin)
+        ratio = (f_x_eps - f_x).norm() / self.lip_eps
+        lip_loss = self.lip_weight * ratio.square()
+        return total_loss + lip_loss, loss_dict
 
 
 if __name__ == "__main__":
