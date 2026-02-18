@@ -51,12 +51,22 @@ class Experiment(Experiment07a):
             )
             return
 
+        # Save any previously accumulated gradients (from grad_accum_steps > 1).
+        saved_grad: dict[str, Tensor] = {}
+        for n, p in self.model.named_parameters():
+            if p.grad is not None:
+                saved_grad[n] = p.grad.detach().clone()
+
         ref_grad: dict[str, Tensor] | None = None
+        accum_grad: dict[str, Tensor] = {}
 
         for step_val in unique_steps:
             mask = h_steps == step_val
             group_active = active_samples[mask]
             group_winners = winner_chains[mask]
+
+            # Zero gradients so this group's backward is isolated.
+            self.model.zero_grad(set_to_none=True)
 
             # Compute and backward this group's loss.
             assert self.device is not None
@@ -77,7 +87,7 @@ class Experiment(Experiment07a):
                     if p.grad is not None
                 }
             elif ref_grad is not None:
-                # Project out conflicting component of current gradient.
+                # Project out conflicting component of this group's gradient.
                 with torch.no_grad():
                     for n, p in self.model.named_parameters():
                         if p.grad is None or n not in ref_grad:
@@ -87,6 +97,26 @@ class Experiment(Experiment07a):
                         dot = (g * r).sum()
                         if dot < 0:
                             p.grad = g - (dot / (r.norm().square() + 1e-12)) * r
+
+            # Accumulate this group's (possibly projected) gradient.
+            with torch.no_grad():
+                for n, p in self.model.named_parameters():
+                    if p.grad is None:
+                        continue
+                    if n in accum_grad:
+                        accum_grad[n].add_(p.grad)
+                    else:
+                        accum_grad[n] = p.grad.detach().clone()
+
+        # Restore saved + accumulated gradients.
+        self.model.zero_grad(set_to_none=True)
+        with torch.no_grad():
+            for n, p in self.model.named_parameters():
+                parts = [
+                    t for t in [saved_grad.get(n), accum_grad.get(n)] if t is not None
+                ]
+                if parts:
+                    p.grad = parts[0] if len(parts) == 1 else parts[0] + parts[1]
 
 
 if __name__ == "__main__":

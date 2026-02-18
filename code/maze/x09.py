@@ -47,6 +47,9 @@ class Experiment(Experiment07a):
 
     def _update_weights(self) -> None:
         super()._update_weights()
+        # Skip if optimizer didn't step (grad accumulation not complete yet).
+        if self._grad_accum_counter != 0:
+            return
         # Initialize EMA on first call.
         if self._act_ema is None:
             self._act_ema = {
