@@ -25,6 +25,10 @@ from experiment import main
 from maze.x07a import Experiment as Experiment07a
 
 import torch
+import torch._functorch.config
+
+
+torch._functorch.config.donated_buffer = False  # noqa: SLF001
 
 
 if TYPE_CHECKING:

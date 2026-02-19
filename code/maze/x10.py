@@ -23,10 +23,13 @@ References:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+import dataclasses
 
 from experiment import main
 from maze.x07a import Experiment as Experiment07a
+from model import TRM3, TRM3ConfigProtocol
 
 import torch
 
@@ -37,6 +40,14 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07a):
+    config: TRM3ConfigProtocol = dataclasses.replace(
+        cast(TRM3.Config, Experiment07a.config),
+        block_kwargs_by_layer={
+            0: {"checkpoint": True},
+            1: {"checkpoint": True},
+        },
+    )
+
     lip_weight: float = 0.1
     lip_eps: float = 1e-3
     log_lip: bool = True
