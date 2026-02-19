@@ -48,7 +48,7 @@ class Experiment(Experiment07a):
         },
     )
 
-    lip_weight: float = 0.1
+    lip_weight: float = 0.01
     lip_eps: float = 1e-3
     log_lip: bool = True
 
