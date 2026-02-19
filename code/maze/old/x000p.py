@@ -1,4 +1,4 @@
-"""x000q: x000l with core_damping=0.5 for iterative stability."""
+"""x000p: x000l with QK-norm for Muon stability."""
 
 from typing import cast
 
@@ -6,7 +6,7 @@ import dataclasses
 import functools
 
 from experiment import main, setup_muon_optimizers
-from maze.x000 import Experiment as Experiment000
+from maze.old.x000 import Experiment as Experiment000
 from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
 
 
@@ -29,7 +29,6 @@ class Experiment(Experiment000):
         register_tokens_learnable=False,
         q_halt_seq_index=0,
         cast_model_to_dtype=False,
-        core_damping=0.5,
         block_fn=functools.partial(
             TransformerBlock,
             multiple_of=128,
@@ -38,6 +37,7 @@ class Experiment(Experiment000):
             attn_init_weight_fn=trunc_normal_init_,
             attn_muon_modified=True,
             attn_checkpoint_muon_norm=True,
+            attn_qk_norm=True,
         ),
     )
 

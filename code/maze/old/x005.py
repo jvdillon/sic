@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 from experiment import ForwardResult, TrainingState, main
-from maze.x000l import Experiment as Experiment000l
+from maze.old.x000l import Experiment as Experiment000l
 from torch import nn
 
 import torch

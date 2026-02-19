@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, cast
 import dataclasses
 
 from experiment import HCycleResult
-from maze.x000l import Experiment as Experiment000l
+from maze.old.x000l import Experiment as Experiment000l
 from model import TRM3, TRM3ConfigProtocol
 from torch import nn
 from torch.utils.checkpoint import checkpoint

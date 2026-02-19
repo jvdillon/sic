@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from experiment import HCycleResult, main
-from maze.x000l import Experiment as Experiment000l
+from maze.old.x000l import Experiment as Experiment000l
 from torch.utils.checkpoint import checkpoint
 
 

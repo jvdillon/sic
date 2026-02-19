@@ -1,10 +1,10 @@
-"""x000d: x000 + grad_accum_steps=4, batch_size=30."""
+"""x001a: x001 except noaug."""
 
 from experiment import main
-from maze.x000 import Experiment as Experiment000
+from maze.old.x001 import Experiment as Experiment001
 
 
-class Experiment(Experiment000):
+class Experiment(Experiment001):
     data_dir: str = "/opt/scratch/datasets/maze-30x30-hard-1k"
     grad_accum_steps: int = 4
     batch_size: int = 30

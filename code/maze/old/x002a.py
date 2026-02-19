@@ -8,7 +8,7 @@ embed_tokens.weight.
 from __future__ import annotations
 
 from experiment import main
-from maze.x002 import Experiment as Experiment002
+from maze.old.x002 import Experiment as Experiment002
 
 
 class Experiment(Experiment002):

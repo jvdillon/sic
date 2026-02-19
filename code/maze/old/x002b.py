@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from experiment import main
-from maze.x002a import Experiment as Experiment002a
+from maze.old.x002a import Experiment as Experiment002a
 
 
 class Experiment(Experiment002a):

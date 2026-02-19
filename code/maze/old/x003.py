@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from experiment import ForwardResult, HCycleResult, main
-from maze.x002 import Experiment as Experiment002
+from maze.old.x002 import Experiment as Experiment002
 from torch import Tensor
 from torch.nn import functional
 

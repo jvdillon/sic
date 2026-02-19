@@ -11,7 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 from experiment import HCycleResult, main
-from maze.x000l import Experiment as Experiment000l
+from maze.old.x000l import Experiment as Experiment000l
 from torch import Tensor
 from torch.nn import functional
 

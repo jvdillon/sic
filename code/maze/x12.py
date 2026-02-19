@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07a):
+    _h_cycle_logits: list[Tensor] | None = None
+
     config: TRM3ConfigProtocol = dataclasses.replace(
         cast(TRM3.Config, Experiment07a.config),
         block_kwargs_by_layer={

@@ -5,7 +5,7 @@ from typing import cast
 import copy
 
 from experiment import main
-from maze.x000 import Experiment as Experiment000
+from maze.old.x000 import Experiment as Experiment000
 from model import TRM3, TRM3ConfigProtocol
 
 
