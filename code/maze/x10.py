@@ -44,7 +44,7 @@ class Experiment(Experiment07a):
         cast(TRM3.Config, Experiment07a.config),
         block_kwargs_by_layer={
             0: {"checkpoint": True},
-            1: {"checkpoint": True},
+            # 1: {"checkpoint": True},
         },
     )
 
