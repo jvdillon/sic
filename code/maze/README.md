@@ -23,7 +23,7 @@ x10.log:Step 12000  Test 99.50% / 93.40% (halt: 99.49%/83.20%)  Train lm=0.6641Â
 | --- | --- | --- | --- | --- | --- |
 | TRM-Att | 7M | 77.71 | 78.70 | 41.00  | 3.33 |
 | TRM-MLP | 5M | 84.80 | / | / | / |
-| Time(h) | 0.67 | 2 | 37 | 49 |
+| Time(h) | | 0.67 | 2 | 37 | 49 |
 
 TODOs/Notes:
 - still need to re-enable EMA to see smooth results. This will obviously bring down peak
