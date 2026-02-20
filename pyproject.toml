@@ -260,6 +260,7 @@ error-on-warning = true
 
 [tool.ty.rules]
 all = "warn"
+division-by-zero = "ignore"
 
 [tool.codespell]
 builtin = "clear,rare,code"
