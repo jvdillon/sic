@@ -206,7 +206,7 @@ section-order = [
 
 [tool.basedpyright]
 typeCheckingMode = "recommended"
-extraPaths = ["code/", ".typings"]
+extraPaths = ["code/", "code/sudoku/", ".typings"]
 exclude = [
     ".venv",
     "*.egg-info",
@@ -253,13 +253,14 @@ reportUnusedImport = false
 
 [tool.ty.environment]
 python-version = "3.12"
-extra-paths = ["code/", ".typings"]
+extra-paths = ["code/", "code/sudoku/", ".typings"]
 
 [tool.ty.terminal]
 error-on-warning = true
 
 [tool.ty.rules]
 all = "warn"
+division-by-zero = "ignore"  # False positives on guarded ternaries (x / y if y > 0 else 0).
 
 [tool.codespell]
 builtin = "clear,rare,code"
