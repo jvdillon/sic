@@ -17,3 +17,13 @@ x07f.log:Step  9500  Test 99.54% / 93.60% (halt: 99.50%/82.30%)  Train lm=0.6641
 x07.log.0:Step 16000  Test 99.47% / 93.10% (halt: 99.44%/81.20%)  Train lm=0.6641±0.0013ϵ[0.6641,0.6680] n_halted=110.4260±5.0354ϵ[82.0000,122.0000]  TrainAcc 99.99%/99.20% (halt: 99.98%/98.90%)  (55.402s / 180.375s)
 x10.log:Step 12000  Test 99.50% / 93.40% (halt: 99.49%/83.20%)  Train lm=0.6641±0.0012ϵ[0.6641,0.6719] n_halted=108.4940±7.0220ϵ[62.0000,121.0000]  TrainAcc 99.98%/99.10% (halt: 99.98%/99.00%)  (55.416s / 288.770s)
 ```
+
+[TRM repro](https://github.com/gaoxin492/TinyRecursiveModels#) has
+```
+TRM-Att	7M	77.71	78.70	41.00	3.33
+```
+using 8xHseries for
+- maze: 2h
+- sudoku: 0.67h
+- arc1: 37h
+- arc2: 437h
