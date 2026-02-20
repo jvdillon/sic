@@ -7,10 +7,10 @@ from pathlib import Path
 import json
 import tempfile
 
+from data import PuzzleDataset, augment_sudoku, load_puzzle_dataset
+
 import numpy as np
 import torch
-
-from data import PuzzleDataset, augment_sudoku, load_puzzle_dataset
 
 
 def test_augment_sudoku_shapes():

@@ -13,6 +13,7 @@ warnings.filterwarnings("ignore", message=".*TF32.*")
 # To get bit-for-bit you may need to: rm -rf /tmp/torchinductor_jvdillon/
 
 
+from data import PuzzleDataset, augment_sudoku  # noqa: E402
 from experiment import (  # noqa: E402
     Experiment as ExperimentNew,
     main,
@@ -27,8 +28,6 @@ from torch import Tensor, nn  # noqa: E402
 from util import set_seed  # noqa: E402
 
 import torch  # noqa: E402
-
-from data import PuzzleDataset, augment_sudoku  # noqa: E402
 
 
 class Experiment:

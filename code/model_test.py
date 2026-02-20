@@ -163,7 +163,7 @@ class TestRoPE:
 
     def test_axial_per_axis_freqs(self):
         rope = RoPE.Config(dim=[16, 16]).make()
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         assert inv[0].numel() == 8
         assert inv[1].numel() == 8
 
@@ -171,13 +171,13 @@ class TestRoPE:
 
     def test_no_grad(self):
         rope = RoPE.Config(dim=32).make()
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         assert all(not f.requires_grad for f in inv if f.numel())
 
     def test_dtype_preserved_after_cast(self):
         rope = RoPE.Config(dim=32).make()
         rope = rope.to(torch.bfloat16)
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         assert all(f.dtype == torch.float32 for f in inv if f.numel())
 
     def test_output_dtype_matches_model(self):
@@ -190,8 +190,8 @@ class TestRoPE:
     def test_different_base_changes_freqs(self):
         r1 = RoPE.Config(dim=32, base=100.0).make()
         r2 = RoPE.Config(dim=32, base=10_000.0).make()
-        inv1 = r1._inv_freqs  # noqa: SLF001
-        inv2 = r2._inv_freqs  # noqa: SLF001
+        inv1 = r1._inv_freqs
+        inv2 = r2._inv_freqs
         assert not torch.equal(inv1[0], inv2[0])
 
 
@@ -278,7 +278,7 @@ class TestRoPEMixed:
         rope = RoPEMixed.Config(
             dim=16, num_heads=4, base=[100.0, 100.0], reduction_mode="sum"
         ).make()
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         active = [f for f in inv if f.numel()]
         assert len(active) == 2  # 2 axes
         assert all(f.shape[0] == 4 for f in active)  # 4 heads
@@ -291,12 +291,12 @@ class TestRoPEMixed:
 
     def test_learnable_has_grad(self):
         rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=True).make()
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         assert all(f.requires_grad for f in inv if f.numel())
 
     def test_fixed_no_grad(self):
         rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=False).make()
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         assert all(not f.requires_grad for f in inv if f.numel())
 
     # --- dtype preservation through .to() --------------------------------
@@ -304,7 +304,7 @@ class TestRoPEMixed:
     def test_dtype_preserved_after_cast(self):
         rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=True).make()
         rope = rope.to(torch.bfloat16)
-        inv = rope._inv_freqs  # noqa: SLF001
+        inv = rope._inv_freqs
         assert all(f.dtype == torch.float32 for f in inv if f.numel())
 
     def test_output_dtype_matches_model(self):

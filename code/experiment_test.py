@@ -296,7 +296,7 @@ def test_reset_transient_state():
     exp.reset_transient_state()
 
     # _state should be fresh
-    assert exp._state.h_step.sum() == 0  # noqa: SLF001
+    assert exp._state.h_step.sum() == 0
 
 
 def test_resume_from_checkpoint_new_format():

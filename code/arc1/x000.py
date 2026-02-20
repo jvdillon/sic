@@ -7,6 +7,7 @@ TRM ARC config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
 # Slow compile?
 # Try: rm -rf /tmp/torchinductor_* ~/.triton/cache
 
+from data import get_puzzle_config
 from experiment import (
     Experiment as Experiment182,
     main,
@@ -18,8 +19,6 @@ from model import (
     TransformerBlock,
     TRM3ConfigProtocol,
 )
-
-from data import get_puzzle_config
 
 
 _CFG = get_puzzle_config("arc")

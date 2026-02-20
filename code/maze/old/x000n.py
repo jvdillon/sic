@@ -4,6 +4,7 @@ from typing import cast
 
 import dataclasses
 
+from data import get_puzzle_config
 from experiment import (
     Experiment as ExperimentBase,
     main,
@@ -17,8 +18,6 @@ from model import (
     TRM3ConfigProtocol,
     trunc_normal_init_,
 )
-
-from data import get_puzzle_config
 
 
 _CFG = get_puzzle_config("maze")

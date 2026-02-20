@@ -382,9 +382,8 @@ def load_and_run(
         str(pathlib.Path(__file__).resolve().parent.parent),
     )
 
-    from experiment import Experiment as ExperimentBase  # noqa: PLC0415, TC002
-
     from data import PuzzleDataset  # noqa: PLC0415
+    from experiment import Experiment as ExperimentBase  # noqa: PLC0415, TC002
 
     maze_dir = pathlib.Path(__file__).resolve().parent
     mod = importlib.import_module(exp_name)

@@ -29,6 +29,7 @@ if False:
 
     enable_determinism()
 
+from data import PuzzleDataset, augment_sudoku
 from evaluation import print_diagnostics
 from model import (
     EMA,
@@ -43,8 +44,6 @@ from util import Tee, numpy_rng, set_seed
 
 import numpy as np
 import torch
-
-from data import PuzzleDataset, augment_sudoku
 
 
 if TYPE_CHECKING:

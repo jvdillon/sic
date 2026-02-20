@@ -4,6 +4,7 @@ Uses TransformerBlock with RoPE (matching TRM paper config for maze).
 TRM maze config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
 """
 
+from data import get_puzzle_config
 from experiment import (
     Experiment as Experiment182,
     main,
@@ -17,8 +18,6 @@ from model import (
     TRM3ConfigProtocol,
     trunc_normal_init_,
 )
-
-from data import get_puzzle_config
 
 
 _CFG = get_puzzle_config("maze")
