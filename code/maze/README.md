@@ -27,3 +27,8 @@ using 8xHseries for
 - sudoku: 0.67h
 - arc1: 37h
 - arc2: 437h
+
+
+TODOs/Notes:
+- still need to re-enable EMA to see smooth results. This will obviously bring down peak
+- our puzzle acc is "valid solution"; unclear if gaoxin492 uses exact acc like TRM repo. This will cost ~5%.
