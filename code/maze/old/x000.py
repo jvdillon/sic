@@ -4,14 +4,19 @@ Uses TransformerBlock with RoPE (matching TRM paper config for maze).
 TRM maze config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
 """
 
-import functools
-
 from experiment import (
     Experiment as Experiment182,
     main,
     setup_muon_optimizers,
 )
-from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
+from model import (
+    TRM3,
+    Attention,
+    SwiGLU,
+    TransformerBlock,
+    TRM3ConfigProtocol,
+    trunc_normal_init_,
+)
 
 from data import get_puzzle_config
 
@@ -42,12 +47,15 @@ class Experiment(Experiment182):
         z_L_init_svd=False,
         use_rope=True,
         num_heads=8,  # Only used for RoPE dim calculation
-        block_fn=functools.partial(
-            TransformerBlock,
-            multiple_of=128,
-            num_heads=8,
-            mlp_init_weight_fn=trunc_normal_init_,
-            attn_init_weight_fn=trunc_normal_init_,
+        block=TransformerBlock.Config(
+            attn=Attention.Config(
+                num_heads=8,
+                init_weight_fn=trunc_normal_init_,
+            ),
+            ffn=SwiGLU.Config(
+                multiple_of=128,
+                init_weight_fn=trunc_normal_init_,
+            ),
         ),
     )
 

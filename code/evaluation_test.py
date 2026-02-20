@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import functools
-
 from evaluation import (
     cells_fixed_broken,
     evaluate_multistart,
@@ -28,13 +26,13 @@ def _config() -> TRM3.Config:
         device=None,
         dtype=torch.float32,
         num_register_tokens=0,
-        block_fn=functools.partial(MLPMixerBlock, seq_len=81),
+        block=MLPMixerBlock.Config(seq_len=81),
     )
 
 
 def test_run_act_steps():
     config = _config()
-    model = config.setup()
+    model = config.make()
     model.eval()
 
     device = torch.device("cpu")
@@ -61,7 +59,7 @@ def test_run_act_steps():
 
 def test_evaluate_single_start():
     config = _config()
-    model = config.setup()
+    model = config.make()
     model.eval()
 
     inputs = torch.randint(low=0, high=10, size=(4, 81))
@@ -82,7 +80,7 @@ def test_evaluate_single_start():
 
 def test_evaluate_multistart():
     config = _config()
-    model = config.setup()
+    model = config.make()
     model.eval()
 
     inputs = torch.randint(low=0, high=10, size=(4, 81))

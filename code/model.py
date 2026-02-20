@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Literal, Protocol, Self, TypedDict, cast
+from dataclasses import field
+from typing import Any, Literal, NamedTuple, Protocol, Self, TypedDict, cast
 
-import dataclasses
+import copy
 import functools
 import math
 import traceback
 
+from configgle import Configurable, DataclassLike, Fig, Makes
 from torch import Tensor, nn
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
+from util import broadcast_sequences, mesh_arange
 
 import torch
 
@@ -49,7 +52,13 @@ class ModuleProtocol(Protocol):
     def zero_grad(self, set_to_none: bool = False) -> None: ...
 
 
-class TRM3ConfigProtocol(Protocol):
+class ConfigurableChannelsIn(Configurable[nn.Module], Protocol):
+    """Configurable nn.Module with a c_in field."""
+
+    c_in: int
+
+
+class TRM3ConfigProtocol(DataclassLike, Protocol):
     """Minimal config protocol for TRM3 models (duck typing for callers)."""
 
     puzzle_grid_shape: tuple[int, ...]
@@ -60,7 +69,7 @@ class TRM3ConfigProtocol(Protocol):
     H_cycles: int
     L_cycles: int
     head_bias: bool
-    block_fn: Callable[[int], nn.Module]
+    block: ConfigurableChannelsIn
     block_kwargs_by_layer: dict[int, dict[str, Any]]
     compile_core: bool
     compile_reasoning: bool
@@ -89,7 +98,7 @@ class TRM3ConfigProtocol(Protocol):
     @property
     def num_effective_heads(self) -> int: ...
 
-    def setup(self, *args: Any, **kwargs: Any) -> nn.Module: ...
+    def make(self) -> nn.Module: ...
 
 
 class CarryState(TypedDict):
@@ -99,21 +108,44 @@ class CarryState(TypedDict):
     Carry policies (top1, top2, copy_top1, copy_top2) operate on chains.
     """
 
-    z_H: Tensor  # [B, N, S, C] - each chain's z_H state
-    z_L: Tensor  # [B, N, S, C] - each chain's z_L state
-    carry_count: Tensor  # [B, N] - per-chain count of actual carries (updates)
+    z_H: Tensor
+    """[B, N, S, C] - each chain's z_H state."""
+    z_L: Tensor
+    """[B, N, S, C] - each chain's z_L state."""
+    carry_count: Tensor
+    """[B, N] - per-chain count of actual carries (updates)."""
 
 
 class WTAForwardOutput(TypedDict):
     """Output of wta_forward."""
 
-    logits: Tensor  # [B, N, num_puzzle_grid_tokens, V] per-head logits
-    q_halt: Tensor  # [B, N] per-head halt logits
-    losses: Tensor  # [B, N] per-head losses
-    winner_idx: Tensor  # [B] index of winning head
-    carry: CarryState  # Updated carry state
-    h_indices: Tensor  # [N] H indices used
-    l_indices: Tensor  # [N] L indices used
+    logits: Tensor
+    """[B, N, num_puzzle_grid_tokens, V] per-head logits."""
+    q_halt: Tensor
+    """[B, N] per-head halt logits."""
+    losses: Tensor
+    """[B, N] per-head losses."""
+    winner_idx: Tensor
+    """[B] index of winning head."""
+    carry: CarryState
+    """Updated carry state."""
+    h_indices: Tensor
+    """[N] H indices used."""
+    l_indices: Tensor
+    """[N] L indices used."""
+
+
+class HCycleResult(NamedTuple):
+    logits: Tensor
+    q_halt: Tensor
+    z_H: Tensor
+    z_L: Tensor
+    z_H_pre: Tensor
+    """z_H input to last core() call."""
+    z_L_pre: Tensor
+    """z_L input to last core() call."""
+    all_logits: tuple[Tensor, ...] = ()
+    all_z_H: tuple[Tensor, ...] = ()
 
 
 class TRM3Protocol(ModuleProtocol, Protocol):
@@ -153,7 +185,7 @@ ModelProtocol = TRM3Protocol
 # $ TORCH_LOGS="recompiles_verbose" python script.py
 # or set os.environ["TORCH_LOGS"] = "recompiles_verbose" before importing torch
 
-_compile_traces: dict[str, list[str]] = {}
+_compile_traces = dict[str, list[str]]()
 
 
 @torch.compiler.assume_constant_result
@@ -239,102 +271,6 @@ def _find_multiple(a: int, b: int) -> int:
     return (-(a // -b)) * b
 
 
-def apply_rope(
-    q: Tensor,
-    k: Tensor,
-    cos: Tensor,
-    sin: Tensor,
-    interleave: bool = False,
-) -> tuple[Tensor, Tensor]:
-    """Apply rotary position embedding to query and key tensors.
-
-    cos/sin are half-dim (D//2). Splits q/k into pairs, applies a 2D
-    rotation, and recombines. No replication needed -- half the memory
-    vs full-dim cos/sin approaches.
-
-    The ``interleave`` flag selects the dimension pairing convention:
-
-    - ``False`` (default): GPT-NeoX / HuggingFace half-split. Pairs
-      dim i with dim i+D/2. This is the convention in all HuggingFace
-      Transformers models (LLaMA, Mistral, Gemma, Qwen, etc.). Default
-      because most pretrained checkpoints use HF.
-    - ``True``: RoFormer / Meta LLaMA interleave. Pairs dim 2i with
-      dim 2i+1 (consecutive). This matches the original paper's math
-      and Meta's official LLaMA code.
-
-    Both conventions are mathematically equivalent up to a permutation
-    of embedding dimensions. HuggingFace applies a weight permutation
-    during checkpoint conversion (``convert_llama_weights_to_hf.py``)
-    to reconcile the two. For bit-for-bit reproduction, match the
-    convention used during training.
-
-    When q/k have more sequence positions than cos/sin (e.g. from
-    padding), cos/sin are right-padded with identity values (cos=1,
-    sin=0) so extra positions are unrotated.
-
-    References:
-      - Su et al., RoFormer (arXiv:2104.09864), Eq. 34.
-      - HuggingFace transformers ``rotate_half``:
-        https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py
-      - Meta LLaMA ``apply_rotary_emb``:
-        https://github.com/meta-llama/llama/blob/main/llama/model.py
-
-    Args:
-      q: [..., S, H, D].
-      k: [..., S, H, D].
-      cos: [..., S', H, D//2] where H=1 (fixed) or num_heads
-          (learnable). S' <= S; right-padded to S if smaller.
-      sin: Same shape as cos.
-      interleave: Pairing convention (see above).
-
-    Returns:
-      q_embed: Rotated queries, same shape as q.
-      k_embed: Rotated keys, same shape as k.
-
-    """
-    # Pad cos/sin to match q/k sequence length if needed.
-    seq_dim = -3
-    seq_len = q.shape[seq_dim]
-    rope_len = cos.shape[seq_dim]
-    if rope_len < seq_len:
-        pad_shape = list(cos.shape)
-        pad_shape[seq_dim] = seq_len - rope_len
-        cos = torch.cat(
-            [cos, torch.ones(pad_shape, dtype=cos.dtype, device=cos.device)],
-            dim=seq_dim,
-        )
-        sin = torch.cat(
-            [sin, torch.zeros(pad_shape, dtype=sin.dtype, device=sin.device)],
-            dim=seq_dim,
-        )
-    return (
-        _rope_rotate(q, cos, sin, interleave),
-        _rope_rotate(k, cos, sin, interleave),
-    )
-
-
-def _rope_rotate(x: Tensor, cos: Tensor, sin: Tensor, interleave: bool) -> Tensor:
-    """Apply 2D rotation to a single tensor using half-dim cos/sin."""
-    dtype = x.dtype
-    shape = x.shape
-    # float32 rotation math → input dtype.
-    if interleave:
-        split_dim = -1
-        x = x.float().reshape(*shape[:-1], -1, 2)
-    else:
-        split_dim = -2
-        x = x.float().reshape(*shape[:-1], 2, -1)
-    x0, x1 = x.moveaxis(split_dim, 0)
-    return (
-        torch.stack(
-            [x0 * cos - x1 * sin, x1 * cos + x0 * sin],
-            dim=split_dim,
-        )
-        .reshape(shape)
-        .to(dtype)
-    )
-
-
 class RoPE(nn.Module):
     """N-dimensional Rotary Position Embedding with fixed frequencies.
 
@@ -345,11 +281,11 @@ class RoPE(nn.Module):
     axis (e.g. ``dim=[128, 0]`` encodes only the first axis).
 
     Returns half-dim cos/sin (shape ``[..., S, 1, dim//2]``). Pair
-    with ``apply_rope`` which splits q/k, applies the 2D rotation, and
+    with ``RoPE.rotate`` which splits q/k, applies the 2D rotation, and
     recombines -- no replication needed. The ``interleave`` flag on
-    ``apply_rope`` selects the dimension pairing convention:
+    ``RoPE.rotate`` selects the dimension pairing convention:
     GPT-NeoX / HuggingFace half-split (LLaMA, Mistral, Gemma, Qwen)
-    vs RoFormer / Meta LLaMA interleave. See ``apply_rope`` docstring
+    vs RoFormer / Meta LLaMA interleave. See ``RoPE.rotate`` docstring
     for details.
 
     ``smallest_recommended_base(dim, max_positions)`` reference:
@@ -386,14 +322,16 @@ class RoPE(nn.Module):
 
     """
 
-    def __init__(
-        self,
-        dim: int | Iterable[int],
-        *,
-        base: float | Iterable[float] = 10e3,
-        reduction_mode: Literal["cat", "sum"] = "cat",
-    ):
+    class Config(Fig):
+        dim: int | Iterable[int] = 64
+        base: float | Iterable[float] = 10e3
+        reduction_mode: Literal["cat", "sum"] = "cat"
+
+    def __init__(self, config: Config):
         super().__init__()
+        dim = config.dim
+        base = config.base
+        reduction_mode = config.reduction_mode
         self.reduction_mode = reduction_mode
         if (
             reduction_mode == "cat"
@@ -402,7 +340,7 @@ class RoPE(nn.Module):
             and len(base) > 1
         ):
             dim = self._split_dim(dim, len(base))
-        dim, base = self._broadcast_sequences(dim, base)
+        dim, base = broadcast_sequences(dim, base)
         self.dim = tuple(int(d) for d in dim)
         self.base = tuple(float(b) for b in base)
         self._inv_freqs: list[Tensor] = [torch.empty(0) for _ in self.dim]
@@ -454,6 +392,103 @@ class RoPE(nn.Module):
         )
 
     @classmethod
+    def rotate(
+        cls,
+        q: Tensor,
+        k: Tensor,
+        cos: Tensor,
+        sin: Tensor,
+        interleave: bool = False,
+    ) -> tuple[Tensor, Tensor]:
+        """Apply rotary position embedding to query and key tensors.
+
+        cos/sin are half-dim (D//2). Splits q/k into pairs, applies a 2D
+        rotation, and recombines. No replication needed -- half the memory
+        vs full-dim cos/sin approaches.
+
+        The ``interleave`` flag selects the dimension pairing convention:
+
+        - ``False`` (default): GPT-NeoX / HuggingFace half-split. Pairs
+          dim i with dim i+D/2. This is the convention in all HuggingFace
+          Transformers models (LLaMA, Mistral, Gemma, Qwen, etc.). Default
+          because most pretrained checkpoints use HF.
+        - ``True``: RoFormer / Meta LLaMA interleave. Pairs dim 2i with
+          dim 2i+1 (consecutive). This matches the original paper's math
+          and Meta's official LLaMA code.
+
+        Both conventions are mathematically equivalent up to a permutation
+        of embedding dimensions. HuggingFace applies a weight permutation
+        during checkpoint conversion (``convert_llama_weights_to_hf.py``)
+        to reconcile the two. For bit-for-bit reproduction, match the
+        convention used during training.
+
+        When q/k have more sequence positions than cos/sin (e.g. from
+        padding), cos/sin are right-padded with identity values (cos=1,
+        sin=0) so extra positions are unrotated.
+
+        References:
+          - Su et al., RoFormer (arXiv:2104.09864), Eq. 34.
+          - HuggingFace transformers ``rotate_half``:
+            https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py
+          - Meta LLaMA ``apply_rotary_emb``:
+            https://github.com/meta-llama/llama/blob/main/llama/model.py
+
+        Args:
+          q: [..., S, H, D].
+          k: [..., S, H, D].
+          cos: [..., S', H, D//2] where H=1 (fixed) or num_heads
+              (learnable). S' <= S; right-padded to S if smaller.
+          sin: Same shape as cos.
+          interleave: Pairing convention (see above).
+
+        Returns:
+          q_embed: Rotated queries, same shape as q.
+          k_embed: Rotated keys, same shape as k.
+
+        """
+        # Pad cos/sin to match q/k sequence length if needed.
+        seq_dim = -3
+        seq_len = q.shape[seq_dim]
+        rope_len = cos.shape[seq_dim]
+        if rope_len < seq_len:
+            pad_shape = list(cos.shape)
+            pad_shape[seq_dim] = seq_len - rope_len
+            cos = torch.cat(
+                [cos, torch.ones(pad_shape, dtype=cos.dtype, device=cos.device)],
+                dim=seq_dim,
+            )
+            sin = torch.cat(
+                [sin, torch.zeros(pad_shape, dtype=sin.dtype, device=sin.device)],
+                dim=seq_dim,
+            )
+        return (
+            cls._rotate(q, cos, sin, interleave),
+            cls._rotate(k, cos, sin, interleave),
+        )
+
+    @staticmethod
+    def _rotate(x: Tensor, cos: Tensor, sin: Tensor, interleave: bool) -> Tensor:
+        """Apply 2D rotation to a single tensor using half-dim cos/sin."""
+        dtype = x.dtype
+        shape = x.shape
+        # float32 rotation math → input dtype.
+        if interleave:
+            split_dim = -1
+            x = x.float().reshape(*shape[:-1], -1, 2)
+        else:
+            split_dim = -2
+            x = x.float().reshape(*shape[:-1], 2, -1)
+        x0, x1 = x.moveaxis(split_dim, 0)
+        return (
+            torch.stack(
+                [x0 * cos - x1 * sin, x1 * cos + x0 * sin],
+                dim=split_dim,
+            )
+            .reshape(shape)
+            .to(dtype)
+        )
+
+    @classmethod
     def smallest_recommended_base(
         cls,
         dim: int | Iterable[int],
@@ -482,7 +517,7 @@ class RoPE(nn.Module):
           base: Float (1D) or tuple of floats (ND).
 
         """
-        dims, maxpos = cls._broadcast_sequences(dim, max_positions)
+        dims, maxpos = broadcast_sequences(dim, max_positions)
         bases = []
         for c, m in zip(dims, maxpos, strict=True):
             if c == 0:
@@ -491,26 +526,6 @@ class RoPE(nn.Module):
             cls._validate_c(c)
             bases.append(((m - 1) / (2 * math.pi)) ** (c / (c - 2)))
         return bases[0] if len(bases) == 1 else tuple(bases)
-
-    @classmethod
-    def mesh_arange(
-        cls,
-        end: int | Sequence[int],
-        *,
-        start: int | Sequence[int] = 0,
-        step: int | Sequence[int] = 1,
-        dtype: torch.dtype = torch.long,
-        device: torch.device | str | None = None,
-    ) -> Tensor:
-        start, end, step = cls._broadcast_sequences(start, end, step)
-        grid = torch.meshgrid(
-            *[
-                torch.arange(s, e, st, dtype=dtype, device=device)
-                for s, e, st in zip(start, end, step, strict=False)
-            ],
-            indexing="ij",
-        )
-        return torch.stack(grid, dim=-1).reshape(-1, len(end))
 
     @classmethod
     def _make_inv_freqs(cls, b: float, c: int) -> Tensor:
@@ -554,19 +569,6 @@ class RoPE(nn.Module):
             dims[i] += 2
         return dims
 
-    @classmethod
-    def _broadcast_sequences(
-        cls,
-        *args: object | Sequence[object],
-    ) -> tuple[list[Any], ...]:
-        lists = [[a] if not isinstance(a, Sequence) else list(a) for a in args]
-        nd = max(len(a) for a in lists)
-        for a in lists:
-            if len(a) not in (1, nd):
-                lengths = [len(x) for x in lists]
-                raise ValueError(f"Incompatible lengths: {lengths}.")
-        return tuple(a * nd if len(a) == 1 else a for a in lists)
-
 
 class RoPEMixed(RoPE):
     """N-dimensional RoPE with per-head frequencies.
@@ -580,7 +582,7 @@ class RoPEMixed(RoPE):
     al., ECCV 2024](https://arxiv.org/abs/2403.13298).
 
     Returns half-dim cos/sin (shape ``[..., S, H, dim//2]``). Pair with
-    ``apply_rope``.
+    ``RoPE.rotate``.
 
     Args:
       dim: Channel count per axis (same semantics as ``RoPE``).
@@ -591,16 +593,15 @@ class RoPEMixed(RoPE):
 
     """
 
-    def __init__(
-        self,
-        dim: int | Iterable[int],
-        *,
-        num_heads: int = 1,
-        base: float | Iterable[float] = 10e3,
-        reduction_mode: Literal["cat", "sum"] = "cat",
-        learnable: bool = False,
-    ):
-        super().__init__(dim, base=base, reduction_mode=reduction_mode)
+    class Config(Makes["RoPEMixed"], RoPE.Config):
+        num_heads: int = 1
+        learnable: bool = False
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        reduction_mode = config.reduction_mode
+        num_heads = config.num_heads
+        learnable = config.learnable
         if reduction_mode == "sum":
             active_dims = {f.shape[-1] for f in self._inv_freqs if f.numel()}
             if len(active_dims) > 1:
@@ -637,39 +638,29 @@ class RoPEMixed(RoPE):
 class Linear(nn.Module):
     """Linear with configurable init."""
 
-    def __init__(
-        self,
-        c_in: int,
-        c_out: int,
-        *,
-        bias: bool = True,
-        init_weight_fn: InitFn = normal_init_,
-        init_bias_fn: InitFn = kaiming_uniform_init_,
-        dtype: torch.dtype | None = None,
-    ):
+    class Config(Fig):
+        c_in: int = -1
+        c_out: int = -1
+        bias: bool = True
+        init_weight_fn: InitFn = normal_init_
+        init_bias_fn: InitFn = kaiming_uniform_init_
+        dtype: torch.dtype | None = None
+
+    def __init__(self, config: Config):
         super().__init__()
-        self.c_in = c_in
-        self.c_out = c_out
+        self.c_in = c_in = config.c_in
+        self.c_out = c_out = config.c_out
+        init_weight_fn = config.init_weight_fn
+        init_bias_fn = config.init_bias_fn
+        dtype = config.dtype
         self.weight = nn.Parameter(
-            init_weight_fn(
-                torch.empty(
-                    [c_out, c_in],
-                    dtype=dtype,
-                ),
-            ),
+            init_weight_fn(torch.empty([c_out, c_in], dtype=dtype))
         )
-        if bias:
+        if config.bias:
             # TODO(josh): Consider adding to this "if": "or has kwarg 'c_in'".
             if init_bias_fn is kaiming_uniform_init_:
                 init_bias_fn = functools.partial(kaiming_uniform_init_, c_in=c_in)
-            self.bias = nn.Parameter(
-                init_bias_fn(
-                    torch.empty(
-                        c_out,
-                        dtype=dtype,
-                    ),
-                ),
-            )
+            self.bias = nn.Parameter(init_bias_fn(torch.empty(c_out, dtype=dtype)))
         else:
             self.bias = None
 
@@ -679,11 +670,7 @@ class Linear(nn.Module):
         return nn.functional.linear(x, w, b)
 
 
-default_norm_fn = functools.partial(
-    nn.RMSNorm,
-    eps=1e-5,
-    elementwise_affine=False,
-)
+default_norm_fn = functools.partial(nn.RMSNorm, eps=1e-5, elementwise_affine=False)
 default_act_fn = nn.functional.silu
 
 
@@ -694,26 +681,22 @@ class EnsembleLinear(nn.Module):
     Output shape: [..., num_ensemble, c_out]
     """
 
-    def __init__(
-        self,
-        c_in: int,
-        c_out: int,
-        *,
-        num_ensemble: int,
-        bias: bool = False,
-        init_weight_fn: InitFn = normal_init_,
-    ):
+    class Config(Fig):
+        c_in: int = -1
+        c_out: int = -1
+        num_ensemble: int = -1
+        bias: bool = False
+        init_weight_fn: InitFn = normal_init_
+
+    def __init__(self, config: Config):
         super().__init__()
+        c_in, c_out = config.c_in, config.c_out
+        num_ensemble = config.num_ensemble
         self.weight = nn.Parameter(
-            init_weight_fn(torch.empty([num_ensemble, c_out, c_in])),
+            config.init_weight_fn(torch.empty([num_ensemble, c_out, c_in]))
         )
-        if bias:
-            self.bias = nn.Parameter(
-                torch.zeros(
-                    num_ensemble,
-                    c_out,
-                ),
-            )
+        if config.bias:
+            self.bias = nn.Parameter(torch.zeros(num_ensemble, c_out))
         else:
             self.bias = None
 
@@ -729,22 +712,22 @@ class EnsembleLinear(nn.Module):
 class Embedding(nn.Module):
     """Embedding with truncated normal init."""
 
-    def __init__(
-        self,
-        num_embeddings: int,
-        embedding_dim: int,
-        *,
-        init_weight_fn: InitFn = trunc_normal_init_,  # std = rsqrt(c_in)
-        dtype: torch.dtype | None = None,
-    ):
+    class Config(Fig):
+        num_embeddings: int = -1
+        embedding_dim: int = -1
+        init_weight_fn: InitFn = trunc_normal_init_
+        """std = rsqrt(c_in)."""
+        dtype: torch.dtype | None = None
+
+    def __init__(self, config: Config):
         super().__init__()
         self.weight = nn.Parameter(
-            init_weight_fn(
+            config.init_weight_fn(
                 torch.empty(
-                    [num_embeddings, embedding_dim],
-                    dtype=dtype,
-                ),
-            ),
+                    [config.num_embeddings, config.embedding_dim],
+                    dtype=config.dtype,
+                )
+            )
         )
 
     def forward(self, x: Tensor, dtype: torch.dtype | None = None) -> Tensor:
@@ -766,17 +749,12 @@ def make_grid_positions(
     When legacy=True, uses the old convention (1-offset on ALL axes).
     """
     n = len(grid_shape)
-    grid_pos = RoPE.mesh_arange(grid_shape, device=device)
+    grid_pos = mesh_arange(grid_shape, device=device)
     if legacy:
         grid_pos = 1 + grid_pos
     else:
         grid_pos[:, 0] += num_prefix_tokens
-    prefix = torch.zeros(
-        num_prefix_tokens,
-        n,
-        dtype=torch.long,
-        device=device,
-    )
+    prefix = torch.zeros(num_prefix_tokens, n, dtype=torch.long, device=device)
     prefix[:, -1] = torch.arange(num_prefix_tokens, device=device)
     return torch.cat([prefix, grid_pos])
 
@@ -784,46 +762,50 @@ def make_grid_positions(
 class Attention(nn.Module):
     """Multi-head attention with fused QKV EnsembleLinear for Muon orthogonalization."""
 
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        num_heads: int,
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        muon_modified: bool = False,
-        checkpoint_muon_norm: bool = False,
-        qk_norm: bool = False,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-    ):
+    class Config(Fig):
+        c_in: int = -1
+        num_heads: int = -1
+        num_key_value_heads: int | None = None
+        causal: bool = False
+        muon_modified: bool = False
+        checkpoint_muon_norm: bool = False
+        qk_norm: bool = False
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn
+        init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02)
+
+    def __init__(self, config: Config):
+        c_in = config.c_in
+        num_heads = config.num_heads
         assert num_heads > 0
         super().__init__()
         self.head_dim = c_in // num_heads
         self.num_heads = num_heads
+        num_key_value_heads = config.num_key_value_heads
         if num_key_value_heads is None:
             num_key_value_heads = num_heads
         self.num_key_value_heads = num_key_value_heads
-        self.causal = causal
-        self.checkpoint_muon_norm = checkpoint_muon_norm
+        self.causal = config.causal
+        self.checkpoint_muon_norm = config.checkpoint_muon_norm
+        init_weight_fn = config.init_weight_fn
+        norm_fn = config.norm_fn
 
         # Fused QKV: one kernel, each head orthogonalized independently by Muon
         # Ensemble dim = num_heads + 2 * num_key_value_heads (Q heads + K heads + V heads)
-        self.qkv_proj = EnsembleLinear(
-            c_in,
-            self.head_dim,
+        self.qkv_proj = EnsembleLinear.Config(
+            c_in=c_in,
+            c_out=self.head_dim,
             num_ensemble=num_heads + 2 * num_key_value_heads,
             bias=False,
             init_weight_fn=init_weight_fn,
-        )
-        self.o_proj = Linear(
-            c_in,
-            c_in,
+        ).make()
+        self.o_proj = Linear.Config(
+            c_in=c_in,
+            c_out=c_in,
             bias=False,
             init_weight_fn=init_weight_fn,
-        )
-        self.o_norm = norm_fn(c_in) if muon_modified else None
-        self.qk_norm = norm_fn(self.head_dim) if qk_norm else None
+        ).make()
+        self.o_norm = norm_fn(c_in) if config.muon_modified else None
+        self.qk_norm = norm_fn(self.head_dim) if config.qk_norm else None
 
     def forward(
         self,
@@ -845,11 +827,11 @@ class Attention(nn.Module):
 
         if cos_sin is not None:
             cos, sin = cos_sin
-            q, k = apply_rope(q, k, cos, sin)
+            q, k = RoPE.rotate(q, k, cos, sin)
 
-        q, k, v = (t.transpose(-2, -3) for t in (q, k, v))  # S H D -> H S D
+        q, k, v = (t.movedim(-2, -3) for t in (q, k, v))  # S H D -> H S D
         out = nn.functional.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
-        out = out.transpose(-3, -2).flatten(-2)  # H S D -> S (H D)
+        out = out.movedim(-3, -2).flatten(-2)  # H S D -> S (H D)
         if self.o_norm is not None:
             if self.checkpoint_muon_norm:
                 out = torch_checkpoint(self.o_norm, out, use_reentrant=False)
@@ -865,42 +847,47 @@ class SwiGLU(nn.Module):
     muon_modified=False: silu(gate) * x
     """
 
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        expansion: float = 4.0,
-        gate: bool = True,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        muon_modified: bool = True,
-        init_weight_fn: InitFn = normal_init_,
-    ):
+    class Config(Fig):
+        c_in: int = -1
+        expansion: float = 4.0
+        gate: bool = True
+        multiple_of: int = 256
+        act_fn: Callable[[Tensor], Tensor] = default_act_fn
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn
+        muon_modified: bool = True
+        init_weight_fn: InitFn = normal_init_
+
+    def __init__(self, config: Config):
         super().__init__()
+        c_in = config.c_in
+        gate = config.gate
+        init_weight_fn = config.init_weight_fn
+        act_fn = config.act_fn
+        muon_modified = config.muon_modified
         self.gate = gate
+        expansion = config.expansion
         if gate:
             expansion *= 2 / 3
-        c_hidden = _find_multiple(round(expansion * c_in), multiple_of)
-        self.up_proj = Linear(
-            c_in,
-            (c_hidden * 2) if gate else c_hidden,
+        c_hidden = _find_multiple(round(expansion * c_in), config.multiple_of)
+        self.up_proj = Linear.Config(
+            c_in=c_in,
+            c_out=(c_hidden * 2) if gate else c_hidden,
             bias=False,
             init_weight_fn=init_weight_fn,
-        )
-        self.down_proj = Linear(
-            c_hidden,
-            c_in,
+        ).make()
+        self.down_proj = Linear.Config(
+            c_in=c_hidden,
+            c_out=c_in,
             bias=False,
             init_weight_fn=init_weight_fn,
-        )
+        ).make()
         if muon_modified:
             if act_fn is not nn.functional.silu:
                 raise NotImplementedError(
                     "Muon modified SwiGLU is only defined when "
                     f"act_fn is nn.functional.silu ({act_fn})."
                 )
-            self.norm = norm_fn(c_hidden)
+            self.norm = config.norm_fn(c_hidden)
         else:
             self.norm = None
         self.act = act_fn
@@ -928,55 +915,29 @@ class SwiGLU(nn.Module):
 class TransformerBlock(nn.Module):
     """Transformer block with attention and MLP. Uses post-norm."""
 
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        prenorm: bool = False,
-        # MLP.
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        gate: bool = True,
-        mlp_muon_modified: bool = True,
-        mlp_init_weight_fn: InitFn = normal_init_,
-        # Attention specific kwargs.
-        num_heads: int = 0,  # Required >0.
-        num_key_value_heads: int | None = None,
-        causal: bool = False,
-        attn_muon_modified: bool = False,
-        attn_checkpoint_muon_norm: bool = False,
-        attn_qk_norm: bool = False,
-        attn_init_weight_fn: InitFn = functools.partial(normal_init_, std=0.02),
-        checkpoint: bool = False,
-    ):
+    class Config(Fig):
+        c_in: int = -1
+        attn: ConfigurableChannelsIn = field(default_factory=Attention.Config)
+        ffn: ConfigurableChannelsIn = field(default_factory=SwiGLU.Config)
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn
+        prenorm: bool = False
+        checkpoint: bool = False
+
+        def finalize(self) -> Self:
+            r = super().finalize()
+            r.attn.c_in = r.c_in
+            r.ffn.c_in = r.c_in
+            return r
+
+    def __init__(self, config: Config):
         super().__init__()
-        self.checkpoint = checkpoint
-        self.attn = Attention(
-            c_in,
-            num_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-            causal=causal,
-            muon_modified=attn_muon_modified,
-            checkpoint_muon_norm=attn_checkpoint_muon_norm,
-            qk_norm=attn_qk_norm,
-            norm_fn=norm_fn,
-            init_weight_fn=attn_init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=mlp_muon_modified,
-            init_weight_fn=mlp_init_weight_fn,
-        )
-        self.prenorm = prenorm
-        self.norm1 = norm_fn(c_in)
-        self.norm2 = norm_fn(c_in)
+        self.checkpoint = config.checkpoint
+        self.prenorm = config.prenorm
+        self.attn = config.attn.make()
+        self.mlp = config.ffn.make()
+        norm_fn = config.norm_fn
+        self.norm1 = norm_fn(config.c_in)
+        self.norm2 = norm_fn(config.c_in)
 
     def _forward(
         self,
@@ -1013,49 +974,29 @@ class TransformerBlock(nn.Module):
 class MLPMixerBlock(nn.Module):
     """MLP-Mixer block with token-mixing and channel-mixing. Uses post-norm."""
 
-    def __init__(
-        self,
-        c_in: int,
-        *,
-        prenorm: bool = False,
-        expansion: float = 4.0,
-        multiple_of: int = 256,
-        norm_fn: Callable[[int], nn.Module] = default_norm_fn,
-        act_fn: Callable[[Tensor], Tensor] = default_act_fn,
-        muon_modified: bool = True,
-        gate: bool = True,
-        # MLPMixer specific kwargs.
-        seq_len: int = 0,
-        token_multiple_of: int | None = None,
-        init_weight_fn: InitFn = normal_init_,
-    ):
-        assert seq_len > 0
+    class Config(Fig):
+        c_in: int = -1
+        seq_len: int = -1
+        attn: ConfigurableChannelsIn = field(default_factory=SwiGLU.Config)
+        ffn: ConfigurableChannelsIn = field(default_factory=SwiGLU.Config)
+        norm_fn: Callable[[int], nn.Module] = default_norm_fn
+        prenorm: bool = False
+
+        def finalize(self) -> Self:
+            r = super().finalize()
+            r.attn.c_in = r.seq_len
+            r.ffn.c_in = r.c_in
+            return r
+
+    def __init__(self, config: Config):
+        assert config.seq_len > 0
         super().__init__()
-        if token_multiple_of is None:
-            token_multiple_of = multiple_of
-        self.attn = SwiGLU(
-            seq_len,
-            expansion=expansion,
-            multiple_of=token_multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=muon_modified,
-            init_weight_fn=init_weight_fn,
-        )
-        self.mlp = SwiGLU(
-            c_in,
-            expansion=expansion,
-            multiple_of=multiple_of,
-            norm_fn=norm_fn,
-            act_fn=act_fn,
-            gate=gate,
-            muon_modified=muon_modified,
-            init_weight_fn=init_weight_fn,
-        )
-        self.prenorm = prenorm
-        self.norm1 = norm_fn(seq_len)
-        self.norm2 = norm_fn(c_in)
+        self.attn = config.attn.make()
+        self.mlp = config.ffn.make()
+        norm_fn = config.norm_fn
+        self.prenorm = config.prenorm
+        self.norm1 = norm_fn(config.seq_len)
+        self.norm2 = norm_fn(config.c_in)
 
     def forward(
         self,
@@ -1065,17 +1006,17 @@ class MLPMixerBlock(nn.Module):
         if cos_sin is not None:
             raise NotImplementedError("MLPMixerBlock does not support RoPE")
         if self.prenorm:
-            x = x.transpose(-2, -1)  # [*B, D, S]
+            x = x.movedim(-2, -1)  # [*B, D, S]
             z = self.norm1(x)  # Specifically doing norm on S.
             x = x + self.attn(z)
-            x = x.transpose(-2, -1)  # [*B, S, D]
+            x = x.movedim(-2, -1)  # [*B, S, D]
             z = self.norm2(x)
             x = x + self.mlp(z)
         else:
-            x = x.transpose(-2, -1)  # [*B, D, S]
+            x = x.movedim(-2, -1)  # [*B, D, S]
             x = x + self.attn(x)
             x = self.norm1(x)  # Specifically doing norm on S.
-            x = x.transpose(-2, -1)  # [*B, S, D]
+            x = x.movedim(-2, -1)  # [*B, S, D]
             x = x + self.mlp(x)
             x = self.norm2(x)
         return x
@@ -1084,8 +1025,18 @@ class MLPMixerBlock(nn.Module):
 class BatchNorm(nn.BatchNorm1d):
     """BatchNorm1d for (B, L, C) input."""
 
-    def __init__(self, num_features: int, momentum: float = 0.4, eps: float = 1e-12):
-        super().__init__(num_features, momentum=momentum, eps=eps, affine=False)
+    class Config(Fig):
+        num_features: int = -1
+        momentum: float = 0.4
+        eps: float = 1e-12
+
+    def __init__(self, config: Config):
+        super().__init__(
+            config.num_features,
+            momentum=config.momentum,
+            eps=config.eps,
+            affine=False,
+        )
 
     def forward(self, input: Tensor) -> Tensor:
         return super().forward(input.reshape(-1, input.shape[-1])).reshape(*input.shape)
@@ -1094,11 +1045,21 @@ class BatchNorm(nn.BatchNorm1d):
 class GroupNorm(nn.GroupNorm):
     """GroupNorm for (B, L, C) input."""
 
-    def __init__(self, num_features: int, num_groups: int = 8, eps: float = 1e-5):
-        super().__init__(num_groups, num_features, eps=eps, affine=False)
+    class Config(Fig):
+        num_features: int = -1
+        num_groups: int = 8
+        eps: float = 1e-5
+
+    def __init__(self, config: Config):
+        super().__init__(
+            config.num_groups,
+            config.num_features,
+            eps=config.eps,
+            affine=False,
+        )
 
     def forward(self, input: Tensor) -> Tensor:
-        return super().forward(input.transpose(-2, -1)).transpose(-1, -2)
+        return super().forward(input.movedim(-2, -1)).movedim(-2, -1)
 
 
 class Sequential(nn.Sequential):
@@ -1118,7 +1079,7 @@ class EMA:
         self.shadow = {
             n: p.data.clone() for n, p in model.named_parameters() if p.requires_grad
         }
-        self.backup: dict[str, Tensor] = {}
+        self.backup = dict[str, Tensor]()
 
     @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
     def update(self, model: ModuleProtocol) -> None:
@@ -1138,124 +1099,137 @@ class EMA:
         for n, p in model.named_parameters():
             if p.requires_grad:
                 p.data.copy_(self.backup[n])
-        self.backup = {}
+        self.backup = dict[str, Tensor]()
 
 
-def _block_fn_creates_mlp_mixer(block_fn: Callable[[int], nn.Module]) -> bool:
-    """Check if block_fn creates MLPMixerBlock without instantiating.
-
-    Uses `is` identity check intentionally - subclasses would need their own
-    validation logic since they may handle seq_len/RoPE differently.
-    """
-    if isinstance(block_fn, functools.partial):
-        return block_fn.func is MLPMixerBlock
-    return block_fn is MLPMixerBlock
+def _block_is_mlp_mixer(block: object) -> bool:
+    """Check if block config creates MLPMixerBlock without instantiating."""
+    return isinstance(block, MLPMixerBlock.Config)
 
 
 class TRM3(nn.Module):
     """Tiny Recursive Model."""
 
-    @dataclasses.dataclass(slots=True, kw_only=True)
-    class Config:
-        vocab_size: int = 10 + 1 + 1  # values + unknown + halt
+    class Config(Fig):
+        vocab_size: int = 10 + 1 + 1
+        """values + unknown + halt."""
         puzzle_grid_shape: tuple[int, ...] = (9, 9)
         hidden_size: int = 512
         num_layers: int = 2
         H_cycles: int = 6
         L_cycles: int = 9
 
-        # I dont like this dtype default!
         dtype: torch.dtype | None = torch.bfloat16
         device: torch.device | str | None = "cuda"
 
         head_bias: bool = True
-        # NOTE: Default uses class-level puzzle_grid_shape (81) at definition time.
-        # If you change puzzle_grid_shape, you must also provide a compatible block_fn.
-        block_fn: Callable[[int], nn.Module] = functools.partial(  # noqa: RUF009
-            MLPMixerBlock,
-            seq_len=9 * 9 + 1,
-            init_weight_fn=trunc_normal_init_,
+        block: ConfigurableChannelsIn = field(
+            default_factory=lambda: MLPMixerBlock.Config(
+                seq_len=9 * 9 + 1,
+                attn=SwiGLU.Config(init_weight_fn=trunc_normal_init_),
+                ffn=SwiGLU.Config(init_weight_fn=trunc_normal_init_),
+            ),
         )
-        block_kwargs_by_layer: dict[int, dict[str, Any]] = dataclasses.field(
-            default_factory=dict,
-        )
+        block_kwargs_by_layer: dict[int, dict[str, Any]] = field(default_factory=dict)
         compile_core: bool = True
         compile_reasoning: bool = False
         max_num_compile_core: int = 3
 
-        # Head configuration
-        K_H: int = 1  # z_H pool size
-        K_L: int = 4  # z_L pool size
-        K_H_active: int | None = None  # active per step (None = K_H)
-        K_L_active: int | None = None  # active per step (None = K_L)
+        K_H: int = 1
+        """z_H pool size."""
+        K_L: int = 4
+        """z_L pool size."""
+        K_H_active: int | None = None
+        """Active per step (None = K_H)."""
+        K_L_active: int | None = None
+        """Active per step (None = K_L)."""
 
-        # Pairing policy
         HL_policy: Literal["inner", "outer"] = "inner"
         HL_random_subset_size: int | None = None
 
-        # Carry policy: how to update chains after each step
-        # - "top1": only winner chain's state carried, others frozen (keep current state)
-        # - "top2": top 2 chains' states carried, others frozen
-        # - "copy_top1": all chains get winner's output copied
-        # - "copy_top2": half get top1, half get top2 (randperm assignment)
-        # - "all": all chains updated with their own output (no selection)
-        # - "none": no carry - reset to init each step
         carry_H: CarryPolicy = "top1"
+        """How to update z_H chains after each step.
+
+        - "top1": only winner chain's state carried, others frozen
+        - "top2": top 2 chains' states carried, others frozen
+        - "copy_top1": all chains get winner's output copied
+        - "copy_top2": half get top1, half get top2 (randperm assignment)
+        - "all": all chains updated with their own output (no selection)
+        - "none": no carry - reset to init each step
+        """
         carry_L: CarryPolicy = "all"
+        """How to update z_L chains after each step. See carry_H."""
 
-        # SVD init alignment
         z_H_init_svd: bool = False
+        """SVD init alignment for z_H."""
         z_L_init_svd: bool = False
+        """SVD init alignment for z_L."""
 
-        # Embedding rescale trick (TRM-style): init with std=1/sqrt(C), multiply by sqrt(C)
-        # This affects gradient magnitudes for Adam. True = TRM behavior, False = pre-scaled.
         embedding_rescale_trick: bool = True
+        """Init with std=1/sqrt(C), multiply by sqrt(C).
 
-        # Delta reparameterization: z = z_init + z_delta where delta is detached.
-        # Allows gradients to flow to H_init/L_init in final H-cycle.
+        This affects gradient magnitudes for Adam. True = TRM behavior,
+        False = pre-scaled.
+        """
+
         z_delta_reparam: bool = False
+        """Delta reparameterization: z = z_init + z_delta where delta is detached.
 
-        # Random z init: sample from trunc_normal(0, 1) instead of learned H_init/L_init
+        Allows gradients to flow to H_init/L_init in final H-cycle.
+        """
+
         z_H_random_init: bool = False
+        """Sample z_H from trunc_normal(0, 1) instead of learned H_init."""
         z_L_random_init: bool = False
+        """Sample z_L from trunc_normal(0, 1) instead of learned L_init."""
 
         use_rope: bool = False
-        rope_kwargs: dict[str, Any] = dataclasses.field(default_factory=dict)
-        num_heads: int = 8  # Only used for RoPE dim calculation
+        rope_kwargs: dict[str, Any] = field(default_factory=dict)
+        num_heads: int = 8
+        """Only used for RoPE dim calculation."""
 
-        # Prefix tokens: prepend before puzzle_grid
-        # Sequence order: [puzzle_id_tokens..., register_tokens..., puzzle_grid...]
-        # - puzzle_id_tokens: per-puzzle learned tokens (embedding table)
-        # - register_tokens: shared learned tokens (puzzle-agnostic)
-        # q_head reads from q_halt_seq_index position in the full sequence
-        num_puzzle_id_tokens: int = 0  # Per-puzzle learned tokens
-        num_register_tokens: int = (
-            1  # Shared learned tokens (replaces old HALT token role)
-        )
-        register_token_init_std: float = 1.0  # 0 = zero-init (TRM reference)
-        register_tokens_learnable: bool = (
-            True  # False = fixed (reference uses zero-pad, not learnable)
-        )
-        num_puzzle_ids: int = 0  # Size of puzzle ID embedding table
-        q_halt_seq_index: int = 0  # Sequence position from which q_head reads
+        num_puzzle_id_tokens: int = 0
+        """Per-puzzle learned tokens prepended before puzzle_grid."""
+        num_register_tokens: int = 1
+        """Shared learned tokens (replaces old HALT token role)."""
+        register_token_init_std: float = 1.0
+        """0 = zero-init (TRM reference)."""
+        register_tokens_learnable: bool = True
+        """False = fixed (reference uses zero-pad, not learnable)."""
+        num_puzzle_ids: int = 0
+        """Size of puzzle ID embedding table."""
+        q_halt_seq_index: int = 0
+        """Sequence position from which q_head reads."""
 
-        # If False, head outputs vocab_size-1 classes (no PAD logit).
-        # Labels must be shifted: labels-1 with ignore_index=-1.
         label_smoothing_includes_pad_token: bool = True
+        """If False, head outputs vocab_size-1 classes (no PAD logit).
 
-        # Whether TRM3.__init__ casts all params/buffers to config.dtype via self.to().
-        # Set False to keep RoPE buffers in float32 (needed for b4b match with reference).
+        Labels must be shifted: labels-1 with ignore_index=-1.
+        """
+
         cast_model_to_dtype: bool = True
+        """Whether __init__ casts all params/buffers to config.dtype via self.to().
 
-        # Damping factor for iterative reasoning: z = (1-α)·z + α·reasoning(z).
-        # 0.0 = no damping (default), 0.5 = half step. Enforces contractivity
-        # when reasoning block uses post-norm (which constrains output magnitude).
+        Set False to keep RoPE buffers in float32 (needed for b4b match with reference).
+        """
+
         core_damping: float = 0.0
+        """Damping factor for iterative reasoning: z = (1-a)*z + a*reasoning(z).
 
-        # Anchor: sequence index reset to a learned embedding every
-        # reasoning() call in core(). Fixed reference point for RoPE-based
-        # position recovery. None = off.
+        0.0 = no damping (default), 0.5 = half step. Enforces contractivity
+        when reasoning block uses post-norm (which constrains output magnitude).
+        """
+
         anchor_seq_index: int | None = None
+        """Sequence index reset to a learned embedding every reasoning() call.
+
+        Fixed reference point for RoPE-based position recovery. None = off.
+        """
+
+        def finalize(self) -> Self:
+            r = super().finalize()
+            r.block.c_in = r.hidden_size
+            return r
 
         @property
         def num_puzzle_grid_tokens(self) -> int:
@@ -1293,9 +1267,6 @@ class TRM3(nn.Module):
                 return n
             return min(n, self.HL_random_subset_size)
 
-        def setup(self, *args: Any, **kwargs: Any) -> TRM3:
-            return TRM3(self, *args, **kwargs)
-
     def __init__(self, config: Config):
         super().__init__()
         if config.device is not None:
@@ -1303,11 +1274,11 @@ class TRM3(nn.Module):
 
         # Validate: MLPMixerBlock requires seq_len to match actual sequence length.
         # With prefix tokens, total_seq_len > num_puzzle_grid_tokens, so the
-        # default block_fn (MLPMixerBlock with seq_len=num_puzzle_grid_tokens+1)
-        # will have mismatched dimensions. User must provide a compatible block_fn.
+        # default block (MLPMixerBlock with seq_len=num_puzzle_grid_tokens+1)
+        # will have mismatched dimensions. User must provide a compatible block.
         if (
             config.num_puzzle_id_tokens > 0 or config.num_register_tokens > 0
-        ) and _block_fn_creates_mlp_mixer(config.block_fn):
+        ) and _block_is_mlp_mixer(config.block):
             raise ValueError(
                 "MLPMixerBlock cannot be used with prefix tokens "
                 f"(num_puzzle_id_tokens={config.num_puzzle_id_tokens}, "
@@ -1323,7 +1294,7 @@ class TRM3(nn.Module):
             )
 
         # Validate: MLPMixerBlock doesn't support RoPE (raises at runtime otherwise)
-        if config.use_rope and _block_fn_creates_mlp_mixer(config.block_fn):
+        if config.use_rope and _block_is_mlp_mixer(config.block):
             raise ValueError(
                 "MLPMixerBlock does not support RoPE. "
                 "Use TransformerBlock or set use_rope=False.",
@@ -1341,50 +1312,49 @@ class TRM3(nn.Module):
         # NOTE: Init order must match TRM for RNG compatibility:
         # embed_tokens -> head -> q_head -> reasoning -> H_init -> L_init
         # PRNG_EQUIVALENCE: Don't pass dtype to Embedding - TRM doesn't, and it affects RNG.
-        self.embed_tokens = Embedding(
-            config.vocab_size,
-            config.hidden_size,
+        self.embed_tokens = Embedding.Config(
+            num_embeddings=config.vocab_size,
+            embedding_dim=config.hidden_size,
             init_weight_fn=functools.partial(
                 trunc_normal_init_,
                 std=1.0 / self.embed_scale,
             ),
-        )
-        self.head = Linear(
-            config.hidden_size,
-            config.vocab_size - (not config.label_smoothing_includes_pad_token),
+        ).make()
+        self.head = Linear.Config(
+            c_in=config.hidden_size,
+            c_out=config.vocab_size - (not config.label_smoothing_includes_pad_token),
             bias=config.head_bias,
             init_weight_fn=trunc_normal_init_,  # std = rsqrt(hidden_size)
             init_bias_fn=nn.init.zeros_,
-        )
-        self.q_head = Linear(
-            config.hidden_size,
-            1,
+        ).make()
+        self.q_head = Linear.Config(
+            c_in=config.hidden_size,
+            c_out=1,
             bias=True,
             init_weight_fn=nn.init.zeros_,
             init_bias_fn=functools.partial(nn.init.constant_, val=-5.0),
-        )
+        ).make()
         # PRNG_EQUIVALENCE: Must consume RNG for backwards compat.
         _ = normal_init_(torch.empty_like(self.q_head.weight))
-        self.reasoning = Sequential(
-            *[
-                config.block_fn(
-                    config.hidden_size,
-                    **config.block_kwargs_by_layer.get(i, {}),
-                )
-                for i in range(config.num_layers)
-            ],
-        )
+        blocks = []
+        for i in range(config.num_layers):
+            block_cfg = copy.copy(config.block)
+            overrides = config.block_kwargs_by_layer.get(i, {})
+            if overrides:
+                block_cfg.update(**overrides)
+            blocks.append(block_cfg.make())
+        self.reasoning = Sequential(*blocks)
 
         # Puzzle ID embedding: per-puzzle learned tokens
         if config.num_puzzle_id_tokens > 0:
-            self.puzzle_id_embed: Embedding | None = Embedding(
-                config.num_puzzle_ids,
-                config.num_puzzle_id_tokens * config.hidden_size,
+            self.puzzle_id_embed: Embedding | None = Embedding.Config(
+                num_embeddings=config.num_puzzle_ids,
+                embedding_dim=config.num_puzzle_id_tokens * config.hidden_size,
                 init_weight_fn=functools.partial(
                     trunc_normal_init_,
                     std=0,
                 ),  # Zero init
-            )
+            ).make()
         else:
             self.puzzle_id_embed = None
 
@@ -1406,10 +1376,10 @@ class TRM3(nn.Module):
             self.register_tokens = None
 
         if config.use_rope:
-            self.rope = RoPEMixed(
-                config.hidden_size // config.num_heads,
+            self.rope = RoPEMixed.Config(
+                dim=config.hidden_size // config.num_heads,
                 **config.rope_kwargs,
-            )
+            ).make()
         else:
             self.rope = None
 
@@ -1707,7 +1677,7 @@ class TRM3(nn.Module):
             return input_emb
 
         B = input_emb.shape[0]
-        prefix_parts: list[Tensor] = []
+        prefix_parts = list[Tensor]()
 
         # Puzzle ID tokens: per-puzzle learned embeddings
         if cfg.num_puzzle_id_tokens > 0:
@@ -1748,6 +1718,77 @@ class TRM3(nn.Module):
             return self._forward_delta_reparam(input_ids, z_H, z_L, puzzle_ids)
         return self._forward_simple(input_ids, z_H, z_L, puzzle_ids)
 
+    def _prepare_forward(
+        self,
+        input_ids: Tensor,
+        puzzle_ids: Tensor | None = None,
+    ) -> tuple[
+        Tensor,
+        tuple[Tensor, Tensor] | None,
+        Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],
+    ]:
+        """Embed tokens, prepend prefix, get cos_sin, select core."""
+        cfg = self.config
+        input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
+        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
+        cos_sin = self._get_cos_sin(input_emb.device)
+        core = self.core_compiled if cfg.compile_core else self.core
+        return input_emb, cos_sin, core
+
+    def run_h_cycles(
+        self,
+        core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],
+        input_emb: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+        cos_sin: tuple[Tensor, Tensor] | None,
+        *,
+        collect_intermediates: bool = False,
+    ) -> HCycleResult:
+        """Run H_cycles: H_cycles-1 under no_grad, final with grad.
+
+        Args:
+            core: The core function (compiled or not).
+            input_emb: [B, S, C] embedded input with prefix.
+            z_H: [B, S, C] H state.
+            z_L: [B, S, C] L state.
+            cos_sin: RoPE embeddings or None.
+            collect_intermediates: If True, collect all_logits/all_z_H
+                from each H-cycle (needed for eval diagnostics).
+
+        """
+        cos_sin_detach = (
+            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+        )
+        all_logits = list[Tensor]()
+        all_z_H = list[Tensor]()
+        with torch.no_grad():
+            for _ in range(self.config.H_cycles - 1):
+                logits_i, _q_halt, z_H, z_L = core(
+                    input_emb.detach(),
+                    z_H.detach(),
+                    z_L.detach(),
+                    cos_sin_detach,
+                )
+                if collect_intermediates:
+                    all_logits.append(logits_i)
+                    all_z_H.append(z_H)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
+        if collect_intermediates:
+            all_logits.append(logits.detach())
+            all_z_H.append(z_H.detach())
+        return HCycleResult(
+            logits,
+            q_halt,
+            z_H,
+            z_L,
+            z_H_pre,
+            z_L_pre,
+            tuple(all_logits),
+            tuple(all_z_H),
+        )
+
     def step(
         self,
         input_ids: Tensor,
@@ -1773,11 +1814,7 @@ class TRM3(nn.Module):
 
         """
         cfg = self.config
-        input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
-        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
-
-        cos_sin = self._get_cos_sin(input_emb.device)
-        core = self.core_compiled if cfg.compile_core else self.core
+        input_emb, cos_sin, core = self._prepare_forward(input_ids, puzzle_ids)
         logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
 
         # Slice output to exclude prefix positions (puzzle_id + register tokens)
@@ -2066,35 +2103,18 @@ class TRM3(nn.Module):
     ) -> dict[str, Tensor | list[Tensor]]:
         """Standard forward: H_cycles-1 under no_grad, final with grad."""
         cfg = self.config
-        input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
-        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
-
-        cos_sin = self._get_cos_sin(input_emb.device)
-        core = self.core_compiled if cfg.compile_core else self.core
-
-        H_cycles = cfg.H_cycles
-        all_logits = []
-        all_z_H = []
-
-        # Detach cos_sin for no_grad iterations to avoid retaining the
-        # gradient graph when inv_freqs is a learnable Parameter.
-        cos_sin_detach = (
-            (cos_sin[0].detach(), cos_sin[1].detach()) if cos_sin is not None else None
+        input_emb, cos_sin, core = self._prepare_forward(input_ids, puzzle_ids)
+        hc = self.run_h_cycles(
+            core,
+            input_emb,
+            z_H,
+            z_L,
+            cos_sin,
+            collect_intermediates=True,
         )
-        with torch.no_grad():
-            for _ in range(H_cycles - 1):
-                logits, q_halt, z_H, z_L = core(
-                    input_emb.detach(),
-                    z_H.detach(),
-                    z_L.detach(),
-                    cos_sin_detach,
-                )
-                all_logits.append(logits)
-                all_z_H.append(z_H)
 
-        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
-        all_logits.append(logits.detach())
-        all_z_H.append(z_H.detach())
+        logits = hc.logits
+        all_logits = list(hc.all_logits)
 
         # Slice logits to exclude prefix positions (puzzle_id + register tokens).
         # z_H/z_L/all_z_H remain full total_seq_len - they're state vectors, not outputs.
@@ -2106,10 +2126,10 @@ class TRM3(nn.Module):
         return {
             "logits": logits,  # [B, num_puzzle_grid_tokens, V]
             "all_logits": all_logits,  # List[[B, num_puzzle_grid_tokens, V]]
-            "q_halt": q_halt,  # [B]
-            "z_H": z_H.detach(),  # [B, total_seq_len, C]
-            "z_L": z_L.detach(),  # [B, total_seq_len, C]
-            "all_z_H": all_z_H,  # List[[B, total_seq_len, C]]
+            "q_halt": hc.q_halt,  # [B]
+            "z_H": hc.z_H.detach(),  # [B, total_seq_len, C]
+            "z_L": hc.z_L.detach(),  # [B, total_seq_len, C]
+            "all_z_H": list(hc.all_z_H),  # List[[B, total_seq_len, C]]
         }
 
     def _forward_delta_reparam(
@@ -2131,11 +2151,7 @@ class TRM3(nn.Module):
                 "z_delta_reparam is incompatible with z_H_random_init/z_L_random_init. "
                 "Delta reparam assumes z derives from H_init/L_init.",
             )
-        input_emb = self.embed_scale * self.embed_tokens(input_ids, cfg.dtype)
-        input_emb = self._prepend_prefix(input_emb, puzzle_ids)
-
-        cos_sin = self._get_cos_sin(input_emb.device)
-        core = self.core_compiled if cfg.compile_core else self.core
+        input_emb, cos_sin, core = self._prepare_forward(input_ids, puzzle_ids)
 
         H_cycles = cfg.H_cycles
         all_logits = []
@@ -2276,3 +2292,53 @@ class TRM3(nn.Module):
         q_halt = self.q_head(z_H[:, self.config.q_halt_seq_index]).squeeze(-1)
 
         return logits, q_halt, z_H, z_L
+
+
+class TRM3AC(TRM3):
+    """TRM3 with activation-checkpointed H-cycles."""
+
+    class Config(Makes["TRM3AC"], TRM3.Config):
+        pass
+
+    def run_h_cycles(
+        self,
+        core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],
+        input_emb: Tensor,
+        z_H: Tensor,
+        z_L: Tensor,
+        cos_sin: tuple[Tensor, Tensor] | None,
+        *,
+        collect_intermediates: bool = False,
+    ) -> HCycleResult:
+        """Run H_cycles with activation checkpointing on all iterations."""
+        all_logits = list[Tensor]()
+        all_z_H = list[Tensor]()
+        for _ in range(self.config.H_cycles - 1):
+            result = torch_checkpoint(
+                core,
+                input_emb,
+                z_H,
+                z_L,
+                cos_sin,
+                use_reentrant=False,
+            )
+            assert result is not None
+            logits_i, _q_halt, z_H, z_L = result
+            if collect_intermediates:
+                all_logits.append(logits_i)
+                all_z_H.append(z_H)
+        z_H_pre, z_L_pre = z_H, z_L
+        logits, q_halt, z_H, z_L = core(input_emb, z_H, z_L, cos_sin)
+        if collect_intermediates:
+            all_logits.append(logits.detach())
+            all_z_H.append(z_H.detach())
+        return HCycleResult(
+            logits,
+            q_halt,
+            z_H,
+            z_L,
+            z_H_pre,
+            z_L_pre,
+            tuple(all_logits),
+            tuple(all_z_H),
+        )

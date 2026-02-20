@@ -108,7 +108,7 @@ class Experiment:
         self.dtype = self.config.dtype
         self.model = cast(
             TRM3,
-            self.config.setup().to(
+            self.config.make().to(
                 device=self.device,
                 # This converts all parameters to bfloat16 meaning that gradients will be
                 # computed as bfloat16.

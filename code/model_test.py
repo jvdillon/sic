@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import functools
 import pathlib
 
 from model import (
@@ -21,7 +20,7 @@ from model import (
     Sequential,
     SwiGLU,
     TransformerBlock,
-    _find_multiple,  # pyright: ignore[reportPrivateUsage]
+    _find_multiple,
     trunc_normal_init_,
 )
 from util import set_seed
@@ -51,20 +50,20 @@ class TestModelUtils:
 
 class TestLinear:
     def test_forward(self):
-        lin = Linear(64, 32, bias=False)
+        lin = Linear.Config(c_in=64, c_out=32, bias=False).make()
         x = torch.randn(2, 10, 64)
         y = lin(x)
         assert y.shape == (2, 10, 32)
 
     def test_with_bias(self):
-        lin = Linear(64, 32, bias=True)
+        lin = Linear.Config(c_in=64, c_out=32, bias=True).make()
         assert lin.bias is not None
         x = torch.randn(2, 10, 64)
         y = lin(x)
         assert y.shape == (2, 10, 32)
 
     def test_dtype_cast(self):
-        lin = Linear(32, 16, bias=False)
+        lin = Linear.Config(c_in=32, c_out=16, bias=False).make()
         x = torch.randn(2, 5, 32, dtype=torch.float16)
         y = lin(x)
         assert y.dtype == torch.float16
@@ -72,14 +71,14 @@ class TestLinear:
 
 class TestEmbedding:
     def test_forward(self):
-        emb = Embedding(100, 64)
+        emb = Embedding.Config(num_embeddings=100, embedding_dim=64).make()
         x = torch.randint(low=0, high=100, size=(2, 10))
         y = emb(x, torch.float32)
         assert y.shape == (2, 10, 64)
         assert y.dtype == torch.float32
 
     def test_dtype_cast(self):
-        emb = Embedding(50, 32)
+        emb = Embedding.Config(num_embeddings=50, embedding_dim=32).make()
         x = torch.randint(low=0, high=50, size=(2, 5))
         y = emb(x, torch.float16)
         assert y.dtype == torch.float16
@@ -110,7 +109,7 @@ class TestRoPE:
         pos_shape: tuple[int, ...],
         expected_shape: tuple[int, ...],
     ):
-        rope = RoPE(**kwargs)
+        rope = RoPE.Config(**kwargs).make()
         positions = torch.arange(torch.tensor(pos_shape).prod().item()).float()
         positions = positions.reshape(pos_shape)
         cos, sin = rope(positions)
@@ -120,18 +119,18 @@ class TestRoPE:
     # --- Value tests -----------------------------------------------------
 
     def test_values_bounded(self):
-        rope = RoPE(dim=16, base=10_000.0)
+        rope = RoPE.Config(dim=16, base=10_000.0).make()
         cos, sin = rope(torch.arange(64))
         assert cos.abs().max() <= 1.0
         assert sin.abs().max() <= 1.0
 
     def test_pythagorean_identity(self):
-        rope = RoPE(dim=32)
+        rope = RoPE.Config(dim=32).make()
         cos, sin = rope(torch.arange(20))
         torch.testing.assert_close(cos**2 + sin**2, torch.ones_like(cos))
 
     def test_zero_position_is_identity(self):
-        rope = RoPE(dim=32, base=10_000.0)
+        rope = RoPE.Config(dim=32, base=10_000.0).make()
         cos, sin = rope(torch.zeros(1))
         torch.testing.assert_close(cos, torch.ones_like(cos))
         torch.testing.assert_close(sin, torch.zeros_like(sin))
@@ -139,58 +138,60 @@ class TestRoPE:
     # --- Dim replication -------------------------------------------------
 
     def test_scalar_dim_split_by_bases_3(self):
-        rope = RoPE(dim=128, base=[10_000.0, 10_000.0, 10_000.0])
+        rope = RoPE.Config(dim=128, base=[10_000.0, 10_000.0, 10_000.0]).make()
         assert rope.dim == (44, 42, 42)
 
     def test_scalar_dim_split_by_bases_2(self):
-        rope = RoPE(dim=128, base=[10_000.0, 10_000.0])
+        rope = RoPE.Config(dim=128, base=[10_000.0, 10_000.0]).make()
         assert rope.dim == (64, 64)
 
     def test_scalar_dim_replicated_sum(self):
-        rope = RoPE(dim=128, base=[10_000.0, 10_000.0], reduction_mode="sum")
+        rope = RoPE.Config(
+            dim=128, base=[10_000.0, 10_000.0], reduction_mode="sum"
+        ).make()
         assert rope.dim == (128, 128)
 
     def test_odd_dim_raises(self):
         with pytest.raises(ValueError, match="even"):
-            RoPE(dim=3, base=[10_000.0, 10_000.0])
+            RoPE.Config(dim=3, base=[10_000.0, 10_000.0]).make()
 
     def test_dim_too_small_for_axes_raises(self):
         with pytest.raises(ValueError, match="Cannot split"):
-            RoPE(dim=2, base=[10_000.0, 10_000.0, 10_000.0])
+            RoPE.Config(dim=2, base=[10_000.0, 10_000.0, 10_000.0]).make()
 
     # --- Block-diagonal structure ----------------------------------------
 
     def test_axial_per_axis_freqs(self):
-        rope = RoPE(dim=[16, 16])
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        rope = RoPE.Config(dim=[16, 16]).make()
+        inv = rope._inv_freqs  # noqa: SLF001
         assert inv[0].numel() == 8
         assert inv[1].numel() == 8
 
     # --- dtype preservation through .to() --------------------------------
 
     def test_no_grad(self):
-        rope = RoPE(dim=32)
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        rope = RoPE.Config(dim=32).make()
+        inv = rope._inv_freqs  # noqa: SLF001
         assert all(not f.requires_grad for f in inv if f.numel())
 
     def test_dtype_preserved_after_cast(self):
-        rope = RoPE(dim=32)
+        rope = RoPE.Config(dim=32).make()
         rope = rope.to(torch.bfloat16)
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv = rope._inv_freqs  # noqa: SLF001
         assert all(f.dtype == torch.float32 for f in inv if f.numel())
 
     def test_output_dtype_matches_model(self):
-        rope = RoPE(dim=32).to(torch.bfloat16)
+        rope = RoPE.Config(dim=32).make().to(torch.bfloat16)
         cos, _sin = rope(torch.arange(10))
         assert cos.dtype == torch.bfloat16
 
     # --- different bases -------------------------------------------------
 
     def test_different_base_changes_freqs(self):
-        r1 = RoPE(dim=32, base=100.0)
-        r2 = RoPE(dim=32, base=10_000.0)
-        inv1 = r1._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        inv2 = r2._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        r1 = RoPE.Config(dim=32, base=100.0).make()
+        r2 = RoPE.Config(dim=32, base=10_000.0).make()
+        inv1 = r1._inv_freqs  # noqa: SLF001
+        inv2 = r2._inv_freqs  # noqa: SLF001
         assert not torch.equal(inv1[0], inv2[0])
 
 
@@ -251,7 +252,7 @@ class TestRoPEMixed:
         pos_shape: tuple[int, ...],
         expected_shape: tuple[int, ...],
     ):
-        rope = RoPEMixed(**kwargs)
+        rope = RoPEMixed.Config(**kwargs).make()
         positions = torch.arange(torch.tensor(pos_shape).prod().item()).float()
         positions = positions.reshape(pos_shape)
         cos, sin = rope(positions)
@@ -261,72 +262,74 @@ class TestRoPEMixed:
     # --- Value tests -----------------------------------------------------
 
     def test_values_bounded(self):
-        rope = RoPEMixed(dim=16, num_heads=4, base=10_000.0)
+        rope = RoPEMixed.Config(dim=16, num_heads=4, base=10_000.0).make()
         cos, sin = rope(torch.arange(64))
         assert cos.abs().max() <= 1.0
         assert sin.abs().max() <= 1.0
 
     def test_pythagorean_identity(self):
-        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
+        rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=True).make()
         cos, sin = rope(torch.arange(20))
         torch.testing.assert_close(cos**2 + sin**2, torch.ones_like(cos))
 
     # --- Sum: dense structure --------------------------------------------
 
     def test_sum_dense(self):
-        rope = RoPEMixed(dim=16, num_heads=4, base=[100.0, 100.0], reduction_mode="sum")
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        rope = RoPEMixed.Config(
+            dim=16, num_heads=4, base=[100.0, 100.0], reduction_mode="sum"
+        ).make()
+        inv = rope._inv_freqs  # noqa: SLF001
         active = [f for f in inv if f.numel()]
         assert len(active) == 2  # 2 axes
         assert all(f.shape[0] == 4 for f in active)  # 4 heads
 
     def test_axial_false_unequal_dims_raises(self):
         with pytest.raises(ValueError, match="uniform"):
-            RoPEMixed(dim=[44, 42], num_heads=4, reduction_mode="sum")
+            RoPEMixed.Config(dim=[44, 42], num_heads=4, reduction_mode="sum").make()
 
     # --- learnable / requires_grad ---------------------------------------
 
     def test_learnable_has_grad(self):
-        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=True).make()
+        inv = rope._inv_freqs  # noqa: SLF001
         assert all(f.requires_grad for f in inv if f.numel())
 
     def test_fixed_no_grad(self):
-        rope = RoPEMixed(dim=32, num_heads=4, learnable=False)
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=False).make()
+        inv = rope._inv_freqs  # noqa: SLF001
         assert all(not f.requires_grad for f in inv if f.numel())
 
     # --- dtype preservation through .to() --------------------------------
 
     def test_dtype_preserved_after_cast(self):
-        rope = RoPEMixed(dim=32, num_heads=4, learnable=True)
+        rope = RoPEMixed.Config(dim=32, num_heads=4, learnable=True).make()
         rope = rope.to(torch.bfloat16)
-        inv = rope._inv_freqs  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        inv = rope._inv_freqs  # noqa: SLF001
         assert all(f.dtype == torch.float32 for f in inv if f.numel())
 
     def test_output_dtype_matches_model(self):
-        rope = RoPEMixed(dim=32, num_heads=4).to(torch.bfloat16)
+        rope = RoPEMixed.Config(dim=32, num_heads=4).make().to(torch.bfloat16)
         cos, _sin = rope(torch.arange(10))
         assert cos.dtype == torch.bfloat16
 
 
 class TestAttention:
     def test_forward_no_rope(self):
-        attn = Attention(64, num_heads=4)
+        attn = Attention.Config(c_in=64, num_heads=4).make()
         x = torch.randn(2, 10, 64)
         y = attn(x, cos_sin=None)
         assert y.shape == (2, 10, 64)
 
     def test_forward_with_rope(self):
-        attn = Attention(64, num_heads=4)
-        rope = RoPE(dim=16, base=10000.0)
+        attn = Attention.Config(c_in=64, num_heads=4).make()
+        rope = RoPE.Config(dim=16, base=10000.0).make()
         x = torch.randn(2, 10, 64)
         cos, sin = rope(torch.arange(10))
         y = attn(x, cos_sin=(cos, sin))
         assert y.shape == (2, 10, 64)
 
     def test_causal(self):
-        attn = Attention(64, num_heads=4, causal=True)
+        attn = Attention.Config(c_in=64, num_heads=4, causal=True).make()
         x = torch.randn(2, 10, 64)
         y = attn(x, cos_sin=None)
         assert y.shape == (2, 10, 64)
@@ -334,26 +337,30 @@ class TestAttention:
 
 class TestSwiGLU:
     def test_forward_with_gate(self):
-        mlp = SwiGLU(64, expansion=4.0, gate=True)
+        mlp = SwiGLU.Config(c_in=64, expansion=4.0, gate=True).make()
         x = torch.randn(2, 10, 64)
         y = mlp(x)
         assert y.shape == (2, 10, 64)
 
     def test_forward_no_gate(self):
-        mlp = SwiGLU(64, expansion=4.0, gate=False)
+        mlp = SwiGLU.Config(c_in=64, expansion=4.0, gate=False).make()
         x = torch.randn(2, 10, 64)
         y = mlp(x)
         assert y.shape == (2, 10, 64)
 
     def test_muon_modified_mode(self):
-        mlp = SwiGLU(64, expansion=4.0, gate=True, muon_modified=True)
+        mlp = SwiGLU.Config(
+            c_in=64, expansion=4.0, gate=True, muon_modified=True
+        ).make()
         x = torch.randn(2, 10, 64)
         y = mlp(x)
         assert y.shape == (2, 10, 64)
         assert mlp.norm is not None
 
     def test_non_muon_modified_mode(self):
-        mlp = SwiGLU(64, expansion=4.0, gate=True, muon_modified=False)
+        mlp = SwiGLU.Config(
+            c_in=64, expansion=4.0, gate=True, muon_modified=False
+        ).make()
         x = torch.randn(2, 10, 64)
         y = mlp(x)
         assert y.shape == (2, 10, 64)
@@ -362,14 +369,20 @@ class TestSwiGLU:
 
 class TestTransformerBlock:
     def test_forward(self):
-        block = TransformerBlock(64, num_heads=4)
+        block = TransformerBlock.Config(
+            c_in=64,
+            attn=Attention.Config(num_heads=4),
+        ).make()
         x = torch.randn(2, 10, 64)
         y = block(x)
         assert y.shape == (2, 10, 64)
 
     def test_with_rope(self):
-        block = TransformerBlock(64, num_heads=4)
-        rope = RoPE(dim=16, base=10000.0)
+        block = TransformerBlock.Config(
+            c_in=64,
+            attn=Attention.Config(num_heads=4),
+        ).make()
+        rope = RoPE.Config(dim=16, base=10000.0).make()
         x = torch.randn(2, 10, 64)
         cos, sin = rope(torch.arange(10))
         y = block(x, cos_sin=(cos, sin))
@@ -378,19 +391,24 @@ class TestTransformerBlock:
 
 class TestMLPMixerBlock:
     def test_forward(self):
-        block = MLPMixerBlock(64, seq_len=10)
+        block = MLPMixerBlock.Config(c_in=64, seq_len=10).make()
         x = torch.randn(2, 10, 64)
         y = block(x)
         assert y.shape == (2, 10, 64)
 
     def test_muon_modified_mode(self):
-        block = MLPMixerBlock(64, seq_len=10, muon_modified=True)
+        block = MLPMixerBlock.Config(
+            c_in=64,
+            seq_len=10,
+            attn=SwiGLU.Config(muon_modified=True),
+            ffn=SwiGLU.Config(muon_modified=True),
+        ).make()
         x = torch.randn(2, 10, 64)
         y = block(x)
         assert y.shape == (2, 10, 64)
 
     def test_rope_raises(self):
-        block = MLPMixerBlock(64, seq_len=10)
+        block = MLPMixerBlock.Config(c_in=64, seq_len=10).make()
         x = torch.randn(2, 10, 64)
         with pytest.raises(NotImplementedError):
             block(x, cos_sin=(torch.randn(10, 16), torch.randn(10, 16)))
@@ -398,14 +416,14 @@ class TestMLPMixerBlock:
 
 class TestNormLayers:
     def test_batch_norm(self):
-        bn = BatchNorm(64)
+        bn = BatchNorm.Config(num_features=64).make()
         bn.train()
         x = torch.randn(4, 10, 64)
         y = bn(x)
         assert y.shape == (4, 10, 64)
 
     def test_group_norm(self):
-        gn = GroupNorm(64, num_groups=8)
+        gn = GroupNorm.Config(num_features=64, num_groups=8).make()
         x = torch.randn(2, 10, 64)
         y = gn(x)
         assert y.shape == (2, 10, 64)
@@ -414,8 +432,8 @@ class TestNormLayers:
 class TestSequential:
     def test_forward_with_kwargs(self):
         blocks = Sequential(
-            MLPMixerBlock(64, seq_len=10),
-            MLPMixerBlock(64, seq_len=10),
+            MLPMixerBlock.Config(c_in=64, seq_len=10).make(),
+            MLPMixerBlock.Config(c_in=64, seq_len=10).make(),
         )
         x = torch.randn(2, 10, 64)
         y = blocks(x, cos_sin=None)
@@ -474,7 +492,7 @@ def _trm3_test_config(**overrides: Any) -> TRM3.Config:
         "dtype": torch.float32,
         "num_register_tokens": 0,
         "puzzle_grid_shape": (82,),
-        "block_fn": functools.partial(MLPMixerBlock, seq_len=82),
+        "block": MLPMixerBlock.Config(seq_len=82),
     }
     defaults.update(overrides)
     return TRM3.Config(**defaults)
@@ -486,7 +504,7 @@ class TestTRM3:
         return _trm3_test_config()
 
     def test_forward_basic(self, config: TRM3.Config):
-        model = config.setup()
+        model = config.make()
         x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init[0].expand(2, 82, -1)
         z_L = model.L_init[0].expand(2, 82, -1)
@@ -494,7 +512,7 @@ class TestTRM3:
         assert out["logits"].shape == (2, 82, 12)
 
     def test_forward_with_z_states(self, config: TRM3.Config):
-        model = config.setup()
+        model = config.make()
         x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init[0].expand(2, 82, -1)
         z_L = model.L_init[0].expand(2, 82, -1)
@@ -507,7 +525,7 @@ class TestTRM3:
         assert out["q_halt"].shape == (2,)
 
     def test_all_logits(self, config: TRM3.Config):
-        model = config.setup()
+        model = config.make()
         x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init[0].expand(2, 82, -1)
         z_L = model.L_init[0].expand(2, 82, -1)
@@ -516,7 +534,7 @@ class TestTRM3:
         assert len(out["all_logits"]) == config.H_cycles
 
     def test_all_z_h(self, config: TRM3.Config):
-        model = config.setup()
+        model = config.make()
         x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init[0].expand(2, 82, -1)
         z_L = model.L_init[0].expand(2, 82, -1)
@@ -527,7 +545,7 @@ class TestTRM3:
 
     def test_step(self, config: TRM3.Config):
         """Test step() for single H-cycle."""
-        model = config.setup()
+        model = config.make()
         x = torch.randint(low=0, high=12, size=(2, 82))
         z_H = model.H_init[0].expand(2, 82, -1)
         z_L = model.L_init[0].expand(2, 82, -1)
@@ -550,7 +568,7 @@ def regenerate_trm_checkpoint() -> None:
     """Regenerate test_data/trm3.pt. Call when model init changes."""
     set_seed(42)
     config = _trm_bitforbit_config()
-    model = config.setup()
+    model = config.make()
     model.eval()
 
     inputs = _trm_bitforbit_inputs()
@@ -584,7 +602,7 @@ class TestTRMBitForBit:
         """Forward pass produces exact same logits as checkpoint."""
         set_seed(42)
         config = _trm_bitforbit_config()
-        model = config.setup()
+        model = config.make()
         model.eval()
 
         inputs = _trm_bitforbit_inputs()
@@ -608,7 +626,7 @@ class TestTRMBitForBit:
 
         # Run 1
         set_seed(42)
-        model1 = config.setup()
+        model1 = config.make()
         model1.train()
         opt1 = torch.optim.AdamW(model1.parameters(), lr=1e-3)
 
@@ -626,7 +644,7 @@ class TestTRMBitForBit:
 
         # Run 2
         set_seed(42)
-        model2 = config.setup()
+        model2 = config.make()
         model2.train()
         opt2 = torch.optim.AdamW(model2.parameters(), lr=1e-3)
 

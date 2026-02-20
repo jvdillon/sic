@@ -18,15 +18,11 @@ References:
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-import dataclasses
-
-from experiment import HCycleResult, main
+from experiment import main
 from maze.x07a import Experiment as Experiment07a
-from model import TRM3, TRM3ConfigProtocol
-from torch.utils.checkpoint import checkpoint as torch_checkpoint
+from model import TRM3AC, TRM3ConfigProtocol
 
 import torch
 import torch._functorch.config
@@ -40,44 +36,14 @@ if TYPE_CHECKING:
 
 
 class Experiment(Experiment07a):
-    _h_cycle_logits: list[Tensor] | None = None
+    collect_h_cycle_intermediates: bool = True
 
-    config: TRM3ConfigProtocol = dataclasses.replace(
-        cast(TRM3.Config, Experiment07a.config),
+    config: TRM3ConfigProtocol = TRM3AC.Config().update(
+        Experiment07a.config,
         block_kwargs_by_layer={
             0: {"checkpoint": True},
         },
     )
-
-    def _run_h_cycles(
-        self,
-        core: Callable[..., tuple[Tensor, Tensor, Tensor, Tensor]],
-        embeddings: Tensor,
-        z_H: Tensor,
-        z_L: Tensor,
-        cos_sin: tuple[Tensor, Tensor] | None,
-    ) -> HCycleResult:
-        # All H-cycles with gradients via AC (like x07b).
-        # Store per-H-cycle logits for PCGrad in _backward.
-        all_logits: list[Tensor] = []
-        for _ in range(self.model.config.H_cycles - 1):
-            result = torch_checkpoint(
-                core,
-                embeddings,
-                z_H,
-                z_L,
-                cos_sin,
-                use_reentrant=False,
-            )
-            assert result is not None
-            logits_h, _q_halt, z_H, z_L = result
-            all_logits.append(logits_h)
-        z_H_pre, z_L_pre = z_H, z_L
-        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
-        all_logits.append(logits)
-        # Stash per-H-cycle logits for _backward.
-        self._h_cycle_logits = all_logits
-        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
     def _backward(
         self,
@@ -87,7 +53,8 @@ class Experiment(Experiment07a):
         winner_chains: Tensor,
         train_q_halt: bool,
     ) -> None:
-        h_logits = getattr(self, "_h_cycle_logits", None)
+        hc = self._last_hc_result
+        h_logits = list(hc.all_logits) if hc is not None else None
         if h_logits is None or len(h_logits) <= 1:
             super()._backward(
                 forward_result,
@@ -189,8 +156,6 @@ class Experiment(Experiment07a):
                 ]
                 if parts:
                     p.grad = parts[0] if len(parts) == 1 else parts[0] + parts[1]
-
-        self._h_cycle_logits = None
 
 
 if __name__ == "__main__":

@@ -3,11 +3,17 @@
 from typing import cast
 
 import dataclasses
-import functools
 
 from experiment import main
 from maze.old.x000 import Experiment as Experiment000
-from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
+from model import (
+    TRM3,
+    Attention,
+    SwiGLU,
+    TransformerBlock,
+    TRM3ConfigProtocol,
+    trunc_normal_init_,
+)
 
 
 class Experiment(Experiment000):
@@ -35,14 +41,17 @@ class Experiment(Experiment000):
         register_tokens_learnable=False,
         q_halt_seq_index=0,
         cast_model_to_dtype=False,
-        block_fn=functools.partial(
-            TransformerBlock,
-            multiple_of=128,
-            num_heads=8,
-            mlp_init_weight_fn=trunc_normal_init_,
-            attn_init_weight_fn=trunc_normal_init_,
-            attn_muon_modified=True,
-            attn_checkpoint_muon_norm=True,
+        block=TransformerBlock.Config(
+            attn=Attention.Config(
+                num_heads=8,
+                muon_modified=True,
+                checkpoint_muon_norm=True,
+                init_weight_fn=trunc_normal_init_,
+            ),
+            ffn=SwiGLU.Config(
+                multiple_of=128,
+                init_weight_fn=trunc_normal_init_,
+            ),
         ),
     )
 

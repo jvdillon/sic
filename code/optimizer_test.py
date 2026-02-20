@@ -3,7 +3,7 @@
 from optimizer import (
     DummyOptimizer,
     Muon,
-    _adjust_lr,  # pyright: ignore[reportPrivateUsage]
+    _adjust_lr,
     matrix_signum_via_newtonschulz,
 )
 from torch import nn

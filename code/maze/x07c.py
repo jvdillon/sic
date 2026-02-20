@@ -5,27 +5,24 @@ from __future__ import annotations
 from typing import cast
 
 import dataclasses
-import functools
 
 from experiment import main
 from maze.x07a import Experiment as Experiment07a
-from model import TRM3, TRM3ConfigProtocol
+from model import TRM3, MLPMixerBlock, SwiGLU, TRM3ConfigProtocol
 
 
-Config07a = cast(TRM3.Config, Experiment07a.config)
-Block07a = cast(functools.partial[TRM3ConfigProtocol], Config07a.block_fn)
+_config = cast(TRM3.Config, Experiment07a.config)
+_block = cast(MLPMixerBlock.Config, _config.block)
+_attn = cast(SwiGLU.Config, _block.attn)
 
 
 class Experiment(Experiment07a):
     total_train_steps: int = 8_000
     config: TRM3ConfigProtocol = dataclasses.replace(
-        Config07a,
-        block_fn=functools.partial(
-            Block07a.func,
-            **{
-                **Block07a.keywords,
-                "attn_qk_norm": True,
-            },
+        _config,
+        block=dataclasses.replace(
+            _block,
+            attn=dataclasses.replace(_attn, qk_norm=True),
         ),
     )
 

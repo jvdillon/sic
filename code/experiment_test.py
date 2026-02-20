@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-import functools
 import tempfile
 
 from experiment import (
@@ -14,7 +13,7 @@ from experiment import (
     resume_from_checkpoint,
     setup_muon_optimizers,
 )
-from model import TRM3, MLPMixerBlock, TRM3ConfigProtocol, trunc_normal_init_
+from model import TRM3, MLPMixerBlock, SwiGLU, TRM3ConfigProtocol, trunc_normal_init_
 from torch import Tensor
 
 import torch
@@ -203,17 +202,17 @@ def _test_config() -> TRM3.Config:
         device="cpu",
         cast_model_to_dtype=False,
         num_register_tokens=0,
-        block_fn=functools.partial(
-            MLPMixerBlock,
+        block=MLPMixerBlock.Config(
             seq_len=81,
-            init_weight_fn=trunc_normal_init_,
+            attn=SwiGLU.Config(init_weight_fn=trunc_normal_init_),
+            ffn=SwiGLU.Config(init_weight_fn=trunc_normal_init_),
         ),
     )
 
 
 def test_setup_muon_optimizers():
     config = _test_config()
-    model = config.setup()
+    model = config.make()
     opt1, opt2 = setup_muon_optimizers(model)
     assert len(opt1.param_groups) >= 1
     assert len(opt2.param_groups) >= 1
@@ -297,7 +296,7 @@ def test_reset_transient_state():
     exp.reset_transient_state()
 
     # _state should be fresh
-    assert exp._state.h_step.sum() == 0  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    assert exp._state.h_step.sum() == 0  # noqa: SLF001
 
 
 def test_resume_from_checkpoint_new_format():
@@ -489,7 +488,7 @@ def test_fast_eval_metrics_at_halt_time():
 def test_no_recompilation_all_paths():
     """Test that step() and forward() use same core signature (no recompile)."""
     config = _test_config()
-    model = config.setup()
+    model = config.make()
 
     call_signatures: list[object] = []
     originalcore = model.core
@@ -511,7 +510,7 @@ def test_no_recompilation_all_paths():
         call_signatures.append(sig)
         return originalcore(input_emb, z_H, z_L, cos_sin)
 
-    model.core = trackingcore  # ty: ignore[invalid-assignment]
+    model.core = trackingcore
 
     B = 4
     grid_len = config.num_puzzle_grid_tokens
@@ -602,13 +601,13 @@ def test_wta_batched_vs_sequential():
         device="cpu",
         cast_model_to_dtype=False,
         num_register_tokens=0,
-        block_fn=functools.partial(
-            MLPMixerBlock,
+        block=MLPMixerBlock.Config(
             seq_len=81,
-            init_weight_fn=trunc_normal_init_,
+            attn=SwiGLU.Config(init_weight_fn=trunc_normal_init_),
+            ffn=SwiGLU.Config(init_weight_fn=trunc_normal_init_),
         ),
     )
-    model = config.setup()
+    model = config.make()
     model.eval()
 
     B, K = 4, 3

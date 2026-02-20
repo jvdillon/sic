@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from numbers import Integral
 from types import TracebackType
-from typing import Protocol, Self, TextIO
+from typing import Any, Protocol, Self, TextIO
 
 import hashlib
 import math
@@ -24,8 +24,9 @@ if True:
     )
 
 
+from typing import override
+
 from torch import Tensor
-from typing_extensions import override
 
 import numpy as np
 import pytest
@@ -429,6 +430,39 @@ def _dims(dim: int | Integral | Sequence[int | Integral]) -> tuple[int, ...]:
     if isinstance(dim, (int, Integral)):
         return (operator.index(dim),)
     return tuple(operator.index(d) for d in dim)
+
+
+def broadcast_sequences(
+    *args: object | Sequence[object],
+) -> tuple[list[Any], ...]:
+    """Broadcast scalar-or-sequence arguments to matching lengths."""
+    lists = [[a] if not isinstance(a, Sequence) else list(a) for a in args]
+    nd = max(len(a) for a in lists)
+    for a in lists:
+        if len(a) not in (1, nd):
+            lengths = [len(x) for x in lists]
+            raise ValueError(f"Incompatible lengths: {lengths}.")
+    return tuple(a * nd if len(a) == 1 else a for a in lists)
+
+
+def mesh_arange(
+    end: int | Sequence[int],
+    *,
+    start: int | Sequence[int] = 0,
+    step: int | Sequence[int] = 1,
+    dtype: torch.dtype = torch.long,
+    device: torch.device | str | None = None,
+) -> Tensor:
+    """N-D meshgrid of aranges, flattened to ``[prod(sizes), N]``."""
+    start, end, step = broadcast_sequences(start, end, step)
+    grid = torch.meshgrid(
+        *[
+            torch.arange(s, e, st, dtype=dtype, device=device)
+            for s, e, st in zip(start, end, step, strict=False)
+        ],
+        indexing="ij",
+    )
+    return torch.stack(grid, dim=-1).reshape(-1, len(end))
 
 
 def argsort(x: Sequence[SupportsArgSort], descending: bool = False) -> list[int]:

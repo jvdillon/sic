@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Speed is Confidence"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11.10"
+requires-python = ">=3.13"
 authors = [
     { name = "Joshua V. Dillon" },
 ]
@@ -16,12 +16,13 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "setuptools",
     "torch==2.9.0",
+    "configgle>=1.1.10",
     "einops",
     "einshape",
     "jaxtyping",
@@ -98,7 +99,7 @@ fix = true
 show-fixes = true
 line-length = 88
 output-format = "concise"
-target-version = "py311"
+target-version = "py312"
 exclude = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", "research/third_party", "research/tools"]
 extend-include = ["*.ipynb"]
 
@@ -215,7 +216,7 @@ exclude = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", 
 ignore = [".venv", ".typings", "*.egg-info", ".pytest_cache", "build", "dist", "paper"]
 stubPath = ".typings"
 pythonPlatform = "Linux"
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 reportAny = false
 reportCallInDefaultInitializer = false
 reportConstantRedefinition = false
@@ -234,6 +235,7 @@ reportUnknownVariableType = false
 reportUnsafeMultipleInheritance = false
 reportUnreachable = false
 reportUnusedCallResult = false
+reportPrivateUsage = false
 reportUnusedImport = false
 
 [tool.ty.environment]

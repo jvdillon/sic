@@ -7,8 +7,6 @@ TRM ARC config: H_cycles=3, L_cycles=4, L_layers=2, attention+RoPE.
 # Slow compile?
 # Try: rm -rf /tmp/torchinductor_* ~/.triton/cache
 
-import functools
-
 from experiment import (
     Experiment as Experiment182,
     main,
@@ -16,6 +14,7 @@ from experiment import (
 )
 from model import (
     TRM3,
+    Attention,
     TransformerBlock,
     TRM3ConfigProtocol,
 )
@@ -53,14 +52,13 @@ class Experiment(Experiment182):
         carry_L="all",
         z_L_init_svd=False,
         use_rope=True,
-        num_heads=8,  # Must match block_fn num_heads (for RoPE dim)
+        num_heads=8,  # Must match block attn num_heads (for RoPE dim)
         # NOTE: Prefix tokens disabled because ExperimentBase eval methods don't pass puzzle_ids.
         num_puzzle_id_tokens=0,  # TRM-style: disabled until eval supports puzzle_ids
         num_register_tokens=0,  # TRM-style: disabled until eval supports puzzle_ids
         num_puzzle_ids=256,  # Embedding table size (unused when num_puzzle_id_tokens=0)
-        block_fn=functools.partial(
-            TransformerBlock,
-            num_heads=8,
+        block=TransformerBlock.Config(
+            attn=Attention.Config(num_heads=8),
         ),
     )
 

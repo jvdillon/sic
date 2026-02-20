@@ -78,7 +78,7 @@ class Experiment(Experiment07a):
         eps_vec = torch.randn_like(x)
         norms = eps_vec.flatten(1).norm(dim=1, keepdim=True).unsqueeze(-1)
         eps_vec = eps_vec / norms.clamp(min=1e-12) * self.lip_eps
-        cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001
         assert self.device is not None
         with torch.autocast(device_type=self.device.type, dtype=self.dtype):
             f_x = self.model.reasoning(x, cos_sin)

@@ -33,6 +33,7 @@ from evaluation import print_diagnostics
 from model import (
     EMA,
     TRM3,
+    HCycleResult,
     ModuleProtocol,
     TRM3ConfigProtocol,
 )
@@ -209,15 +210,6 @@ class EvalResult(NamedTuple):
     train_halt_puzzle_acc: float
 
 
-class HCycleResult(NamedTuple):
-    logits: Tensor
-    q_halt: Tensor
-    z_H: Tensor
-    z_L: Tensor
-    z_H_pre: Tensor  # z_H input to last core() call
-    z_L_pre: Tensor  # z_L input to last core() call
-
-
 class ForwardResult(TypedDict):
     losses: Tensor  # [P] per-chain losses (inf for inactive)
     logits: Tensor  # [P, num_puzzle_grid_tokens, V]
@@ -314,6 +306,7 @@ class Experiment:
     cast_model_to_dtype: bool = True
     max_pending_samples: int = 1000
     log_lip: bool = False  # Log reasoning block Lipschitz estimate per step
+    collect_h_cycle_intermediates: bool = False  # Collect per-H-cycle logits/z_H
 
     def __init__(self) -> None:
         self.setup_model()  # Sets self.device and self.dtype
@@ -324,6 +317,7 @@ class Experiment:
         self.current_step = 0
         self.best_acc = 0.0
         self._grad_accum_counter = 0
+        self._last_hc_result: HCycleResult | None = None
 
         self.act_steps_history: list[float] = []
         self.halt_steps_histogram = [0] * self.max_reasoning_steps
@@ -363,7 +357,7 @@ class Experiment:
         self.dtype: torch.dtype = self.config.dtype or torch.bfloat16
         self.model: TRM3 = cast(
             "TRM3",
-            self.config.setup().to(
+            self.config.make().to(
                 device=self.device,
                 dtype=self.dtype if self.cast_model_to_dtype else None,
             ),
@@ -700,27 +694,14 @@ class Experiment:
         z_L: Tensor,
         cos_sin: tuple[Tensor, Tensor] | None,
     ) -> HCycleResult:
-        # Detach cos_sin for no_grad iterations to avoid retaining the
-        # gradient graph when inv_freqs is a learnable Parameter.
-        cos_sin_detach = (
-            (
-                cos_sin[0].detach(),
-                cos_sin[1].detach(),
-            )
-            if cos_sin is not None
-            else None
+        return self.model.run_h_cycles(
+            core,
+            embeddings,
+            z_H,
+            z_L,
+            cos_sin,
+            collect_intermediates=self.collect_h_cycle_intermediates,
         )
-        for _ in range(self.model.config.H_cycles - 1):
-            with torch.no_grad():
-                _logits, _q_halt, z_H, z_L = core(
-                    embeddings.detach(),
-                    z_H.detach(),
-                    z_L.detach(),
-                    cos_sin_detach,
-                )
-        z_H_pre, z_L_pre = z_H, z_L
-        logits, q_halt, z_H, z_L = core(embeddings, z_H, z_L, cos_sin)
-        return HCycleResult(logits, q_halt, z_H, z_L, z_H_pre, z_L_pre)
 
     def _forward(self, state: TrainingState) -> ForwardResult:
         num_chains = state.num_chains
@@ -772,7 +753,7 @@ class Experiment:
                 if cfg.num_puzzle_id_tokens > 0
                 else None
             )
-            embeddings = self.model._prepend_prefix(embeddings, chain_puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            embeddings = self.model._prepend_prefix(embeddings, chain_puzzle_ids)  # noqa: SLF001
 
             # Add puzzle_id embedding to z_H if enabled (old additive approach).
             # NOTE: This is a separate feature from TRM-style prefix tokens above.
@@ -794,7 +775,7 @@ class Experiment:
                 else self.model.core
             )
             z_L = state.z_L
-            cos_sin = self.model._get_cos_sin(embeddings.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            cos_sin = self.model._get_cos_sin(embeddings.device)  # noqa: SLF001
             hc = self._run_h_cycles(
                 core,
                 embeddings,
@@ -802,6 +783,7 @@ class Experiment:
                 z_L,
                 cos_sin,
             )
+            self._last_hc_result = hc
             logits, q_halt, z_H, z_L = hc.logits, hc.q_halt, hc.z_H, hc.z_L
             z_H_pre, z_L_pre = hc.z_H_pre, hc.z_L_pre
 
@@ -895,7 +877,7 @@ class Experiment:
         # Normalize per sample: each sample gets a unit-norm perturbation.
         norms = eps_vec.flatten(1).norm(dim=1, keepdim=True).unsqueeze(-1)
         eps_vec = eps_vec / norms.clamp(min=1e-12) * eps
-        cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        cos_sin = self.model._get_cos_sin(x.device)  # noqa: SLF001
         with torch.no_grad():
             f_x = self.model.reasoning(x, cos_sin)
             f_x_eps = self.model.reasoning(x + eps_vec, cos_sin)
@@ -1566,7 +1548,7 @@ class Experiment:
 
     def make_z_L_single(self, puzzle_idx: int) -> Tensor:
         del puzzle_idx
-        _, l_indices = self.model._sample_head_indices()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        _, l_indices = self.model._sample_head_indices()  # noqa: SLF001
         S = self.config.total_seq_len
         return self.model.L_init[l_indices].unsqueeze(1).expand(-1, S, -1)
 

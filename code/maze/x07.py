@@ -6,14 +6,19 @@ x07.log.1 is eval_method="full".
 
 from typing import Literal
 
-import functools
-
 from experiment import (
     Experiment as ExperimentBase,
     main,
     setup_muon_optimizers,
 )
-from model import TRM3, TransformerBlock, TRM3ConfigProtocol, trunc_normal_init_
+from model import (
+    TRM3,
+    Attention,
+    SwiGLU,
+    TransformerBlock,
+    TRM3ConfigProtocol,
+    trunc_normal_init_,
+)
 
 from data import get_puzzle_config
 
@@ -62,16 +67,19 @@ class Experiment(ExperimentBase):
         q_halt_seq_index=0,
         cast_model_to_dtype=False,
         label_smoothing_includes_pad_token=False,
-        block_fn=functools.partial(
-            TransformerBlock,
-            multiple_of=128,
-            num_heads=8,
-            mlp_init_weight_fn=trunc_normal_init_,
-            mlp_muon_modified=True,
-            attn_init_weight_fn=trunc_normal_init_,
-            attn_muon_modified=True,
-            attn_checkpoint_muon_norm=True,
-            attn_qk_norm=False,
+        block=TransformerBlock.Config(
+            attn=Attention.Config(
+                num_heads=8,
+                muon_modified=True,
+                checkpoint_muon_norm=True,
+                qk_norm=False,
+                init_weight_fn=trunc_normal_init_,
+            ),
+            ffn=SwiGLU.Config(
+                multiple_of=128,
+                muon_modified=True,
+                init_weight_fn=trunc_normal_init_,
+            ),
         ),
     )
 

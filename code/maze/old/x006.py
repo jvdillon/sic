@@ -101,9 +101,9 @@ class Experiment(Experiment000l):
             puzzle_ids = torch.zeros(
                 tokens.shape[0], device=tokens.device, dtype=torch.long
             )
-            emb = m._prepend_prefix(emb, puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            emb = m._prepend_prefix(emb, puzzle_ids)  # noqa: SLF001
             core = m.core_compiled if cfg.compile_core else m.core
-            cos_sin = m._get_cos_sin(emb.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            cos_sin = m._get_cos_sin(emb.device)  # noqa: SLF001
             h_result = self._run_h_cycles(
                 core,
                 emb,

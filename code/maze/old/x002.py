@@ -73,8 +73,8 @@ class Experiment(Experiment000l):
         m = self.model
         cfg = m.config
         input_emb = m.embed_scale * m.embed_tokens(input_ids, cfg.dtype)
-        input_emb = m._prepend_prefix(input_emb, puzzle_ids)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-        cos_sin = m._get_cos_sin(input_emb.device)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+        input_emb = m._prepend_prefix(input_emb, puzzle_ids)  # noqa: SLF001
+        cos_sin = m._get_cos_sin(input_emb.device)  # noqa: SLF001
         core = m.core_compiled if cfg.compile_core else m.core
         n_prefix = cfg.num_puzzle_id_tokens + cfg.num_register_tokens
         base_emb = input_emb
