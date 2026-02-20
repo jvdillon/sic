@@ -466,28 +466,6 @@ class RoPE(nn.Module):
             cls._rotate(k, cos, sin, interleave),
         )
 
-    @staticmethod
-    def _rotate(x: Tensor, cos: Tensor, sin: Tensor, interleave: bool) -> Tensor:
-        """Apply 2D rotation to a single tensor using half-dim cos/sin."""
-        dtype = x.dtype
-        shape = x.shape
-        # float32 rotation math → input dtype.
-        if interleave:
-            split_dim = -1
-            x = x.float().reshape(*shape[:-1], -1, 2)
-        else:
-            split_dim = -2
-            x = x.float().reshape(*shape[:-1], 2, -1)
-        x0, x1 = x.moveaxis(split_dim, 0)
-        return (
-            torch.stack(
-                [x0 * cos - x1 * sin, x1 * cos + x0 * sin],
-                dim=split_dim,
-            )
-            .reshape(shape)
-            .to(dtype)
-        )
-
     @classmethod
     def smallest_recommended_base(
         cls,
@@ -526,6 +504,28 @@ class RoPE(nn.Module):
             cls._validate_c(c)
             bases.append(((m - 1) / (2 * math.pi)) ** (c / (c - 2)))
         return bases[0] if len(bases) == 1 else tuple(bases)
+
+    @classmethod
+    def _rotate(cls, x: Tensor, cos: Tensor, sin: Tensor, interleave: bool) -> Tensor:
+        """Apply 2D rotation to a single tensor using half-dim cos/sin."""
+        dtype = x.dtype
+        shape = x.shape
+        # float32 rotation math → input dtype.
+        if interleave:
+            split_dim = -1
+            x = x.float().reshape(*shape[:-1], -1, 2)
+        else:
+            split_dim = -2
+            x = x.float().reshape(*shape[:-1], 2, -1)
+        x0, x1 = x.moveaxis(split_dim, 0)
+        return (
+            torch.stack(
+                [x0 * cos - x1 * sin, x1 * cos + x0 * sin],
+                dim=split_dim,
+            )
+            .reshape(shape)
+            .to(dtype)
+        )
 
     @classmethod
     def _make_inv_freqs(cls, b: float, c: int) -> Tensor:
@@ -732,31 +732,6 @@ class Embedding(nn.Module):
 
     def forward(self, x: Tensor, dtype: torch.dtype | None = None) -> Tensor:
         return nn.functional.embedding(x, self.weight.to(dtype))
-
-
-def make_grid_positions(
-    grid_shape: tuple[int, ...],
-    num_prefix_tokens: int,
-    device: torch.device | str | None = "cpu",
-    legacy: bool = False,
-) -> Tensor:
-    """Build [S, N] position tensor for an N-D grid with prefix tokens.
-
-    Prefix tokens get sequential positions along the last axis (other axes 0).
-    Grid tokens get 1-offset on axis 0 only (so prefix and grid never collide).
-    For N=1 this is equivalent to arange(num_prefix + prod(grid_shape)).
-
-    When legacy=True, uses the old convention (1-offset on ALL axes).
-    """
-    n = len(grid_shape)
-    grid_pos = mesh_arange(grid_shape, device=device)
-    if legacy:
-        grid_pos = 1 + grid_pos
-    else:
-        grid_pos[:, 0] += num_prefix_tokens
-    prefix = torch.zeros(num_prefix_tokens, n, dtype=torch.long, device=device)
-    prefix[:, -1] = torch.arange(num_prefix_tokens, device=device)
-    return torch.cat([prefix, grid_pos])
 
 
 class Attention(nn.Module):
@@ -1971,8 +1946,9 @@ class TRM3(nn.Module):
 
         return h_indices, l_indices
 
-    @staticmethod
+    @classmethod
     def _apply_carry_policy(
+        cls,
         policy: CarryPolicy,
         z: Tensor,
         z_out: Tensor,
@@ -2342,3 +2318,28 @@ class TRM3AC(TRM3):
             tuple(all_logits),
             tuple(all_z_H),
         )
+
+
+def make_grid_positions(
+    grid_shape: tuple[int, ...],
+    num_prefix_tokens: int,
+    device: torch.device | str | None = "cpu",
+    legacy: bool = False,
+) -> Tensor:
+    """Build [S, N] position tensor for an N-D grid with prefix tokens.
+
+    Prefix tokens get sequential positions along the last axis (other axes 0).
+    Grid tokens get 1-offset on axis 0 only (so prefix and grid never collide).
+    For N=1 this is equivalent to arange(num_prefix + prod(grid_shape)).
+
+    When legacy=True, uses the old convention (1-offset on ALL axes).
+    """
+    n = len(grid_shape)
+    grid_pos = mesh_arange(grid_shape, device=device)
+    if legacy:
+        grid_pos = 1 + grid_pos
+    else:
+        grid_pos[:, 0] += num_prefix_tokens
+    prefix = torch.zeros(num_prefix_tokens, n, dtype=torch.long, device=device)
+    prefix[:, -1] = torch.arange(num_prefix_tokens, device=device)
+    return torch.cat([prefix, grid_pos])
