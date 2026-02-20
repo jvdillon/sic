@@ -260,7 +260,6 @@ error-on-warning = true
 
 [tool.ty.rules]
 all = "warn"
-division-by-zero = "ignore"  # False positives on guarded ternaries (x / y if y > 0 else 0).
 
 [tool.codespell]
 builtin = "clear,rare,code"
