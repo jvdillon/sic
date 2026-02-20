@@ -7,7 +7,7 @@ from maze.x07a import Experiment as Experiment07a
 
 
 class Experiment(Experiment07a):
-    pass
+    seed: int = 43
 
 
 if __name__ == "__main__":

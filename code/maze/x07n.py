@@ -18,7 +18,6 @@ class Experiment(Experiment07):
         K_L=4,
         carry_H="copy_top1",
         z_L_init_svd=True,
-        # z_L_random_init=True,
         rope_kwargs={"base": (10e3, 10e3)},
         block_kwargs_by_layer={
             0: {"checkpoint": True},
