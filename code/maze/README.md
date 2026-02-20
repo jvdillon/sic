@@ -18,16 +18,12 @@ x07.log.0:Step 16000  Test 99.47% / 93.10% (halt: 99.44%/81.20%)  Train lm=0.664
 x10.log:Step 12000  Test 99.50% / 93.40% (halt: 99.49%/83.20%)  Train lm=0.6641±0.0012ϵ[0.6641,0.6719] n_halted=108.4940±7.0220ϵ[62.0000,121.0000]  TrainAcc 99.98%/99.10% (halt: 99.98%/99.00%)  (55.416s / 288.770s)
 ```
 
-[TRM repro](https://github.com/gaoxin492/TinyRecursiveModels#) has
-```
-TRM-Att	7M	77.71	78.70	41.00	3.33
-```
-using 8xHseries for
-- maze: 2h
-- sudoku: 0.67h
-- arc1: 37h
-- arc2: 437h
-
+[TRM repro](https://github.com/gaoxin492/TinyRecursiveModels#) uses 8 H(100?) series GPUs to get:
+| Method | Params | Sudoku | Maze | ARC-1 (@2) | ARC-2 (@2) |
+| --- | --- | --- | --- | --- | --- |
+| TRM-Att | 7M | 77.71 | 78.70 | 41.00  | 3.33 |
+| TRM-MLP | 5M | 84.80 | / | / | / |
+| Time(h) | 0.67 | 2 | 37 | 49 |
 
 TODOs/Notes:
 - still need to re-enable EMA to see smooth results. This will obviously bring down peak
