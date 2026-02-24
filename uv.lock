@@ -125,15 +125,15 @@ wheels = [
 
 [[package]]
 name = "configgle"
-version = "1.1.10"
+version = "1.1.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ty-extensions" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/ef/225fb7950e86dd417669ec3dfa12de143eecc1df4c3579c4eeb6e985c9e1/configgle-1.1.10.tar.gz", hash = "sha256:70003c4cbb76ebe3995ae197a15faaaa65ffae7fed99c81d52466300eabdafba", size = 144317, upload-time = "2026-02-19T00:29:39.216Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/50/a2c04a5f2722ec67108d49939fb1ae1876f36db412cad5228f1360b4a421/configgle-1.1.12.tar.gz", hash = "sha256:82e0c521b6cb8bf23df1af494136d66bd5e92df4c0281f62af0097b5f77d6cb0", size = 146050, upload-time = "2026-02-24T04:59:06.458Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/e4/668369dd3e7b6fd43c081c332f07197b7ad4bbafe45497f66a8a5d68090f/configgle-1.1.10-py3-none-any.whl", hash = "sha256:b629564d2f18511c952030ea3e0bb416a29c5e7dcf45eb6c7538bdd26dad8ece", size = 34066, upload-time = "2026-02-19T00:29:37.885Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/f5/eaacb58dc404c3b2fb60fb89eca822ba342962a5c7200d2e2da419f39c54/configgle-1.1.12-py3-none-any.whl", hash = "sha256:8b96ba8bcb539a69adc675ff2a30f464508d10bf97288852fd78a25e69c0da44", size = 35324, upload-time = "2026-02-24T04:59:05.155Z" },
 ]
 
 [[package]]
@@ -1436,7 +1436,7 @@ lint = [
 [package.metadata]
 requires-dist = [
     { name = "argdantic" },
-    { name = "configgle", specifier = ">=1.1.10" },
+    { name = "configgle", specifier = ">=1.1.12" },
     { name = "einops" },
     { name = "einshape" },
     { name = "huggingface-hub" },

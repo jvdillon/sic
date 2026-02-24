@@ -22,7 +22,7 @@ classifiers = [
 dependencies = [
     "setuptools",
     "torch==2.9.0",
-    "configgle>=1.1.10",
+    "configgle>=1.1.12",
     "einops",
     "einshape",
     "jaxtyping",
