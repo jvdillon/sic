@@ -1,8 +1,3 @@
-from code.tools.dataset.common import (
-    PuzzleDatasetMetadata,
-    dihedral_transform,
-    inverse_dihedral_transform,
-)
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +10,12 @@ from argdantic import ArgParser
 from pydantic import BaseModel
 
 import numpy as np
+
+from code.tools.dataset.common import (
+    PuzzleDatasetMetadata,
+    dihedral_transform,
+    inverse_dihedral_transform,
+)
 
 
 cli = ArgParser()

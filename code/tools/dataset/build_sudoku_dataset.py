@@ -1,4 +1,3 @@
-from code.tools.dataset.common import PuzzleDatasetMetadata
 from pathlib import Path
 
 import csv
@@ -10,6 +9,8 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 import numpy as np
+
+from code.tools.dataset.common import PuzzleDatasetMetadata
 
 
 cli = ArgParser()

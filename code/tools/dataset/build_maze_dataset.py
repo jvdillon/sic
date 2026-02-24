@@ -1,4 +1,3 @@
-from code.tools.dataset.common import PuzzleDatasetMetadata, dihedral_transform
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,8 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 import numpy as np
+
+from code.tools.dataset.common import PuzzleDatasetMetadata, dihedral_transform
 
 
 CHARSET = "# SGo"
