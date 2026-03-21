@@ -72,7 +72,12 @@ exclude = ["*_test.py", "*.log"]
 [tool.pytest.ini_options]
 python_files = ["*_test.py"]
 addopts = ["-Werror", "--import-mode=importlib"]
-norecursedirs = [".venv", "__pycache__", ".typings", "*.egg-info"]
+norecursedirs = [
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    ".typings",
+]
 testpaths = ["code/"]
 pythonpath = ["code/"]
 filterwarnings = ["ignore::pytest.PytestUnraisableExceptionWarning:coroutine.*was never awaited"]
@@ -160,7 +165,7 @@ ignore = [
     "TRY003",  # Raise vanilla args.
     "TRY300",  # Try consider else.
 
-    # Extra
+    # Additional style relaxations.
     "D417",    # Missing argument in docstring
     "EXE001",  # flake8-executable
     "N802",    # Invalid function name.
@@ -196,6 +201,8 @@ force-sort-within-sections = false
 from-first = true
 lines-between-types = 1
 lines-after-imports = 2
+extra-standard-library = ["typing", "typing_extensions", "ty_extensions"]
+known-first-party = ["code"]
 no-lines-before = ["future"]
 order-by-type = true
 relative-imports-order = "closest-to-furthest"
@@ -235,24 +242,25 @@ reportAny = false                          # `Any` propagation is pervasive in P
 reportExplicitAny = false                  # Explicit `Any` annotations are intentional.
 reportImplicitStringConcatenation = false  # Conflicts with ruff ISC003.
 reportInvalidCast = false                  # All cast() calls are intentional.
+reportPrivateUsage = false                 # Redundant with ruff SLF001.
 reportUnannotatedClassAttribute = false    # Class attributes don't always need annotations.
 reportUnusedCallResult = false             # Discarding return values is idiomatic Python.
+reportUnusedImport = false                 # Redundant with ruff F401.
 # Extra suppressions.
 reportCallInDefaultInitializer = false     # Immutable constructors (e.g. NamedTuple) in defaults are safe.
 reportIncompatibleMethodOverride = false   # Subclasses may rename parameters.
 reportMissingSuperCall = false             # Fires on plain `object` inheritance (no-op super).
 reportUnsafeMultipleInheritance = false    # Mixin patterns are intentional.
+# Extra extra suppressions.
 reportConstantRedefinition = false         # Uppercase locals treated as constants (math). [Violates PEP8]
 reportImplicitOverride = false
 reportPrivateImportUsage = false
 reportPrivateLocalImportUsage = false
-reportPrivateUsage = false
 reportUnknownArgumentType = false
 reportUnknownMemberType = false
 reportUnknownParameterType = false
 reportUnknownVariableType = false
 reportUnreachable = false
-reportUnusedImport = false
 
 [tool.ty.environment]
 python-version = "3.12"
@@ -260,12 +268,22 @@ extra-paths = ["code/", "code/sudoku/", ".typings"]
 
 [tool.ty.terminal]
 error-on-warning = true
+# output-format = "concise"   # full concise gitlab github junit
 
 [tool.ty.rules]
 all = "warn"
 division-by-zero = "ignore"
 
+[[tool.ty.overrides]]
+include = ["*_test.py"]
+
+[tool.ty.overrides.rules]
+all = "ignore"
+
 [tool.codespell]
+# SKIP=codespell git commit -m "message"
+# or,
+# some_variable_with_typo = "connexion"  # codespell:ignore
 builtin = "clear,rare,code"
 ignore-words-list = "fave,jupyter,arange,iff,wrt,ow,lite,falsy,truthy,ws,deque,numer,warmup"
 skip = "htmlcov,.doctrees,*.pyc,*.ico,*.png,*.jpg,*.PNG,*.inv,*.dot,*.css,.git,.venv,__pycache__,*.egg-info,uv.lock,.typings/*"
