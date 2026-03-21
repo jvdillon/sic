@@ -125,15 +125,14 @@ wheels = [
 
 [[package]]
 name = "configgle"
-version = "1.1.10"
+version = "1.1.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ty-extensions" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/ef/225fb7950e86dd417669ec3dfa12de143eecc1df4c3579c4eeb6e985c9e1/configgle-1.1.10.tar.gz", hash = "sha256:70003c4cbb76ebe3995ae197a15faaaa65ffae7fed99c81d52466300eabdafba", size = 144317, upload-time = "2026-02-19T00:29:39.216Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/10/c26fbf2e8ce6a2bdfdd9c6060b0486a1d1a4b69c70465db3e7459fd3e1c9/configgle-1.1.15.tar.gz", hash = "sha256:3c57a77fe955852aea7da82c2dfc3d4c50a2a7d3ad8f816cd8fe1efb1e0af412", size = 147962, upload-time = "2026-03-19T16:15:59.358Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/e4/668369dd3e7b6fd43c081c332f07197b7ad4bbafe45497f66a8a5d68090f/configgle-1.1.10-py3-none-any.whl", hash = "sha256:b629564d2f18511c952030ea3e0bb416a29c5e7dcf45eb6c7538bdd26dad8ece", size = 34066, upload-time = "2026-02-19T00:29:37.885Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/2f/96a310a47e04e76bbab1a523f43431d8ffb8895cb0a5783ab533b893944a/configgle-1.1.15-py3-none-any.whl", hash = "sha256:56bd23f30c5ca22dea8d34668173fd4afd9969d8d6da71f1ae3745562e9f235e", size = 37733, upload-time = "2026-03-19T16:15:58.114Z" },
 ]
 
 [[package]]
@@ -1436,7 +1435,7 @@ lint = [
 [package.metadata]
 requires-dist = [
     { name = "argdantic" },
-    { name = "configgle", specifier = ">=1.1.10" },
+    { name = "configgle", specifier = ">=1.1.15" },
     { name = "einops" },
     { name = "einshape" },
     { name = "huggingface-hub" },
@@ -1615,15 +1614,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c5/2d/2663984ac11de6d78f74432b8b14ba64d170b45194312852b7543cf7fd56/ty-0.0.17-py3-none-win32.whl", hash = "sha256:305b6ed150b2740d00a817b193373d21f0767e10f94ac47abfc3b2e5a5aec809", size = 9672932, upload-time = "2026-02-13T13:27:08.522Z" },
     { url = "https://files.pythonhosted.org/packages/de/b5/39be78f30b31ee9f5a585969930c7248354db90494ff5e3d0756560fb731/ty-0.0.17-py3-none-win_amd64.whl", hash = "sha256:531828267527aee7a63e972f54e5eee21d9281b72baf18e5c2850c6b862add83", size = 10542138, upload-time = "2026-02-13T13:27:17.084Z" },
     { url = "https://files.pythonhosted.org/packages/40/b7/f875c729c5d0079640c75bad2c7e5d43edc90f16ba242f28a11966df8f65/ty-0.0.17-py3-none-win_arm64.whl", hash = "sha256:de9810234c0c8d75073457e10a84825b9cd72e6629826b7f01c7a0b266ae25b1", size = 10023068, upload-time = "2026-02-13T13:26:39.637Z" },
-]
-
-[[package]]
-name = "ty-extensions"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/80/08/de6357caa6dcd5aba4d0fdcb81736522ffdf1059af52db0f259eaa229a05/ty_extensions-0.1.0.tar.gz", hash = "sha256:c5a841b6f00656b1222cc3f4e626b54941fd857f1be4fd569d220070f0d73c79", size = 917, upload-time = "2025-05-02T20:06:21.035Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/b9/6e33e87aaa8e4b7fbd91f83cbccc2c162dd9e0349de43912b3e4b8eff31b/ty_extensions-0.1.0-py3-none-any.whl", hash = "sha256:0099ad2bf10eb23931c2fe586820c7fca0b1d2cb22499c6158b2fe409a24a1c9", size = 1274, upload-time = "2025-05-02T20:06:20.031Z" },
 ]
 
 [[package]]
