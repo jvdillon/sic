@@ -11,7 +11,8 @@ ensembling~\citep{dietterich2000ensemble}: train multiple models with different
 seeds and average their predictions. For TRM on Sudoku-Extreme:
 %
 % Source: x02.log (86.02%), x03.log (83.87%), x04.log (85.03%) - noised models
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lcc}
 \toprule
 Method & Puzzle Acc. & ACT Steps \\
@@ -21,7 +22,10 @@ Ensemble (3 seeds) & 88.52\% & 48 \\  % x02.log + x03.log + x04.log
 + TTA (4 rotations) & 91.51\% & 192 \\  % x02.log + x03.log + x04.log + TTA
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Standard ensembling on Sudoku-Extreme. Probability averaging with
+test-time augmentation yields +6.5\% accuracy at 12$\times$ compute cost.}
+\label{tab:ensemble-puzzle}
+\end{table}
 %
 Ensemble plus test-time augmentation yields +6.5\% accuracy, but at
 12$\times$ the compute cost. This presents a puzzle: ensembling helps, but the
@@ -30,20 +34,10 @@ ensemble has its own ``opinion'' about when to stop reasoning, yet we ignore
 this timing information entirely. Can we do better by paying attention to
 \emph{when} models commit to their answers?
 
-We begin with a biological intuition and follow it to its logical conclusion.
-
-Biological neural systems face a fundamental constraint: metabolic energy is
-scarce, yet decisions must be fast. Evolution's solution is to \emph{act on
-the first confident signal}. In cortical winner-take-all
-circuits~\citep{grossberg1987competitive}, competing neural populations race to
-threshold, with the first to fire suppressing alternatives. Spiking neural
-networks formalize this as time-to-first-spike (TTFS)
-coding~\citep{thorpe2001spike, park2020t2fsnn}, where information is encoded in
-\emph{when} neurons fire rather than \emph{how often}---achieving both speed
-and energy efficiency.
-
-This principle suggests a strategy for ensembles of iterative reasoners:
-instead of averaging probabilities, \textbf{select the first model to halt}.
+Drawing on this intuition---that convergence speed can signal
+confidence---we propose a simple strategy for ensembles of iterative
+reasoners: instead of averaging probabilities, \textbf{select the first model
+to halt}.
 
 \subsection{Halt-First Ensemble}
 
@@ -52,7 +46,8 @@ its own ACT iterations. When any model's halting signal exceeds threshold, that
 model provides the final answer. The results are striking:
 %
 % Source: x02.log, x03.log, x04.log (3 seeds × 4 rotations = 12 chains)
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{@{}lccc@{}}
 \toprule
 Method & Acc. & Steps & Speedup \\
@@ -61,10 +56,14 @@ Prob.\ avg.\ (12) & 91.5\% & 192 & 1$\times$ \\  % x02.log + x03.log + x04.log +
 \textbf{Halt-first (12)} & \textbf{97.2\%} & \textbf{18.5} & \textbf{10$\times$} \\  % x02.log + x03.log + x04.log + TTA halt-first
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Halt-first vs.\ probability averaging (12 chains = 3 seeds $\times$
+4 rotations). Selecting the first model to halt improves accuracy by 5.7pp
+while requiring 10$\times$ fewer reasoning steps.}
+\label{tab:halt-first}
+\end{table}
 %
 Halt-first selection improves accuracy by 5.7 percentage points while requiring
-10$\times$ fewer reasoning steps. This validates the biological intuition:
+10$\times$ fewer reasoning steps. This validates our core hypothesis:
 \textbf{inference speed is an implicit confidence signal}. When a reasoning
 process converges quickly, it indicates the model has found a ``clean''
 solution path---one without contradictions or backtracking. Probability
@@ -115,7 +114,7 @@ across multiple gradient updates, not within a single forward pass.
 
 \paragraph{Carry policy.} After each step, we must decide how to propagate
 states to the next iteration. We use \texttt{copy} for $z_H$: the
-winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 10). For $z_L$, we
+winner's $z_H$ is copied to all chains (\Cref{alg:wta}, line 9). For $z_L$, we
 use \texttt{all}: each chain keeps its own $z_L$. This allows heads to benefit
 from shared high-level progress while maintaining low-level diversity (see
 \Cref{sec:ablations} for ablations).
@@ -211,8 +210,10 @@ updates $z_H$ given the equilibrated $z_L^*$. This creates a natural hierarchy:
 $z_L$ handles cell-level constraint propagation while $z_H$ maintains
 puzzle-level state.
 
-\paragraph{Schur complement structure (intuition).} The implicit gradient through
-this bilevel system reveals an elegant structure. Writing the joint state
+\paragraph{Schur complement structure (intuition).} The following analysis
+provides intuition for why the bilevel structure may aid optimization; it is
+not a formal convergence result. The implicit gradient through this bilevel
+system has a suggestive structure. Writing the joint state
 $Z = (z_L, z_H)$ and joint Jacobian in block form:
 %
 \begin{equation}
@@ -229,19 +230,24 @@ a Schur complement:
 %
 The effective outer inverse $S^{-1}$ equals the naive inverse $(I-J_H)^{-1}$
 \emph{corrected} by how inner-outer coupling $(K_H, K_L)$ interacts through
-the inner equilibrium $(I-J_L)^{-1}$. This creates nested Neumann series:
-the inner equilibrium ``solves'' for $z_L^*$ given $z_H$, then the outer loop
-optimizes the simpler problem of finding good $z_H$---divide and conquer.
-In practice, TRM truncates these series, but the bilevel structure may make
-truncation less harmful: deep effective computation with shallow gradient paths.
+the inner equilibrium $(I-J_L)^{-1}$. This suggests a divide-and-conquer
+interpretation: the inner equilibrium ``solves'' for $z_L^*$ given $z_H$,
+then the outer loop optimizes the simpler problem of finding good $z_H$.
+In practice, TRM truncates these series, so the actual gradient paths are
+shorter than the full implicit gradient. We hypothesize that the bilevel
+structure makes this truncation less harmful, but verifying this formally
+remains future work.
 
 \paragraph{Architectural asymmetry stabilizes the inner loop.} L-cycles receive
-$z_L + z_H + z_x$ (three unit-variance terms), while H-cycles receive only
-$z_H + z_L$ (two terms). Assuming approximate independence, $z_L$ contributes
+$z_L + z_H + z_x$ (three terms), while H-cycles receive only
+$z_H + z_L$ (two terms). As a rough heuristic---treating the terms as
+approximately independent and unit-variance---$z_L$ contributes
 $\tfrac{1}{3}$ of L-cycle input variance versus $\tfrac{1}{2}$ for H-cycles.
-The Jacobian $J_L = \partial f / \partial z_L$ is thus smaller: the output is
-``anchored'' by context $(z_H + z_x)$ and less sensitive to $z_L$. The fixed
-input $z_x$ stabilizes L-cycles in a way H-cycles lack.
+In practice $z_L$ and $z_H$ are coupled through the recurrence, so this
+fraction is approximate; the key structural point is that the fixed input
+$z_x$ provides an additional anchoring signal in L-cycles that H-cycles lack,
+reducing sensitivity of $J_L = \partial f / \partial z_L$ to perturbations
+in $z_L$.
 
 \paragraph{Why diverse $z_L$.} Different $z_L$ initializations explore
 different basins of attraction in the inner equilibrium landscape. With $K$

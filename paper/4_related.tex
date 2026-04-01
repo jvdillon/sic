@@ -149,6 +149,17 @@ allocation within a single model.
 % DIFF: Cut "Recent work explores..." (generic)
 % KEPT: Better accuracy + less compute, adaptive allocation, WTA internalizes
 
+\paragraph{Reasoning length and confidence.}
+Recent work on chain-of-thought reasoning observes that shorter reasoning
+traces can correlate with higher accuracy.
+\citet{chen2025dontoverthink} show that preferring shorter thinking chains
+improves LLM reasoning, while \citet{wu2025characterizes} find that
+reasoning quality depends more on structure than length. These findings
+parallel ours in the iterative-model setting: faster convergence signals
+higher confidence. The key difference is mechanism---CoT approaches filter
+or preference-train on \emph{output sequences}, while our method leverages
+the inherent convergence dynamics of iterative fixed-point computation.
+
 % OLD VERSION:
 % \paragraph{Biological inspiration.}
 % Time-to-first-spike (TTFS) coding in spiking neural

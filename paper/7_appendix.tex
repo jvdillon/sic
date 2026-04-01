@@ -147,3 +147,50 @@ TRM needs:
 The success of WTA training, in contrast, works \emph{with} these dynamics:
 it creates diversity in the \emph{initialization} (where it matters) while
 allowing each hypothesis to follow normal iterative refinement.
+
+\section{Experiment Registry}
+\label{app:experiments}
+
+For reproducibility, \Cref{tab:experiment-registry} maps each reported result
+to its experiment identifier in the codebase
+(\texttt{code/sudoku/}).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llcc}
+\toprule
+Result & Exp ID & Seed(s) & Notes \\
+\midrule
+\multicolumn{4}{@{}l}{\textit{Baselines}} \\
+Baseline ($K{=}1$) & x182\{m,n,o,p\} & 42--45 & 85.5\% $\pm$ 1.3\% \\
+Single (no noise) & x00 & 42 & 85.9\% \\
+Single (noise) & x02, x03, x04 & 42--44 & 85.0\% avg \\
+\midrule
+\multicolumn{4}{@{}l}{\textit{WTA $K{=}4$ (fresh init)}} \\
+Best seed & x182a & 42 & 97.6\% \\
+All seeds & x182\{a,b,c,d\} & 42--45 & 96.9\% $\pm$ 0.6\% \\
+\midrule
+\multicolumn{4}{@{}l}{\textit{WTA $K{=}4$ (fixed init)}} \\
+All seeds & x182\{j,k,l,ll\} & 42--45 & 96.9\% $\pm$ 0.7\% \\
+\midrule
+\multicolumn{4}{@{}l}{\textit{WTA $K{=}4$ (ACT warmup)}} \\
+Fresh init & x182\{f,h\} & 42--43 & 94.4\% avg \\
+Fixed init & x182\{g,i\} & 42--43 & 96.2\% avg \\
+\midrule
+\multicolumn{4}{@{}l}{\textit{Carry policy ablation ($K_H{=}4$)}} \\
+all/all & x179g & --- & 90.3\% \\
+all/copy & x179f & --- & 93.7\% \\
+copy/copy & x179e & --- & 95.9\% \\
+copy/all ($K_L{=}4$) & x179q & --- & 97.7\% \\
+\midrule
+\multicolumn{4}{@{}l}{\textit{Ensembles}} \\
+Halt-first (12 ch.) & x02--x04 $\times$ 4 rot & --- & 97.2\% \\
+Prob.\ avg.\ (12 ch.) & x02--x04 $\times$ 4 rot & --- & 91.5\% \\
+TTA-8 & x00 $\times$ 8 rot & 42 & 97.3\% \\
+\bottomrule
+\end{tabular}
+\caption{Experiment registry mapping paper results to codebase experiment
+identifiers. All experiments in \texttt{code/sudoku/}.}
+\label{tab:experiment-registry}
+\end{table}

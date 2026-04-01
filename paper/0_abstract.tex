@@ -84,7 +84,7 @@
 % Best carry (copy/all):    97.7% puzzle [x179q]
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Biological neural systems must be fast but are energy-constrained. Evolution's solution: act on the first signal. Winner-take-all circuits and time-to-first-spike coding implicitly treat \emph{when} a neuron fires as an expression of confidence.
+Biological neural systems must be fast but are energy-constrained. Winner-take-all circuits and time-to-first-spike coding---well-documented mechanisms in neural computation---implicitly treat \emph{when} a neuron fires as an expression of confidence. Inspired by this principle, we ask: can inference speed serve as a confidence signal for neural network ensembles?
 
 We apply this principle to Tiny Recursive Models (TRM)~\citep{jolicoeur2025trm}. On Sudoku-Extreme, a baseline TRM achieves 85.5\% $\pm$ 1.3\%. But a key diagnostic reveals untapped potential: 89\% of failures are \emph{selection} problems---the model can solve these puzzles with a different random initialization. The true capability ceiling is 99\%, not 86\%.
 

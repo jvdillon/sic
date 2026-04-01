@@ -2,14 +2,12 @@
 % the entire paper. End with concrete contributions that deliver on this promise.
 \section{Introduction}
 
-When faced with uncertainty, biological neural systems don't perseverate
-indefinitely---they act on the first confident signal. This principle, refined
-by millions of years of evolution, underlies rapid decision-making from prey
-detection to social judgment. In cortical winner-take-all circuits, competing
-neural populations race to threshold; the first to fire suppresses alternatives
-and triggers action~\citep{grossberg1987competitive}. The speed of convergence
-itself carries information: a fast response indicates a clear, unambiguous
-stimulus.
+In cortical winner-take-all circuits, competing neural populations race to
+threshold; the first to fire suppresses alternatives and triggers
+action~\citep{grossberg1987competitive}. Time-to-first-spike coding encodes
+information in \emph{when} neurons fire rather than how
+often~\citep{thorpe2001spike}. These well-documented mechanisms suggest a
+general principle: convergence speed carries information about confidence.
 
 We apply this biological insight to improve neural network ensembles. Standard
 ensemble methods average predictions across models, treating all outputs
@@ -35,21 +33,20 @@ cost.
 
 \paragraph{Contributions.}
 \begin{enumerate}
-  \item We demonstrate that halt-first selection outperforms probability
-    averaging for ensembles of iterative reasoners, achieving 97.2\% accuracy
-    vs.\ 91.5\% while requiring 10$\times$ fewer reasoning steps.
+  \item \textbf{Halt-first selection.} We demonstrate that selecting the first
+    model to halt outperforms probability averaging for ensembles of iterative
+    reasoners, achieving 97.2\% accuracy vs.\ 91.5\% while requiring
+    10$\times$ fewer reasoning steps (\Cref{tab:halt-first}).
     % Source: x02.log, x03.log, x04.log (halt-first 97.2%, prob avg 91.5%)
-  \item We introduce \emph{oracle-first training}, a WTA method that
-    internalizes ensemble diversity within a single model, achieving
-    96.9\% $\pm$ 0.6\% accuracy with zero inference overhead.
+  \item \textbf{Oracle-first (WTA) training.} We internalize ensemble
+    diversity within a single model by maintaining $K{=}4$ parallel latent
+    states and backpropagating only through the lowest-loss winner, achieving
+    96.9\% $\pm$ 0.6\% accuracy with zero inference overhead (\Cref{tab:main}).
     % Source: x182a.log (97.6%), x182b.log (96.2%), x182c.log (96.5%), x182d.log (97.2%)
-  \item We show that 89\% of baseline failures are \emph{selection} problems,
-    not capability limits---the model can solve these puzzles with different
-    initializations. This reveals that the accuracy ceiling is 99\%, not 86\%.
-  \item We discover that Muon optimization fails with standard SwiGLU and
-    provide a fix (RMSNorm before down-projection), enabling training in
-    48 minutes on consumer hardware (RTX 5090) vs.\ hours on datacenter GPUs
-    for baseline TRM---making rapid experimentation feasible.
-  \item We conduct extensive ablations identifying critical design choices:
-    carry policy, SVD-aligned initialization, and $z_L$ diversity.
+  \item \textbf{Diagnostic and efficiency.} A digit-permutation diagnostic
+    reveals that 89\% of baseline failures are selection problems---the model
+    solves these puzzles under different (in-distribution) relabelings,
+    exposing a 99\% accuracy ceiling (\Cref{tab:selection-vs-capability}).
+    A modified SwiGLU makes Muon viable, enabling baseline training in
+    48 minutes on a single RTX 5090.
 \end{enumerate}

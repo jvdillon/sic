@@ -76,41 +76,20 @@ $^\ddagger$Efficiency = Puzzle Acc / Cost.}
 \label{tab:main}
 \end{table}
 
-\Cref{tab:main} shows our main results. Key findings:
-%
-\begin{enumerate}
-  \item \textbf{Selection is the bottleneck.}
-      A TTA diagnostic reveals 89\% of baseline failures are selection problems
-        (the model \emph{can} solve the puzzle with a different digit
-        permutation). The ceiling is 99.4\%, not 85.5\%.
-        % Source: analysis/digit_perm_inference.py - 1820/2037 failures solved by TTA
-  \item \textbf{WTA training internalizes diversity.}
-      $K{=}4$ $z_L$ heads achieve 96.9\% $\pm$ 0.6\% single-pass accuracy---nearly
-        matching TTA-8 (97.3\%) without any test-time augmentation. Notably,
-        WTA also \emph{reduces variance} by 2$\times$ vs.\ baseline
-        (0.6\% vs.\ 1.3\%).
-        % Source: x182{a,b,c,d,j,k,l,m}.log
-  \item \textbf{Initialization policy.}
-      Fresh init (resample $z_L$ each forward pass) achieves 96.85\% $\pm$ 0.58\%;
-        fixed init (cache in buffer) achieves 96.88\% $\pm$ 0.72\%.
-        Fresh init has slightly lower variance across seeds.
-        % Source: x182{a,b,c,d}.log (K=4 trunc\_randn init):
-        %   x=np.array([96.16, 96.46, 97.16, 97.64]) 96.85% ± 0.58%
-        %   x.mean()   # 96.855
-        %   x.std()    # 0.5805816049445609
-        %   x.min()    # 96.16
-        %   x.max()    # 97.64
-        % Source: x182{j,k,l,ll}.log (K=4 fixed init):
-        %   x=np.array([97.38, 95.65, 97.36, 97.12])  # 96.88% ± 0.72%
-        %   x.mean()   # 96.79667
-        %   x.std()    # 0.8108568855777711
-        %   x.min()    # 95.65
-        %   x.max()    # 97.38
-  \item \textbf{Zero inference overhead.} Unlike TTA/ensembles ($K\times$ cost)
-      our inference entails one model pass, i.e., inference can use $K=1$.
-\end{enumerate}
+\Cref{tab:main} summarizes our main results. WTA training with $K{=}4$ parallel
+$z_L$ heads achieves 96.9\% $\pm$ 0.6\% puzzle accuracy in a single forward
+pass---nearly matching TTA-8 (97.3\%) and halt-first ensembling (97.2\%) while
+requiring no additional inference cost. WTA also halves the cross-seed variance
+relative to the baseline ($\pm$0.6\% vs.\ $\pm$1.3\%). Fresh and fixed
+initialization policies achieve equivalent accuracy; fresh init has slightly
+lower variance.
+% Source: x182{a,b,c,d}.log (fresh), x182{j,k,l,ll}.log (fixed)
 
-\subsection{Learning Curves}
+A digit-permutation diagnostic (\Cref{sec:selection}) reveals why the gap
+between baseline and WTA is so large: 89\% of baseline failures are selection
+problems where the model can solve the puzzle under a different in-distribution
+relabeling. The true accuracy ceiling is 99.4\%, not 85.5\%, and WTA training
+closes most of this gap.
 
 % Source: figures/learning_curves.pdf generated from x182{a,b,c,d}.log
 % x182a: seed=42, 97.64%  x182b: seed=43, 96.16%
@@ -129,10 +108,11 @@ accuracy (96.9\% $\pm$ 0.7\%). Dashed lines: baseline (85.5\%) and TTA-8 (97.3\%
 \Cref{fig:learning-curves} shows learning curves across 4 random seeds. Learning
 is rapid early: puzzle accuracy improves from 84\% to 94\% between steps
 10k--20k, then plateaus around 24k steps with marginal gains thereafter
-($<$0.5pp). Final puzzle accuracy ranges from 95.7\% to 97.6\% across seeds and
-init policies (mean 96.9\%), with most runs crossing the TTA-8 baseline (97.3\%)
-by 30k steps. The tight convergence across seeds suggests WTA training is robust
-to initialization---a notable contrast with baseline TRM's higher variance.
+($<$0.5pp). The tight convergence across seeds (96.9\% $\pm$ 0.6\%) suggests
+WTA training is robust to initialization---a notable contrast with baseline
+TRM's higher variance.
+
+Having established the main result, we now ablate key design choices.
 
 \subsection{Ablation Studies}
 \label{sec:ablations}
@@ -145,59 +125,93 @@ $K \in \{1, 4\}$. For $K{=}4$, we tested two initialization policies: fresh
 % K=1: baseline x182{m,n,o,p} (85.5% ± 1.3% puzzle)
 % K=4: x182a (97.6% puzzle) [x182a.log]
 % Variance across x182 variants shows K=4 robustness
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lccc}
 \toprule
 $K$ & Cell Acc. & Puzzle Acc. & $\Delta$ \\
 \midrule
 1 (baseline) & 94.5\% & 85.5\% & --- \\  % x182{m,n,o,p} mean
-4 (x182h) & 97.3\% & 93.4\% & +7.3pp \\  % x182h.log worst K=4
-4 (x182j) & 98.9\% & 97.4\% & +11.3pp \\  % x182j.log
-4 (x182a) & 99.0\% & 97.6\% & +11.5pp \\  % x182a.log best
+4 (worst) & 97.3\% & 93.4\% & +7.3pp \\  % x182h.log worst K=4
+4 (median) & 98.9\% & 97.4\% & +11.3pp \\  % x182j.log
+4 (best) & 99.0\% & 97.6\% & +11.5pp \\  % x182a.log best
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Effect of number of heads $K$. $K{=}4$ consistently outperforms
+baseline by 7--11pp across configurations.}
+\label{tab:k-ablation}
+\end{table}
 %
-$K{=}4$ consistently outperforms baseline by 7--11pp. Variance across x182 variants
-(93.4\%--97.6\%) reflects sensitivity to hyperparameters (carry policy, SVD
-initialization). The best configuration (x182a) matches TTA-8 performance.
+$K{=}4$ consistently outperforms baseline by 7--11pp. Variance across
+configurations (93.4\%--97.6\%) reflects sensitivity to hyperparameters (carry
+policy, SVD initialization). The best configuration matches TTA-8 performance.
 
 \paragraph{Carry policy.} To understand \emph{where} parallelism helps, we ran a
 grid search over $K_H \in \{1,4\}$ and $K_L \in \{1,4\}$ with different carry
 policies. ``Copy'' means the winner's state is used for all $K$ chains;
 ``all'' means each chain continues with its own state:
 %
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lcc}
 \toprule
 $z_H$ / $z_L$ Policy & Cell Acc. & Puzzle Acc. \\
 \midrule
-all / all (x179g, $K_H{=}4$) & 96.0\% & 90.3\% \\  % x179g.log
-all / copy (x179f, $K_H{=}4$) & 97.4\% & 93.7\% \\  % x179f.log
-copy / copy (x179e, $K_H{=}4$) & 98.3\% & 95.9\% \\  % x179e.log
-\textbf{copy / all (x179q, $K_L{=}4$)} & \textbf{99.1\%} & \textbf{97.7\%} \\  % x179q.log
+all / all ($K_H{=}4$) & 96.0\% & 90.3\% \\  % x179g.log
+all / copy ($K_H{=}4$) & 97.4\% & 93.7\% \\  % x179f.log
+copy / copy ($K_H{=}4$) & 98.3\% & 95.9\% \\  % x179e.log
+\textbf{copy / all ($K_L{=}4$)} & \textbf{99.1\%} & \textbf{97.7\%} \\  % x179q.log
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Carry policy ablation. Copying the winner's $z_H$ while preserving
+diverse $z_L$ states (copy/all) is best, validating the shared-global /
+diverse-local design.}
+\label{tab:carry-policy}
+\end{table}
 %
-The pattern is striking: $K_H{>}1$ with \texttt{carry\_H=all} (top row) is worst,
-while $K_L{=}4$ with \texttt{carry\_L=all} (bottom row) is best. This validates
-the intuition from \S3.5: $z_H$ should converge to a shared global state (copy
-winner's), while diverse $z_L$ states explore different local refinement paths.
-Parallelism in the \emph{inner} loop ($z_L$) enables exploration; parallelism in
-the \emph{outer} loop ($z_H$) just wastes capacity.
+The best policy (copy/all) copies the winner's $z_H$ to all chains while
+letting each chain keep its own $z_L$. This validates the intuition from
+\S3.5: $z_H$ should converge to a shared global state, while diverse $z_L$
+states explore different local refinement paths. Parallelism in the inner loop
+($z_L$) enables exploration; parallelism in the outer loop ($z_H$) wastes
+capacity.
 
-\paragraph{SVD-aligned initialization.} All x182 experiments use SVD-aligned
+\paragraph{SVD-aligned initialization.} Our main experiments use SVD-aligned
 initialization for $z_L$ heads, ensuring each head projects onto a distinct top
 singular vector of the network. This prevents ``dead'' heads that waste capacity
 by initializing in low-influence subspaces.
+
+% Source: x00.log (85.9%), x01.log (85.8%) vs x02.log (86.0%), x03.log (83.9%), x04.log (85.0%)
+\paragraph{State noise.} Training with state noise ($\sigma{=}0.1$ on $z_L$)
+increases ensemble diversity at the cost of individual accuracy:
+%
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Training & Indiv.\ Acc. & Jaccard & Oracle & $\Delta$ Oracle \\
+\midrule
+No noise & 85.9\% & 0.338 & 92.9\% & --- \\  % x00.log (85.9%), x01.log (85.8%)
+With noise & 84.8\% & 0.183 & 94.9\% & +2.0pp \\  % x02.log (86.0%), x03.log (83.9%), x04.log (85.0%)
+\bottomrule
+\end{tabular}
+\caption{Effect of state noise ($\sigma{=}0.1$ on $z_L$). Noise trades 1.1pp
+individual accuracy for 2.0pp higher ensemble ceiling via greater diversity
+(lower Jaccard = less failure overlap).}
+\label{tab:state-noise}
+\end{table}
+%
+Jaccard measures failure overlap between seeds (lower = more diverse). The low
+Jaccard (0.183) confirms that noise during training creates diverse local
+optima, which is precisely the diversity that halt-first selection exploits.
 
 \subsection{TTA vs.\ Ensemble Breakdown}
 
 % Source: x02.log (86.0%), x03.log (83.9%), x04.log (85.0%) - noised models
 TTA (test-time augmentation) and ensemble address different failure modes:
 %
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lccc}
 \toprule
 Method & Puzzle Acc. & $\Delta$ & Cost \\
@@ -208,30 +222,35 @@ Single model & 85.0\% & --- & 1$\times$ \\  % avg(x02.log, x03.log, x04.log)
 + Both & 91.5\% & +6.5pp & 12$\times$ \\  % x02.log + x03.log + x04.log + TTA
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{TTA vs.\ ensemble breakdown. Effects are additive (+6.5pp combined),
+not redundant. TTA is more impactful (+4.0pp) than multi-seed ensemble
+(+3.5pp).}
+\label{tab:tta-breakdown}
+\end{table}
 %
-\textbf{TTA is more impactful than ensemble} (+4.0pp vs +3.5pp) because the
-model hasn't learned full rotational equivariance. Ensemble helps with
-seed-dependent optima. Effects are additive (+6.5pp combined), not redundant.
+TTA contributes more than multi-seed ensembling because the model has not
+learned full rotational equivariance. The two effects are additive, not
+redundant, suggesting they address complementary failure modes.
 
 \subsection{Compute Efficiency Analysis}
 
 \begin{table}[htb]
 \centering
-\begin{tabular}{lccc}
+\begin{tabular}{lcccc}
 \toprule
-Method & Inference & Train & Total \\
+Method & Inference & Train & Wall-clock & VRAM \\
 \midrule
-Baseline ($K{=}1$) & 1$\times$ & 1$\times$ & 1$\times$ \\
-Ensemble (3 seeds) & 3$\times$ & 3$\times$ & 3$\times$ \\
-+ TTA (4 rot) & 12$\times$ & 3$\times$ & --- \\
-Halt-first (12) & 1.5$\times$ & 3$\times$ & --- \\
-\textbf{WTA ($K{=}4$)} & \textbf{1$\times$} & \textbf{4$\times$} & \textbf{4$\times$} \\
+Baseline ($K{=}1$, 8k steps) & 1$\times$ & 1$\times$ & 48 min & 16 GiB \\
+Baseline ($K{=}1$, 36k steps) & 1$\times$ & 1$\times$ & 90 min & 8 GiB \\
+Ensemble (3 seeds) & 3$\times$ & 3$\times$ & 3$\times$baseline & --- \\
++ TTA (4 rot) & 12$\times$ & 3$\times$ & --- & --- \\
+Halt-first (12) & 1.5$\times$ & 3$\times$ & --- & --- \\
+\textbf{WTA ($K{=}4$, 36k steps)} & \textbf{1$\times$} & \textbf{4$\times$} & \textbf{360 min} & \textbf{30 GiB} \\
 \bottomrule
 \end{tabular}
-\caption{Compute cost comparison. Inference is relative to baseline (1 model,
-16 ACT steps); train shows total training compute. WTA shifts cost to training.
-}
+\caption{Compute cost comparison on a single RTX 5090. Inference cost is
+relative to baseline (1 model, 16 ACT steps); train shows total training
+compute. WTA shifts cost entirely to training.}
 %\ifdefined\isicml\vspace{-2em}\fi
 \label{tab:compute}
 \end{table}
@@ -278,43 +297,29 @@ single model---ideal when inference dominates (production) or training is
 one-time.
 
 
-\paragraph{Wall-clock time.} On a single RTX 5090:
-\begin{itemize}
-  \item TRM ($K{=}1$, steps${=}$8k, bs${=}$384): 48 min, 16GiB
-  \item Baseline ($K{=}1$, steps${=}$36k, bs${=}$192): 90 min, 8GiB
-  \item WTA ($K{=}4$, steps${=}$36k, bs${=}$192): 360 min, 30GiB
-  \item Ensemble: $K$ models at $K\times$ time-cost
-\end{itemize}
-
-\subsection{Analysis of Halting Dynamics}
+\subsection{Halting Dynamics}
 \label{sec:halting}
 
-The learned halting signal exhibits strong calibration (\Cref{fig:halt-dist}):
-%
-\begin{itemize}
-  \item \textbf{Fast convergence.} 86.3\% of puzzles halt at step 0 (with 12
-    parallel chains), 94.9\% within step 1. The ensemble finds a confident
-    solution almost immediately.
-  \item \textbf{Correlation with correctness.} Among puzzles where any chain
-    halts at step 0, accuracy is 99.2\%. For puzzles requiring 8+ steps,
-    accuracy drops to 78\%. Fast halting indicates confidence.
-  \item \textbf{Winner consistency.} In WTA training, after step 3, the same
-    head wins 80\%+ of subsequent iterations for a given puzzle. Early steps
-    explore; later steps exploit.
-\end{itemize}
+The learned halting signal is well-calibrated (\Cref{fig:halt-dist}). With 12
+parallel chains, 86.3\% of puzzles have at least one chain halt at step~0, and
+94.9\% within step~1. Among puzzles where any chain halts at step~0, accuracy
+is 99.2\%; for puzzles requiring 8+ steps, accuracy drops to 78\%---confirming
+that fast halting reliably indicates confidence. In WTA training, the same head
+wins 80\%+ of iterations after step~3 for a given puzzle, consistent with an
+``explore then exploit'' dynamic.
 
 % Removed: WTA Selection Methods and Halt-Based Ensembling sections
 % These relied on x102/x122d experiments which had reproducibility issues.
 % The x182 series uses loss-based WTA selection throughout.
 
-\subsection{Training Dynamics of Halting}
-
+\paragraph{Training dynamics of halting.}
 % Source: analysis/halt_analysis.md - x00 Per-Step Convergence Analysis
 % Checkpoints step00500 through step06500
 How does the halting signal emerge during training? We tracked q\_halt
 calibration across checkpoints:
 %
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lcccc}
 \toprule
 Step & Cell Acc. & Puzzle Acc. & Halt Step & q\_halt Corr. \\
@@ -326,49 +331,36 @@ Step & Cell Acc. & Puzzle Acc. & Halt Step & q\_halt Corr. \\
 6500 & 94.3\% & 84.7\% & 4.4 & 1.00 \\  % x00 step06500
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Training dynamics of the halting signal. The model learns \emph{what}
+to predict before \emph{when} to stop: cell accuracy rises first, then halt
+step drops. Halting calibration reaches 0.99 by step 2.5k.}
+\label{tab:halt-training}
+\end{table}
 %
-Key findings:
-\begin{itemize}
-  \item \textbf{Halting emerges after solving.} Cell accuracy rises first (64\%
-    $\to$ 75\%), then halt step drops (15.0 $\to$ 12.3). The model learns
-    \emph{what} to predict before learning \emph{when} to stop.
-  \item \textbf{q\_halt calibration is fast.} Correlation between predicted halt
-    and actual convergence reaches 0.99 by step 2.5k (960k samples).
-  \item \textbf{Halt step magnitude takes longer.} Crossing the 0.5 threshold
-    requires 2--3$\times$ more training (step 4.5k+).
-\end{itemize}
+The model learns \emph{what} to predict before \emph{when} to stop: cell
+accuracy rises first (64\% $\to$ 75\%), then the average halt step drops
+(15.0 $\to$ 12.3). Halting calibration reaches 0.99 by step 2.5k (960k
+training samples), though the halt step magnitude takes longer to
+converge---crossing the 0.5 confidence threshold requires 2--3$\times$ more
+training (step 4.5k+).
 
-\subsection{State Noise and Diversity}
-
-% Source: x00.log (85.9%), x01.log (85.8%) vs x02.log (86.0%), x03.log (83.9%), x04.log (85.0%)
-Training with state noise ($\sigma{=}0.1$ on $z_L$) increases ensemble diversity
-at the cost of individual accuracy:
-%
-\begin{center}
-\begin{tabular}{lcccc}
-\toprule
-Training & Indiv.\ Acc. & Jaccard & Oracle & $\Delta$ Oracle \\
-\midrule
-No noise & 85.9\% & 0.338 & 92.9\% & --- \\  % x00.log (85.9%), x01.log (85.8%)
-With noise & 84.8\% & 0.183 & 94.9\% & +2.0pp \\  % x02.log (86.0%), x03.log (83.9%), x04.log (85.0%)
-\bottomrule
-\end{tabular}
-\end{center}
-%
-Jaccard measures failure overlap between seeds (lower = more diverse). State
-noise reduces individual accuracy by 1.1pp but increases ensemble ceiling by
-2.0pp via greater diversity. The low Jaccard (0.183) confirms noise creates
-training-time exploration that leads to diverse local optima.
-
-\subsection{Error Analysis}
+\subsection{Error and Diversity Analysis}
 
 % Source: x00.log baseline, analysis/digit_perm_inference.py
-\paragraph{Selection vs.\ capability.} A critical diagnostic: when the baseline
-model fails a puzzle, can \emph{any} digit permutation solve it? We ran TTA
-with $K{=}8$ permutations on all baseline failures:
+\paragraph{Selection vs.\ capability.}
+\label{sec:selection}
+A critical diagnostic: when the
+baseline model fails a puzzle, can \emph{any} digit permutation solve it?
+Crucially, the model is trained \emph{with} digit permutation augmentation,
+so all relabelings are in-distribution. Because relabeling preserves the
+constraint graph (the underlying structure is isomorphic), a puzzle that is
+solved under one permutation but not another reveals a \emph{selection}
+problem: the model has the capability but the specific permutation at
+inference time induces a solution path that fails. We ran TTA with $K{=}8$
+permutations on all baseline failures:
 %
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lcc}
 \toprule
 Condition & Count & \% of Failures \\
@@ -377,12 +369,21 @@ Solved by some permutation & 1,820 & 89.3\% \\  % x00.log + digit_perm_inference
 Unsolvable by any permutation & 217 & 10.7\% \\  % x00.log + digit_perm_inference.py
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Digit permutation diagnostic on baseline failures. Since training
+includes digit permutation augmentation, these are selection failures, not
+generalization gaps: the model solves the same puzzle under a different
+(in-distribution) relabeling.}
+\label{tab:selection-vs-capability}
+\end{table}
 %
 \textbf{89\% of failures are selection problems}, not capability limits. The
-model \emph{can} solve these puzzles---it just picked the wrong permutation.
-With oracle selection, accuracy would be ${\sim}$99\%, not 86\%. This motivates
-learning better selection (WTA) rather than increasing model capacity.
+model is trained with digit permutation augmentation, so all relabelings are
+in-distribution---these failures cannot be attributed to representation
+generalization gaps. Rather, the specific permutation at inference time
+determines which solution path the model follows, and some paths fail on some
+puzzles. With oracle permutation selection, accuracy would be ${\sim}$99\%,
+not 86\%. This motivates methods that explore diverse solution paths (WTA)
+rather than increasing model capacity.
 
 % Source: x00.log - puzzles failing all 8 TTA permutations
 \paragraph{The irreducible 217.} We analyzed the 217 puzzles (0.6\%) that no
@@ -412,19 +413,25 @@ Notably, the halting signal remains well-calibrated even on failures:
 $q_\text{halt}$ stays below 0.5 (uncertain) throughout, and fewer than 5\% halt
 before step 8. The model ``knows'' it hasn't found a clean solution.
 
-\subsection{Head Specialization Patterns}
-
+\paragraph{Head specialization.}
 % Source: x182a.log WTA head analysis
 Do different heads specialize on different puzzle types? Head 0 wins 31\% of
-puzzles, heads 1--3 win 23\%, 24\%, 22\%---no single head dominates, confirming
-diversity is maintained. However, puzzle-head affinity across seeds is weak
-($r = 0.12$): heads don't specialize by puzzle ``type'' but rather by the random
-initialization's alignment with each puzzle's solution path.
+puzzles, heads 1--3 win 23\%, 24\%, 22\%. The relatively uniform distribution
+shows no single head dominates, which is a \emph{necessary} condition for
+maintained diversity. However, uniform frequency alone does not prove
+specialization---it could reflect random tie-breaking. We therefore also measure
+puzzle-head affinity across seeds, finding it is weak ($r = 0.12$). This
+suggests heads do not specialize by puzzle ``type'' (e.g., difficulty or
+constraint structure) but rather by the random initialization's alignment with
+each puzzle's solution path. The diversity is \emph{functional} (different
+heads succeed on different puzzles) rather than \emph{semantic} (different
+heads learning different strategies).
 
 % Source: x182a.log per-step winner tracking
 For puzzles requiring multiple H-steps, we track which head wins at each step:
 %
-\begin{center}
+\begin{table}[h]
+\centering
 \begin{tabular}{lcccc}
 \toprule
 H-step & 0 & 1--2 & 3--4 & 5+ \\
@@ -432,12 +439,11 @@ H-step & 0 & 1--2 & 3--4 & 5+ \\
 Same winner as final & 62\% & 78\% & 89\% & 97\% \\
 \bottomrule
 \end{tabular}
-\end{center}
-%
-Early steps show exploration (38\% switch winners); by step 5+, the winning
-head is nearly fixed. This validates the ``explore then exploit'' dynamic.
-
-\subsection{Difficulty vs.\ Halting Time}
+\caption{Winner consistency across H-steps. Early steps show exploration
+(38\% switch winners); by step 5+, the winning head is nearly fixed.}
+\label{tab:winner-consistency}
+\end{table}
+\paragraph{Difficulty vs.\ halting time.}
 
 % Source: x182a.log halt times vs classical solver step counts
 \begin{figure}[t]
@@ -469,13 +475,11 @@ objectively harder puzzles. (Points smoothed for visualization; trend is real.)}
 
 % Source: x182a.log (WTA r=0.73) vs x00.log (baseline r=0.61)
 We measure puzzle difficulty using a standard backtracking solver with MRV
-(minimum remaining values) heuristic. \Cref{fig:difficulty} shows strong
-correlation ($r = 0.73$) between solver difficulty and neural halting time. This confirms that ACT learns a
-meaningful difficulty measure, not just pattern matching on surface features.
-
-Notably, the correlation is stronger for WTA-trained models ($r = 0.73$) than
-baseline ($r = 0.61$), suggesting that WTA's competitive dynamics improve
-calibration of the halting signal.
+(minimum remaining values) heuristic. \Cref{fig:difficulty} shows that neural
+halting time correlates strongly with solver difficulty ($r = 0.73$ for WTA,
+$r = 0.61$ for baseline), confirming that ACT learns a meaningful difficulty
+measure. The stronger correlation under WTA suggests that competitive dynamics
+improve calibration of the halting signal.
 
 \subsection{Limitations}
 
